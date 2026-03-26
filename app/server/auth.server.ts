@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { redirect } from "react-router";
+import { ApiError } from "~/server/api-error.server";
 import { config } from "~/server/config.server";
 import { getSession } from "~/server/session.server";
 
@@ -47,6 +48,6 @@ export async function requireAuth(request: Request) {
 
 export async function requireApiAuth(request: Request) {
 	if (!(await isAuthenticated(request))) {
-		throw Response.json({ error: "Unauthorized" }, { status: 401 });
+		throw new ApiError(401, "unauthorized", "Unauthorized");
 	}
 }
