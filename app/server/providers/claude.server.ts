@@ -1,0 +1,431 @@
+import { basename } from "node:path";
+import { getClaudeBin } from "~/server/config.server";
+import type { HistoricalSession, HostSession, ProviderCapabilities, ProviderSummary } from "~/lib/shelleport";
+import type { ProviderAdapter, ProviderAdapterEvent, ProviderAdapterRunInput } from "~/server/providers/provider.server";
+import { listJsonlFiles, readHeadJsonl } from "~/server/providers/jsonl.server";
+
+const decoder = new TextDecoder();
+
+const claudeCapabilities: ProviderCapabilities = {
+	canCreate: true,
+	canResumeHistorical: true,
+	canInterrupt: true,
+	canTerminate: true,
+	hasStructuredEvents: true,
+	supportsApprovals: true,
+	supportsQuestions: false,
+	supportsImages: false,
+	supportsFork: false,
+	supportsWorktree: true,
+	liveResume: "managed-only",
+};
+
+type ClaudePermissionDenial = {
+	tool_name?: unknown;
+	tool_use_id?: unknown;
+	tool_input?: unknown;
+};
+
+function classifyClaudeBlockReason(content: string) {
+	if (content.includes("This command requires approval")) {
+		return "permission" as const;
+	}
+
+	if (content.includes("was blocked. For security")) {
+		return "sandbox" as const;
+	}
+
+	return null;
+}
+
+function createClaudeCommand(session: HostSession, prompt: string) {
+	const command = [
+		getClaudeBin(),
+		"-p",
+		"--verbose",
+		"--output-format",
+		"stream-json",
+		"--permission-mode",
+		session.permissionMode,
+	];
+
+	for (const toolRule of session.allowedTools) {
+		command.push("--allowedTools", toolRule);
+	}
+
+	if (session.providerSessionRef) {
+		command.push("-r", session.providerSessionRef);
+	}
+
+	command.push(prompt);
+
+	return command;
+}
+
+function getMessageContent(rawEvent: Record<string, unknown>) {
+	const message =
+		rawEvent.message && typeof rawEvent.message === "object"
+			? (rawEvent.message as Record<string, unknown>)
+			: null;
+
+	return Array.isArray(message?.content) ? message.content : [];
+}
+
+function getToolInputRecord(value: unknown) {
+	return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+function tokenizeCommand(command: string) {
+	return command.match(/(?:[^\s"'`]+|"[^"]*"|'[^']*'|`[^`]*`)+/g) ?? [];
+}
+
+export function createClaudeBashToolRule(command: string) {
+	const tokens = tokenizeCommand(command).map((token) => token.replace(/^['"`]|['"`]$/g, ""));
+
+	if (tokens.length === 0) {
+		return null;
+	}
+
+	const prefixTokens = [tokens[0]];
+	const secondToken = tokens[1];
+
+	if (secondToken && !secondToken.startsWith("-")) {
+		prefixTokens.push(secondToken);
+	}
+
+	return `Bash(${prefixTokens.join(" ")}:*)`;
+}
+
+export function createClaudeApprovalPrompt(toolName: string, toolInput: Record<string, unknown>) {
+	if (toolName === "Bash" && typeof toolInput.command === "string") {
+		return `Approve Bash command: ${toolInput.command}`;
+	}
+
+	return `Approve ${toolName}`;
+}
+
+export function createClaudeResumePrompt(toolName: string, toolInput: Record<string, unknown>) {
+	if (toolName === "Bash" && typeof toolInput.command === "string") {
+		return `The user approved this command: ${toolInput.command}. Retry it if still needed, then continue the task.`;
+	}
+
+	return `The user approved the blocked ${toolName} request. Retry it if still needed, then continue the task.`;
+}
+
+function normalizeClaudeResult(rawEvent: Record<string, unknown>) {
+	const events: ProviderAdapterEvent[] = [
+		{
+			type: "host-event",
+			kind: rawEvent.is_error === true ? "error" : "state",
+			summary: rawEvent.is_error === true ? "Claude run failed" : "Claude run complete",
+			data: {
+				result: typeof rawEvent.result === "string" ? rawEvent.result : null,
+				stopReason: typeof rawEvent.stop_reason === "string" ? rawEvent.stop_reason : null,
+				durationMs: typeof rawEvent.duration_ms === "number" ? rawEvent.duration_ms : null,
+			},
+			rawProviderEvent: rawEvent,
+		},
+	];
+
+	const permissionDenials = Array.isArray(rawEvent.permission_denials)
+		? (rawEvent.permission_denials as ClaudePermissionDenial[])
+		: [];
+
+	for (const denial of permissionDenials) {
+		const toolName = typeof denial.tool_name === "string" ? denial.tool_name : null;
+		const toolUseId = typeof denial.tool_use_id === "string" ? denial.tool_use_id : null;
+		const toolInput = getToolInputRecord(denial.tool_input);
+
+		if (!toolName || !toolUseId) {
+			continue;
+		}
+
+		events.push({
+			type: "pending-request",
+			kind: "approval",
+			blockReason: "permission",
+			prompt: createClaudeApprovalPrompt(toolName, toolInput),
+			data: {
+				toolName,
+				toolUseId,
+				toolInput,
+				toolRule:
+					toolName === "Bash" && typeof toolInput.command === "string"
+						? createClaudeBashToolRule(toolInput.command)
+						: toolName,
+				resumePrompt: createClaudeResumePrompt(toolName, toolInput),
+			},
+		});
+	}
+
+	return events;
+}
+
+export function normalizeClaudeEvent(rawEvent: Record<string, unknown>): ProviderAdapterEvent[] {
+	const type = typeof rawEvent.type === "string" ? rawEvent.type : "unknown";
+
+	if (type === "system" && rawEvent.subtype === "init") {
+		const providerSessionRef =
+			typeof rawEvent.session_id === "string" ? rawEvent.session_id : null;
+
+		return providerSessionRef ? [{ type: "provider-session", providerSessionRef }] : [];
+	}
+
+	if (type === "assistant") {
+		const events: ProviderAdapterEvent[] = [];
+
+		for (const item of getMessageContent(rawEvent)) {
+			if (!item || typeof item !== "object") {
+				continue;
+			}
+
+			const contentItem = item as Record<string, unknown>;
+
+			if (contentItem.type === "text" && typeof contentItem.text === "string") {
+				events.push({
+					type: "host-event",
+					kind: "text",
+					summary: "Assistant message",
+					data: {
+						role: "assistant",
+						text: contentItem.text,
+					},
+					rawProviderEvent: rawEvent,
+				});
+			}
+
+			if (contentItem.type === "tool_use" && typeof contentItem.name === "string") {
+				events.push({
+					type: "host-event",
+					kind: "tool-call",
+					summary: contentItem.name,
+					data: {
+						toolName: contentItem.name,
+						toolUseId: typeof contentItem.id === "string" ? contentItem.id : null,
+						input: getToolInputRecord(contentItem.input),
+					},
+					rawProviderEvent: rawEvent,
+				});
+			}
+		}
+
+		return events;
+	}
+
+	if (type === "user") {
+		const events: ProviderAdapterEvent[] = [];
+
+		for (const item of getMessageContent(rawEvent)) {
+			if (!item || typeof item !== "object") {
+				continue;
+			}
+
+			const contentItem = item as Record<string, unknown>;
+
+			if (contentItem.type === "tool_result") {
+				const content =
+					typeof contentItem.content === "string" ? contentItem.content : JSON.stringify(contentItem);
+
+				events.push({
+					type: "host-event",
+					kind: "tool-result",
+					summary: "Tool result",
+					data: {
+						toolUseId: typeof contentItem.tool_use_id === "string" ? contentItem.tool_use_id : null,
+						content,
+						isError: contentItem.is_error === true,
+						blockReason: contentItem.is_error === true ? classifyClaudeBlockReason(content) : null,
+					},
+					rawProviderEvent: rawEvent,
+				});
+			}
+		}
+
+		return events;
+	}
+
+	if (type === "result") {
+		return normalizeClaudeResult(rawEvent);
+	}
+
+	return [
+		{
+			type: "host-event",
+			kind: "system",
+			summary: type,
+			data: rawEvent,
+			rawProviderEvent: rawEvent,
+		},
+	];
+}
+
+async function* streamClaudeProcess(runInput: ProviderAdapterRunInput): AsyncGenerator<ProviderAdapterEvent> {
+	const subprocess = Bun.spawn(createClaudeCommand(runInput.session, runInput.prompt), {
+		cwd: runInput.session.cwd,
+		stdout: "pipe",
+		stderr: "pipe",
+		signal: runInput.signal,
+		env: Bun.env,
+	});
+	const stdoutReader = subprocess.stdout.getReader();
+	const stderrReader = subprocess.stderr.getReader();
+
+	let buffer = "";
+
+	try {
+		while (true) {
+			const { done, value } = await stdoutReader.read();
+
+			if (done) {
+				break;
+			}
+
+			buffer += decoder.decode(value);
+			const lines = buffer.split("\n");
+			buffer = lines.pop() ?? "";
+
+			for (const line of lines) {
+				const trimmed = line.trim();
+
+				if (trimmed.length === 0) {
+					continue;
+				}
+
+				const rawEvent = JSON.parse(trimmed) as Record<string, unknown>;
+
+				for (const event of normalizeClaudeEvent(rawEvent)) {
+					yield event;
+				}
+			}
+		}
+
+		if (buffer.trim().length > 0) {
+			const rawEvent = JSON.parse(buffer.trim()) as Record<string, unknown>;
+
+			for (const event of normalizeClaudeEvent(rawEvent)) {
+				yield event;
+			}
+		}
+
+		const stderrChunks: Uint8Array[] = [];
+
+		while (true) {
+			const { done, value } = await stderrReader.read();
+
+			if (done) {
+				break;
+			}
+
+			stderrChunks.push(value);
+		}
+
+		const exitCode = await subprocess.exited;
+
+		if (exitCode !== 0) {
+			yield {
+				type: "host-event",
+				kind: "error",
+				summary: "Claude CLI error",
+				data: {
+					exitCode,
+					stderr: Buffer.concat(stderrChunks).toString("utf8").trim(),
+				},
+				rawProviderEvent: null,
+			};
+		}
+	} finally {
+		stdoutReader.releaseLock();
+		stderrReader.releaseLock();
+	}
+}
+
+export async function parseClaudeHistoricalSession(path: string): Promise<HistoricalSession | null> {
+	if (path.includes("/subagents/")) {
+		return null;
+	}
+
+	const headLines = await readHeadJsonl(path);
+	let cwd = "";
+	let title = basename(path, ".jsonl");
+	let preview = "";
+	let providerSessionRef = basename(path, ".jsonl");
+	let createTime = Number(Bun.file(path).lastModified || Date.now());
+
+	for (const line of headLines) {
+		if (typeof line.sessionId === "string") {
+			providerSessionRef = line.sessionId;
+		}
+
+		if (typeof line.cwd === "string" && line.cwd.length > 0) {
+			cwd = line.cwd;
+		}
+
+		if (line.message && typeof line.message === "object") {
+			const message = line.message as Record<string, unknown>;
+
+			if (typeof message.content === "string" && preview.length === 0) {
+				preview = message.content.slice(0, 200);
+				title = message.content.slice(0, 72);
+			}
+		}
+
+		if (typeof line.timestamp === "string") {
+			const parsed = Date.parse(line.timestamp);
+
+			if (!Number.isNaN(parsed)) {
+				createTime = parsed;
+				break;
+			}
+		}
+	}
+
+	if (cwd.length === 0) {
+		return null;
+	}
+
+	const stats = await Bun.file(path).stat();
+
+	return {
+		provider: "claude",
+		providerSessionRef,
+		title,
+		cwd,
+		sourcePath: path,
+		createTime,
+		updateTime: stats.mtimeMs,
+		preview,
+	};
+}
+
+export class ClaudeProviderAdapter implements ProviderAdapter {
+	readonly id = "claude" as const;
+	readonly label = "Claude Code";
+
+	capabilities() {
+		return claudeCapabilities;
+	}
+
+	summary(): ProviderSummary {
+		return {
+			id: this.id,
+			label: this.label,
+			status: "ready",
+			capabilities: this.capabilities(),
+		};
+	}
+
+	sendInput(runInput: ProviderAdapterRunInput): AsyncGenerator<ProviderAdapterEvent> {
+		return streamClaudeProcess(runInput);
+	}
+
+	resumeSession(session: HostSession, runInput: ProviderAdapterRunInput): AsyncGenerator<ProviderAdapterEvent> {
+		return streamClaudeProcess({ ...runInput, session });
+	}
+
+	async listHistoricalSessions() {
+		const rootPath = `${Bun.env.HOME ?? ""}/.claude/projects`;
+		const fileList = await listJsonlFiles(rootPath);
+		const sessions = await Promise.all(fileList.map(parseClaudeHistoricalSession));
+		return sessions.filter((session) => session !== null).sort((left, right) => right.updateTime - left.updateTime);
+	}
+}
