@@ -124,8 +124,15 @@ export type CreateSessionInput = {
 	allowedTools?: string[];
 };
 
+export type SessionAttachment = {
+	name: string;
+	path: string;
+	contentType: string;
+};
+
 export type SessionInputPayload = {
 	prompt: string;
+	attachments: SessionAttachment[];
 };
 
 export type SessionControlPayload = {

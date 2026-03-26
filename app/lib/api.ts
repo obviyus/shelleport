@@ -30,9 +30,10 @@ function headers(token: string, json = false): HeadersInit {
 }
 
 async function request<T>(path: string, token: string, init?: RequestInit): Promise<T> {
+	const isJsonBody = init?.body !== undefined && !(init.body instanceof FormData);
 	const res = await fetch(path, {
 		...init,
-		headers: { ...headers(token, !!init?.body), ...init?.headers },
+		headers: { ...headers(token, isJsonBody), ...init?.headers },
 	});
 
 	if (res.status === 401) {
@@ -68,10 +69,21 @@ export function createSession(token: string, input: CreateSessionInput) {
 	});
 }
 
-export function sendInput(token: string, sessionId: string, prompt: string) {
+export function fetchProviders(token: string) {
+	return request<{ providers: ProviderSummary[] }>("/api/providers", token);
+}
+
+export function sendInput(token: string, sessionId: string, prompt: string, images: File[]) {
+	const formData = new FormData();
+	formData.set("prompt", prompt);
+
+	for (const image of images) {
+		formData.append("images", image);
+	}
+
 	return request<{ session: HostSession }>(`/api/sessions/${sessionId}/input`, token, {
 		method: "POST",
-		body: JSON.stringify({ prompt }),
+		body: formData,
 	});
 }
 

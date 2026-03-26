@@ -8,8 +8,10 @@ import type {
 	SessionStreamMessage,
 } from "~/lib/shelleport";
 import { requireApiAuth } from "~/server/auth.server";
+import { storeSessionAttachments } from "~/server/attachments.server";
 import { isApiError, ApiError } from "~/server/api-error.server";
 import { sessionBroker } from "~/server/session-broker.server";
+import { sessionStore } from "~/server/store.server";
 import { getProvider, listProviders } from "~/server/providers/registry.server";
 
 async function readJson<T>(request: Request) {
@@ -20,7 +22,10 @@ async function readJson<T>(request: Request) {
 	}
 }
 
-function writeSseMessage(controller: ReadableStreamDefaultController<string>, message: SessionStreamMessage) {
+function writeSseMessage(
+	controller: ReadableStreamDefaultController<string>,
+	message: SessionStreamMessage,
+) {
 	controller.enqueue(`data: ${JSON.stringify(message)}\n\n`);
 }
 
@@ -29,7 +34,9 @@ async function assertDirectory(path: string, fieldName: string) {
 		throw new ApiError(400, "invalid_cwd", `${fieldName} must be an absolute path`);
 	}
 
-	const stat = await Bun.file(path).stat().catch(() => null);
+	const stat = await Bun.file(path)
+		.stat()
+		.catch(() => null);
 
 	if (!stat?.isDirectory()) {
 		throw new ApiError(400, "invalid_cwd", `${fieldName} must be an existing directory`);
@@ -45,11 +52,19 @@ function assertProviderId(providerId: unknown, fieldName: string): "claude" | "c
 }
 
 function assertPermissionMode(permissionMode: unknown) {
-	if (permissionMode === undefined || permissionMode === "default" || permissionMode === "dontAsk") {
+	if (
+		permissionMode === undefined ||
+		permissionMode === "default" ||
+		permissionMode === "dontAsk"
+	) {
 		return permissionMode;
 	}
 
-	throw new ApiError(400, "invalid_permission_mode", 'permissionMode must be "default" or "dontAsk"');
+	throw new ApiError(
+		400,
+		"invalid_permission_mode",
+		'permissionMode must be "default" or "dontAsk"',
+	);
 }
 
 function assertAllowedTools(allowedTools: unknown) {
@@ -57,8 +72,15 @@ function assertAllowedTools(allowedTools: unknown) {
 		return;
 	}
 
-	if (!Array.isArray(allowedTools) || allowedTools.some((value) => typeof value !== "string" || value.trim().length === 0)) {
-		throw new ApiError(400, "invalid_allowed_tools", "allowedTools must be an array of non-empty strings");
+	if (
+		!Array.isArray(allowedTools) ||
+		allowedTools.some((value) => typeof value !== "string" || value.trim().length === 0)
+	) {
+		throw new ApiError(
+			400,
+			"invalid_allowed_tools",
+			"allowedTools must be an array of non-empty strings",
+		);
 	}
 }
 
@@ -93,15 +115,68 @@ function validateCreateSessionInput(payload: CreateSessionInput) {
 
 function validateImportSessionInput(payload: ImportSessionPayload) {
 	assertProviderId(payload.provider, "provider");
-	if (typeof payload.providerSessionRef !== "string" || payload.providerSessionRef.trim().length === 0) {
-		throw new ApiError(400, "invalid_provider_session_ref", "providerSessionRef must be a non-empty string");
+	if (
+		typeof payload.providerSessionRef !== "string" ||
+		payload.providerSessionRef.trim().length === 0
+	) {
+		throw new ApiError(
+			400,
+			"invalid_provider_session_ref",
+			"providerSessionRef must be a non-empty string",
+		);
 	}
 	assertPermissionMode(payload.permissionMode);
 	assertAllowedTools(payload.allowedTools);
 }
 
 function validateSessionInput(payload: SessionInputPayload) {
-	validatePrompt(payload.prompt, "prompt", true);
+	if (typeof payload.prompt !== "string") {
+		throw new ApiError(400, "invalid_prompt", "prompt must be a string");
+	}
+
+	if (!Array.isArray(payload.attachments)) {
+		throw new ApiError(400, "invalid_attachments", "attachments must be an array");
+	}
+
+	for (const attachment of payload.attachments) {
+		if (
+			typeof attachment.name !== "string" ||
+			attachment.name.trim().length === 0 ||
+			typeof attachment.path !== "string" ||
+			attachment.path.trim().length === 0 ||
+			typeof attachment.contentType !== "string" ||
+			!attachment.contentType.startsWith("image/")
+		) {
+			throw new ApiError(400, "invalid_attachments", "attachments must be valid image files");
+		}
+	}
+}
+
+async function readSessionInput(request: Request, sessionId: string): Promise<SessionInputPayload> {
+	const formData = await request.formData().catch(() => {
+		throw new ApiError(400, "invalid_form_data", "Invalid form data");
+	});
+	const prompt = formData.get("prompt");
+
+	if (prompt !== null && typeof prompt !== "string") {
+		throw new ApiError(400, "invalid_prompt", "prompt must be a string");
+	}
+
+	const session = sessionStore.getSession(sessionId);
+
+	if (!session) {
+		throw new ApiError(404, "session_not_found", "Session not found");
+	}
+
+	const attachments = await storeSessionAttachments(
+		sessionId,
+		session.cwd,
+		formData.getAll("images"),
+	);
+	return {
+		prompt: typeof prompt === "string" ? prompt : "",
+		attachments,
+	};
 }
 
 function validateControlInput(payload: SessionControlPayload) {
@@ -115,7 +190,10 @@ function validateRequestResponseInput(payload: RequestResponsePayload) {
 		throw new ApiError(400, "invalid_decision", 'decision must be "allow" or "deny"');
 	}
 
-	if (payload.toolRule !== undefined && (typeof payload.toolRule !== "string" || payload.toolRule.trim().length === 0)) {
+	if (
+		payload.toolRule !== undefined &&
+		(typeof payload.toolRule !== "string" || payload.toolRule.trim().length === 0)
+	) {
 		throw new ApiError(400, "invalid_tool_rule", "toolRule must be a non-empty string");
 	}
 }
@@ -189,7 +267,12 @@ async function dispatchApiRequest(request: Request) {
 		return Response.json({ providers: listProviders() });
 	}
 
-	if (request.method === "GET" && segments[0] === "api" && segments[1] === "providers" && segments[3] === "sessions") {
+	if (
+		request.method === "GET" &&
+		segments[0] === "api" &&
+		segments[1] === "providers" &&
+		segments[3] === "sessions"
+	) {
 		const providerId = assertProviderId(segments[2], "provider");
 		return Response.json({ sessions: await getProvider(providerId).listHistoricalSessions() });
 	}
@@ -217,7 +300,9 @@ async function dispatchApiRequest(request: Request) {
 
 		if (request.method === "GET" && segments.length === 3) {
 			const detail = sessionBroker.getSessionDetail(sessionId);
-			return detail ? Response.json(detail) : jsonError(404, "session_not_found", "Session not found");
+			return detail
+				? Response.json(detail)
+				: jsonError(404, "session_not_found", "Session not found");
 		}
 
 		if (request.method === "GET" && segments[3] === "events") {
@@ -235,7 +320,7 @@ async function dispatchApiRequest(request: Request) {
 		}
 
 		if (request.method === "POST" && segments[3] === "input") {
-			const payload = await readJson<SessionInputPayload>(request);
+			const payload = await readSessionInput(request, sessionId);
 			validateSessionInput(payload);
 			const session = await sessionBroker.sendInput(sessionId, payload);
 			return Response.json({ session }, { status: 202 });
@@ -249,7 +334,13 @@ async function dispatchApiRequest(request: Request) {
 		}
 	}
 
-	if (request.method === "POST" && segments[0] === "api" && segments[1] === "requests" && segments[2] && segments[3] === "respond") {
+	if (
+		request.method === "POST" &&
+		segments[0] === "api" &&
+		segments[1] === "requests" &&
+		segments[2] &&
+		segments[3] === "respond"
+	) {
 		const payload = await readJson<RequestResponsePayload>(request);
 		validateRequestResponseInput(payload);
 		const requestRecord = await sessionBroker.respondToRequest(segments[2], payload);

@@ -4,6 +4,7 @@ import {
 	CircleStop,
 	CircleX,
 	FolderOpen,
+	ImagePlus,
 	Loader2,
 	LogOut,
 	Plus,
@@ -26,6 +27,7 @@ import {
 	connectSSE,
 	controlSession,
 	createSession,
+	fetchProviders,
 	fetchSessions,
 	getToken,
 	respondToRequest,
@@ -35,6 +37,7 @@ import type {
 	HostEvent,
 	HostSession,
 	PendingRequest,
+	ProviderSummary,
 	RequestResponsePayload,
 	SessionStatus,
 } from "~/lib/shelleport";
@@ -49,6 +52,7 @@ type UserMessage = {
 	id: string;
 	kind: "user-message";
 	text: string;
+	attachments: string[];
 	createTime: number;
 };
 
@@ -60,11 +64,12 @@ function isUserMessage(entry: StreamEntry): entry is UserMessage {
 }
 
 let userMsgCounter = 0;
-function createUserMessage(text: string): UserMessage {
+function createUserMessage(text: string, attachments: string[]): UserMessage {
 	return {
 		id: `user-msg-${++userMsgCounter}`,
 		kind: "user-message",
 		text,
+		attachments,
 		createTime: Date.now(),
 	};
 }
@@ -260,9 +265,23 @@ function UserMessageRenderer({ message }: { message: UserMessage }) {
 	return (
 		<div className="animate-event-enter my-3 flex justify-end">
 			<div className="max-w-[80%] rounded-md border border-foreground/8 bg-accent px-3 py-2">
-				<p className="whitespace-pre-wrap text-xs leading-[1.7] text-foreground/80">
-					{message.text}
-				</p>
+				{message.attachments.length > 0 && (
+					<div className="mb-2 flex flex-wrap justify-end gap-1.5">
+						{message.attachments.map((attachment) => (
+							<span
+								key={attachment}
+								className="rounded border border-foreground/10 bg-background/70 px-2 py-1 text-[10px] text-foreground/60"
+							>
+								{attachment}
+							</span>
+						))}
+					</div>
+				)}
+				{message.text.length > 0 && (
+					<p className="whitespace-pre-wrap text-xs leading-[1.7] text-foreground/80">
+						{message.text}
+					</p>
+				)}
 			</div>
 		</div>
 	);
@@ -432,15 +451,18 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 	const navigate = useNavigate();
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
+	const fileInputRef = useRef<HTMLInputElement>(null);
 	const isAtBottom = useRef(true);
 
 	const [token] = useState(() => getToken());
+	const [providers, setProviders] = useState<ProviderSummary[]>([]);
 	const [sessions, setSessions] = useState<HostSession[]>([]);
 	const [selectedId, setSelectedId] = useState<string | null>(null);
 	const [session, setSession] = useState<HostSession | null>(null);
 	const [stream, setStream] = useState<StreamEntry[]>([]);
 	const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
 	const [prompt, setPrompt] = useState("");
+	const [draftImages, setDraftImages] = useState<File[]>([]);
 	const [showNewSession, setShowNewSession] = useState(false);
 	const [newCwd, setNewCwd] = useState(loaderData.defaultCwd);
 	const [newTitle, setNewTitle] = useState("");
@@ -460,6 +482,13 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 	// Fetch sessions
 	useEffect(() => {
 		if (!token) return;
+		fetchProviders(token)
+			.then(({ providers: nextProviders }) => setProviders(nextProviders))
+			.catch(() => {});
+	}, [token]);
+
+	useEffect(() => {
+		if (!token) return;
 		fetchSessions(token)
 			.then(({ sessions: s }) => {
 				setSessions(s);
@@ -476,6 +505,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 		setPendingRequests([]);
 		setSession(null);
 		setStreamState("connected");
+		setDraftImages([]);
 
 		const controller = connectSSE(
 			token,
@@ -554,28 +584,30 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 	}, [token, newCwd, newTitle]);
 
 	const handleSend = useCallback(async () => {
-		if (
-			!token ||
-			!selectedId ||
-			!prompt.trim() ||
-			session?.status === "running" ||
-			session?.status === "retrying"
-		) {
+		if (!token || !selectedId || session?.status === "running" || session?.status === "retrying") {
 			return;
 		}
 		const text = prompt;
+		const images = draftImages;
+		const attachmentNames = images.map((image) => image.name);
+
+		if (text.trim().length === 0 && images.length === 0) {
+			return;
+		}
+
 		setPrompt("");
+		setDraftImages([]);
 		if (textareaRef.current) textareaRef.current.style.height = "auto";
 
-		// Inject user message into the stream immediately
-		setStream((prev) => [...prev, createUserMessage(text)]);
+		setStream((prev) => [...prev, createUserMessage(text, attachmentNames)]);
 
 		try {
-			await sendInput(token, selectedId, text);
+			await sendInput(token, selectedId, text, images);
 		} catch {
 			setPrompt(text);
+			setDraftImages(images);
 		}
-	}, [token, selectedId, prompt, session?.status]);
+	}, [token, selectedId, prompt, draftImages, session?.status]);
 
 	const handleInterrupt = useCallback(async () => {
 		if (!token || !selectedId) return;
@@ -598,6 +630,42 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 		[token],
 	);
 
+	const addDraftImages = useCallback((files: File[]) => {
+		setDraftImages((prev) => [...prev, ...files]);
+	}, []);
+
+	const handleImageSelect = useCallback(
+		(event: React.ChangeEvent<HTMLInputElement>) => {
+			const files = Array.from(event.target.files ?? []).filter((file) =>
+				file.type.startsWith("image/"),
+			);
+
+			if (files.length > 0) {
+				addDraftImages(files);
+			}
+
+			event.target.value = "";
+		},
+		[addDraftImages],
+	);
+
+	const handlePaste = useCallback(
+		(event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+			const files = Array.from(event.clipboardData.items)
+				.filter((item) => item.type.startsWith("image/"))
+				.map((item) => item.getAsFile())
+				.filter((file): file is File => file !== null);
+
+			if (files.length === 0) {
+				return;
+			}
+
+			event.preventDefault();
+			addDraftImages(files);
+		},
+		[addDraftImages],
+	);
+
 	function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
 		if (e.key === "Enter" && !e.shiftKey) {
 			e.preventDefault();
@@ -618,7 +686,12 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 	if (!token) return null;
 
 	const isSessionBusy = session?.status === "running" || session?.status === "retrying";
-	const canSend = !!selectedId && prompt.trim().length > 0 && !isSessionBusy;
+	const sessionProvider = session
+		? providers.find((provider) => provider.id === session.provider)
+		: null;
+	const canAttachImages = sessionProvider?.capabilities.supportsImages === true;
+	const canSend =
+		!!selectedId && (prompt.trim().length > 0 || draftImages.length > 0) && !isSessionBusy;
 
 	return (
 		<div className="flex h-screen overflow-hidden bg-background">
@@ -667,6 +740,10 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 									onClick={() => setSelectedId(s.id)}
 									title={getSidebarTitle(s)}
 									className={`group w-full rounded-md px-2.5 py-2 text-left transition ${
+										s.status === "running" || s.status === "retrying"
+											? "sidebar-session-running"
+											: ""
+									} ${
 										selectedId === s.id
 											? "bg-accent text-foreground"
 											: "text-foreground/60 hover:bg-accent/50 hover:text-foreground/80"
@@ -785,6 +862,38 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 						<div className="shrink-0 border-t border-border px-5 py-3">
 							<div className="mx-auto max-w-3xl">
 								<div className="relative rounded-md border border-border bg-card transition-colors focus-within:border-foreground/15">
+									<input
+										ref={fileInputRef}
+										type="file"
+										accept="image/*"
+										multiple
+										onChange={handleImageSelect}
+										className="hidden"
+									/>
+									{draftImages.length > 0 && (
+										<div className="flex flex-wrap gap-2 border-b border-border px-3 py-2">
+											{draftImages.map((image, index) => (
+												<span
+													key={`${image.name}-${image.size}-${index}`}
+													className="inline-flex items-center gap-1.5 rounded border border-border bg-background px-2 py-1 text-[10px] text-foreground/70"
+												>
+													{image.name}
+													<button
+														type="button"
+														onClick={() =>
+															setDraftImages((prev) =>
+																prev.filter((_, itemIndex) => itemIndex !== index),
+															)
+														}
+														className="text-muted-foreground transition hover:text-foreground"
+														aria-label={`Remove ${image.name}`}
+													>
+														<X className="size-3" />
+													</button>
+												</span>
+											))}
+										</div>
+									)}
 									<textarea
 										ref={textareaRef}
 										rows={1}
@@ -794,12 +903,28 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 											autoResize(e.currentTarget);
 										}}
 										onKeyDown={handleKeyDown}
+										onPaste={handlePaste}
 										placeholder={
-											isSessionBusy ? "Claude is working..." : "Message Claude... (Enter to send)"
+											isSessionBusy
+												? "Claude is working..."
+												: canAttachImages
+													? "Message Claude... paste images or attach files"
+													: "Message Claude... (Enter to send)"
 										}
 										disabled={isSessionBusy}
-										className="w-full resize-none bg-transparent px-3 py-2.5 pr-10 text-xs text-foreground outline-none placeholder:text-muted-foreground/40 disabled:cursor-not-allowed disabled:opacity-40"
+										className="w-full resize-none bg-transparent px-3 py-2.5 pr-20 text-xs text-foreground outline-none placeholder:text-muted-foreground/40 disabled:cursor-not-allowed disabled:opacity-40"
 									/>
+									{canAttachImages && (
+										<button
+											type="button"
+											onClick={() => fileInputRef.current?.click()}
+											disabled={isSessionBusy}
+											className="absolute right-10 bottom-2 flex size-7 items-center justify-center rounded border border-border bg-background text-muted-foreground transition hover:border-foreground/20 hover:text-foreground disabled:opacity-20"
+											title="Attach images"
+										>
+											<ImagePlus className="size-3.5" />
+										</button>
+									)}
 									<button
 										type="button"
 										onClick={handleSend}

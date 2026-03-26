@@ -96,7 +96,11 @@ function updateSessionStatus(
 	return updatedSession;
 }
 
-async function consumeProviderRun(sessionId: string, prompt: string, mode: "send" | "resume") {
+async function consumeProviderRun(
+	sessionId: string,
+	input: SessionInputPayload,
+	mode: "send" | "resume",
+) {
 	let session = sessionStore.getSession(sessionId);
 
 	if (!session) {
@@ -127,12 +131,14 @@ async function consumeProviderRun(sessionId: string, prompt: string, mode: "send
 		mode === "resume"
 			? provider.resumeSession(session, {
 					session,
-					prompt,
+					prompt: input.prompt,
+					attachments: input.attachments,
 					signal: activeRun.abortController.signal,
 				})
 			: provider.sendInput({
 					session,
-					prompt,
+					prompt: input.prompt,
+					attachments: input.attachments,
 					signal: activeRun.abortController.signal,
 				});
 
@@ -274,7 +280,7 @@ export const sessionBroker = {
 		});
 
 		if (input.prompt?.trim()) {
-			void consumeProviderRun(session.id, input.prompt, "send");
+			void consumeProviderRun(session.id, { prompt: input.prompt, attachments: [] }, "send");
 		}
 
 		return sessionStore.getSession(session.id);
@@ -305,11 +311,27 @@ export const sessionBroker = {
 			throw new ApiError(409, "session_already_running", "Session already running");
 		}
 
-		if (input.prompt.trim().length === 0) {
-			throw new ApiError(400, "prompt_required", "Prompt is required");
+		if (input.prompt.trim().length === 0 && input.attachments.length === 0) {
+			throw new ApiError(400, "prompt_required", "Prompt or image is required");
 		}
 
-		void consumeProviderRun(sessionId, input.prompt, "send");
+		const session = sessionStore.getSession(sessionId);
+
+		if (!session) {
+			throw new ApiError(404, "session_not_found", `Unknown session: ${sessionId}`);
+		}
+
+		const provider = getProvider(session.provider);
+
+		if (input.attachments.length > 0 && !provider.capabilities().supportsImages) {
+			throw new ApiError(
+				400,
+				"provider_no_image_support",
+				`${provider.label} does not support images`,
+			);
+		}
+
+		void consumeProviderRun(sessionId, input, "send");
 
 		return sessionStore.getSession(sessionId);
 	},
@@ -403,7 +425,7 @@ export const sessionBroker = {
 				? request.data.resumePrompt
 				: "The user approved the blocked request. Retry it if still needed, then continue the task.";
 
-		void consumeProviderRun(updatedSession.id, resumePrompt, "resume");
+		void consumeProviderRun(updatedSession.id, { prompt: resumePrompt, attachments: [] }, "resume");
 
 		return resolvedRequest;
 	},
