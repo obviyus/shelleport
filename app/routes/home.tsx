@@ -1,4 +1,5 @@
 import {
+	Check,
 	ChevronRight,
 	CircleStop,
 	FolderOpen,
@@ -7,8 +8,9 @@ import {
 	Plus,
 	Send,
 	Terminal,
+	X,
 } from "lucide-react";
-import { startTransition, useCallback, useEffect, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import {
 	Dialog,
@@ -127,8 +129,66 @@ function StatusDot({ status }: { status: SessionStatus }) {
 }
 
 // ---------------------------------------------------------------------------
-// Event renderer
+// Stream grouping — pairs tool-calls with their results
 // ---------------------------------------------------------------------------
+
+type ToolGroup = { type: "tool"; call: HostEvent; result: HostEvent | null };
+type PassthroughGroup = { type: "entry"; entry: StreamEntry };
+type GroupedEntry = ToolGroup | PassthroughGroup;
+
+function groupStream(entries: StreamEntry[]): GroupedEntry[] {
+	const resultMap = new Map<string, HostEvent>();
+	for (const e of entries) {
+		if (
+			!isUserMessage(e) &&
+			e.kind === "tool-result" &&
+			typeof e.data.toolUseId === "string"
+		) {
+			resultMap.set(e.data.toolUseId, e);
+		}
+	}
+
+	const consumedIds = new Set<string>();
+	const grouped: GroupedEntry[] = [];
+
+	for (const entry of entries) {
+		if (isUserMessage(entry)) {
+			grouped.push({ type: "entry", entry });
+			continue;
+		}
+
+		if (entry.kind === "tool-call") {
+			const uid = entry.data.toolUseId as string | null;
+			const result = uid ? resultMap.get(uid) ?? null : null;
+			if (result) consumedIds.add(result.id);
+			grouped.push({ type: "tool", call: entry, result });
+			continue;
+		}
+
+		if (entry.kind === "tool-result" && consumedIds.has(entry.id)) {
+			continue; // already consumed by its tool-call group
+		}
+
+		grouped.push({ type: "entry", entry });
+	}
+
+	return grouped;
+}
+
+// ---------------------------------------------------------------------------
+// Renderers
+// ---------------------------------------------------------------------------
+
+function GroupedEntryRenderer({ group }: { group: GroupedEntry }) {
+	if (group.type === "tool") {
+		return <ToolCard call={group.call} result={group.result} />;
+	}
+	const { entry } = group;
+	if (isUserMessage(entry)) {
+		return <UserMessageRenderer message={entry} />;
+	}
+	return <EventRenderer event={entry} />;
+}
 
 function UserMessageRenderer({ message }: { message: UserMessage }) {
 	return (
@@ -142,11 +202,70 @@ function UserMessageRenderer({ message }: { message: UserMessage }) {
 	);
 }
 
-function StreamEntryRenderer({ entry }: { entry: StreamEntry }) {
-	if (isUserMessage(entry)) {
-		return <UserMessageRenderer message={entry} />;
-	}
-	return <EventRenderer event={entry} />;
+/** Paired tool-call + result card */
+function ToolCard({ call, result }: { call: HostEvent; result: HostEvent | null }) {
+	const [open, setOpen] = useState(false);
+	const toolName = call.data.toolName as string;
+	const preview = getToolPreview(call);
+	const content = result ? ((result.data.content as string) ?? "") : null;
+	const isError = result?.data.isError === true;
+	const pending = !result;
+
+	return (
+		<div className="animate-event-enter my-1.5 overflow-hidden rounded-md border border-border bg-card/80">
+			{/* Header — always visible */}
+			<button
+				type="button"
+				onClick={() => content && setOpen((v) => !v)}
+				className={`flex w-full items-center gap-2 px-3 py-2 text-left transition ${
+					content ? "cursor-pointer hover:bg-accent/50" : "cursor-default"
+				}`}
+			>
+				{/* Expand chevron */}
+				{content ? (
+					<ChevronRight
+						className={`size-3 shrink-0 text-muted-foreground transition-transform ${
+							open ? "rotate-90" : ""
+						}`}
+					/>
+				) : (
+					<Loader2 className="size-3 shrink-0 animate-spin text-muted-foreground/50" />
+				)}
+
+				{/* Tool name badge */}
+				<span className="shrink-0 rounded border border-foreground/8 bg-foreground/5 px-1.5 py-px text-[10px] font-medium text-foreground/60">
+					{toolName}
+				</span>
+
+				{/* Preview */}
+				<span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
+					{preview}
+				</span>
+
+				{/* Status indicator */}
+				{result && !isError && (
+					<Check className="size-3 shrink-0 text-foreground/25" />
+				)}
+				{isError && (
+					<X className="size-3 shrink-0 text-destructive/60" />
+				)}
+				{pending && (
+					<span className="shrink-0 text-[10px] text-muted-foreground/40">
+						running
+					</span>
+				)}
+			</button>
+
+			{/* Expanded result */}
+			{open && content && (
+				<div className="border-t border-border">
+					<pre className="max-h-72 overflow-auto px-3 py-2.5 text-[10px] leading-[1.7] text-foreground/50">
+						{truncate(content, 8000)}
+					</pre>
+				</div>
+			)}
+		</div>
+	);
 }
 
 function EventRenderer({ event }: { event: HostEvent }) {
@@ -160,38 +279,6 @@ function EventRenderer({ event }: { event: HostEvent }) {
 		);
 	}
 
-	if (event.kind === "tool-call") {
-		return (
-			<div className="animate-event-enter my-1.5 rounded border border-border bg-card px-3 py-2">
-				<span className="text-[11px] font-semibold text-foreground/70">
-					{event.data.toolName as string}
-				</span>
-				<p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-					{getToolPreview(event)}
-				</p>
-			</div>
-		);
-	}
-
-	if (event.kind === "tool-result") {
-		const content = (event.data.content as string) ?? "";
-		const isError = event.data.isError === true;
-		return (
-			<div className="animate-event-enter my-0.5 ml-3">
-				<details className="group">
-					<summary className="flex cursor-pointer items-center gap-1 text-[11px] text-muted-foreground transition hover:text-foreground/60">
-						<ChevronRight className="size-2.5 transition-transform group-open:rotate-90" />
-						Result
-						{isError && <span className="text-destructive">(error)</span>}
-					</summary>
-					<pre className="mt-1 max-h-56 overflow-auto rounded border border-border bg-muted/50 p-2 text-[10px] leading-relaxed text-foreground/60">
-						{truncate(content, 5000)}
-					</pre>
-				</details>
-			</div>
-		);
-	}
-
 	if (event.kind === "error") {
 		const message =
 			typeof event.data.message === "string"
@@ -200,7 +287,7 @@ function EventRenderer({ event }: { event: HostEvent }) {
 					? event.data.stderr
 					: event.summary;
 		return (
-			<div className="animate-event-enter my-2 rounded border border-destructive/20 bg-destructive/5 px-3 py-2">
+			<div className="animate-event-enter my-2 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2">
 				<p className="text-[11px] font-medium text-destructive">{event.summary}</p>
 				{message !== event.summary && (
 					<p className="mt-1 text-[10px] text-destructive/60">{message}</p>
@@ -209,7 +296,7 @@ function EventRenderer({ event }: { event: HostEvent }) {
 		);
 	}
 
-	// system / state
+	// system / state / orphan tool-result
 	return (
 		<div className="animate-event-enter my-3 flex items-center gap-3 text-[10px] text-muted-foreground/40">
 			<div className="h-px flex-1 bg-border" />
@@ -307,6 +394,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 	const [newTitle, setNewTitle] = useState("");
 	const [isCreating, setIsCreating] = useState(false);
 	const [initialLoading, setInitialLoading] = useState(true);
+
+	// Group tool-calls with their results
+	const grouped = useMemo(() => groupStream(stream), [stream]);
 
 	// Auth guard
 	useEffect(() => {
@@ -586,7 +676,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 							onScroll={handleScroll}
 							className="flex-1 overflow-y-auto px-5 py-4"
 						>
-							{stream.length === 0 && session.status !== "running" ? (
+							{grouped.length === 0 && session.status !== "running" ? (
 								<div className="flex h-full items-center justify-center">
 									<p className="text-xs text-muted-foreground/40">
 										Send a message to start
@@ -594,8 +684,11 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 								</div>
 							) : (
 								<div className="mx-auto max-w-3xl">
-									{stream.map((entry) => (
-										<StreamEntryRenderer key={entry.id} entry={entry} />
+									{grouped.map((group) => (
+										<GroupedEntryRenderer
+											key={group.type === "tool" ? group.call.id : group.entry.id}
+											group={group}
+										/>
 									))}
 									{session.status === "running" && (
 										<div className="animate-thinking mt-1 flex gap-1 py-2">
