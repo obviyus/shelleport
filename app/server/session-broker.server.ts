@@ -5,6 +5,7 @@ import type {
 	ImportSessionPayload,
 	PendingRequest,
 	RequestResponsePayload,
+	SessionStatusDetail,
 	SessionControlPayload,
 	SessionInputPayload,
 	SessionStreamMessage,
@@ -61,6 +62,40 @@ function normalizeAllowedTools(allowedTools: string[]) {
 	return [...new Set(allowedTools)].sort();
 }
 
+function emptyStatusDetail(): SessionStatusDetail {
+	return {
+		message: null,
+		attempt: null,
+		nextRetryTime: null,
+		waitKind: null,
+		blockReason: null,
+	};
+}
+
+function updateSessionStatus(
+	sessionId: string,
+	status: HostSession["status"],
+	detail: Partial<SessionStatusDetail> = {},
+	update: Partial<
+		Pick<HostSession, "pid" | "providerSessionRef" | "title" | "permissionMode" | "allowedTools">
+	> = {},
+) {
+	const updatedSession = sessionStore.updateSession(sessionId, {
+		status,
+		statusDetail: {
+			...emptyStatusDetail(),
+			...detail,
+		},
+		...update,
+	});
+
+	if (updatedSession) {
+		publishSession(updatedSession);
+	}
+
+	return updatedSession;
+}
+
 async function consumeProviderRun(sessionId: string, prompt: string, mode: "send" | "resume") {
 	let session = sessionStore.getSession(sessionId);
 
@@ -79,16 +114,14 @@ async function consumeProviderRun(sessionId: string, prompt: string, mode: "send
 	};
 
 	activeRuns.set(sessionId, activeRun);
-	session = sessionStore.updateSession(sessionId, { status: "running" });
+	session = updateSessionStatus(sessionId, "running");
 
 	if (!session) {
 		activeRuns.delete(sessionId);
 		throw new ApiError(404, "session_not_found", `Unknown session: ${sessionId}`);
 	}
-
-	publishSession(session);
-
 	let nextStatus: HostSession["status"] = "idle";
+	let nextStatusDetail = emptyStatusDetail();
 	let hasPendingRequest = false;
 	const generator =
 		mode === "resume"
@@ -96,12 +129,12 @@ async function consumeProviderRun(sessionId: string, prompt: string, mode: "send
 					session,
 					prompt,
 					signal: activeRun.abortController.signal,
-			  })
+				})
 			: provider.sendInput({
 					session,
 					prompt,
 					signal: activeRun.abortController.signal,
-			  });
+				});
 
 	try {
 		for await (const event of generator) {
@@ -129,7 +162,21 @@ async function consumeProviderRun(sessionId: string, prompt: string, mode: "send
 					data: event.data,
 				});
 				publishRequest(request);
+				session =
+					updateSessionStatus(sessionId, "waiting", {
+						waitKind: event.kind,
+						blockReason: event.blockReason,
+					}) ?? session;
 				continue;
+			}
+
+			if (event.type === "session-status") {
+				session = updateSessionStatus(sessionId, event.status, event.detail) ?? session;
+				continue;
+			}
+
+			if (session.status === "retrying") {
+				session = updateSessionStatus(sessionId, "running") ?? session;
 			}
 
 			const storedEvent = sessionStore.appendEvent(sessionId, event);
@@ -137,10 +184,26 @@ async function consumeProviderRun(sessionId: string, prompt: string, mode: "send
 
 			if (event.kind === "error") {
 				nextStatus = "failed";
+				nextStatusDetail = {
+					...emptyStatusDetail(),
+					message:
+						typeof event.data.message === "string"
+							? event.data.message
+							: typeof event.data.stderr === "string"
+								? event.data.stderr
+								: null,
+				};
 			}
 		}
 	} catch (error) {
 		nextStatus = activeRun.abortController.signal.aborted ? "interrupted" : "failed";
+		nextStatusDetail =
+			nextStatus === "failed"
+				? {
+						...emptyStatusDetail(),
+						message: error instanceof Error ? error.message : String(error),
+					}
+				: emptyStatusDetail();
 		const storedEvent = sessionStore.appendEvent(sessionId, {
 			kind: "error",
 			summary: "Run failed",
@@ -156,16 +219,10 @@ async function consumeProviderRun(sessionId: string, prompt: string, mode: "send
 
 		if (nextStatus === "idle" && hasPendingRequest) {
 			nextStatus = "waiting";
+			nextStatusDetail = session.statusDetail;
 		}
 
-		const updatedSession = sessionStore.updateSession(sessionId, {
-			status: nextStatus,
-			pid: null,
-		});
-
-		if (updatedSession) {
-			publishSession(updatedSession);
-		}
+		updateSessionStatus(sessionId, nextStatus, nextStatusDetail, { pid: null });
 
 		activeRun.resolveDone();
 	}
@@ -201,7 +258,11 @@ export const sessionBroker = {
 		const provider = getProvider(input.provider);
 
 		if (!provider.capabilities().canCreate) {
-			throw new ApiError(400, "provider_cannot_create", `${provider.label} cannot start managed sessions in v1`);
+			throw new ApiError(
+				400,
+				"provider_cannot_create",
+				`${provider.label} cannot start managed sessions in v1`,
+			);
 		}
 
 		const session = sessionStore.createSession({
@@ -290,11 +351,7 @@ export const sessionBroker = {
 				decision: "deny",
 			});
 			publishRequest(resolvedRequest);
-			const updatedSession = sessionStore.updateSession(session.id, { status: "idle" });
-
-			if (updatedSession) {
-				publishSession(updatedSession);
-			}
+			updateSessionStatus(session.id, "idle");
 
 			return resolvedRequest;
 		}
@@ -316,6 +373,7 @@ export const sessionBroker = {
 		const allowedTools = normalizeAllowedTools([...session.allowedTools, toolRule]);
 		const updatedSession = sessionStore.updateSession(session.id, {
 			status: "running",
+			statusDetail: emptyStatusDetail(),
 			allowedTools,
 		});
 

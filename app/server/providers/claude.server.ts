@@ -1,7 +1,16 @@
 import { basename } from "node:path";
 import { getClaudeBin } from "~/server/config.server";
-import type { HistoricalSession, HostSession, ProviderCapabilities, ProviderSummary } from "~/lib/shelleport";
-import type { ProviderAdapter, ProviderAdapterEvent, ProviderAdapterRunInput } from "~/server/providers/provider.server";
+import type {
+	HistoricalSession,
+	HostSession,
+	ProviderCapabilities,
+	ProviderSummary,
+} from "~/lib/shelleport";
+import type {
+	ProviderAdapter,
+	ProviderAdapterEvent,
+	ProviderAdapterRunInput,
+} from "~/server/providers/provider.server";
 import { listJsonlFiles, readHeadJsonl } from "~/server/providers/jsonl.server";
 
 const decoder = new TextDecoder();
@@ -24,6 +33,12 @@ type ClaudePermissionDenial = {
 	tool_name?: unknown;
 	tool_use_id?: unknown;
 	tool_input?: unknown;
+};
+
+type ClaudeRetryStatus = {
+	message: string;
+	attempt: number | null;
+	nextRetryTime: number | null;
 };
 
 function classifyClaudeBlockReason(content: string) {
@@ -73,6 +88,88 @@ function getMessageContent(rawEvent: Record<string, unknown>) {
 
 function getToolInputRecord(value: unknown) {
 	return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+function getStringRecord(value: unknown) {
+	return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+}
+
+function parseRetryDelay(text: string) {
+	const match = text.match(/retry(?:ing)?\s+in\s+(\d+)\s*(second|sec|s|minute|min|m)/i);
+
+	if (!match) {
+		return null;
+	}
+
+	const amount = Number(match[1]);
+
+	if (!Number.isFinite(amount)) {
+		return null;
+	}
+
+	return match[2].toLowerCase().startsWith("m") ? amount * 60_000 : amount * 1_000;
+}
+
+function parseClaudeRetryStatus(rawEvent: Record<string, unknown>): ClaudeRetryStatus | null {
+	const candidates: string[] = [];
+	const message = getStringRecord(rawEvent.message);
+	const data = getStringRecord(rawEvent.data);
+	const nestedMessage = getStringRecord(data?.message);
+
+	if (typeof rawEvent.result === "string") {
+		candidates.push(rawEvent.result);
+	}
+
+	if (typeof rawEvent.error === "string") {
+		candidates.push(rawEvent.error);
+	}
+
+	if (typeof data?.toolUseResult === "string") {
+		candidates.push(data.toolUseResult);
+	}
+
+	if (typeof nestedMessage?.toolUseResult === "string") {
+		candidates.push(nestedMessage.toolUseResult);
+	}
+
+	if (Array.isArray(message?.content)) {
+		for (const item of message.content) {
+			const contentItem = getStringRecord(item);
+
+			if (typeof contentItem?.text === "string") {
+				candidates.push(contentItem.text);
+			}
+
+			if (typeof contentItem?.content === "string") {
+				candidates.push(contentItem.content);
+			}
+		}
+	}
+
+	for (const candidate of candidates) {
+		const messageText = candidate.trim();
+		const normalized = messageText.toLowerCase();
+
+		if (
+			!normalized.includes("429") &&
+			!normalized.includes("rate limit") &&
+			!normalized.includes("too many requests") &&
+			!normalized.includes("overloaded")
+		) {
+			continue;
+		}
+
+		const attemptMatch = messageText.match(/attempt\s*#?\s*(\d+)/i);
+		const delayMs = parseRetryDelay(messageText);
+
+		return {
+			message: messageText,
+			attempt: attemptMatch ? Number(attemptMatch[1]) : null,
+			nextRetryTime: delayMs === null ? null : Date.now() + delayMs,
+		};
+	}
+
+	return null;
 }
 
 function tokenizeCommand(command: string) {
@@ -165,8 +262,7 @@ export function normalizeClaudeEvent(rawEvent: Record<string, unknown>): Provide
 	const type = typeof rawEvent.type === "string" ? rawEvent.type : "unknown";
 
 	if (type === "system" && rawEvent.subtype === "init") {
-		const providerSessionRef =
-			typeof rawEvent.session_id === "string" ? rawEvent.session_id : null;
+		const providerSessionRef = typeof rawEvent.session_id === "string" ? rawEvent.session_id : null;
 
 		return providerSessionRef ? [{ type: "provider-session", providerSessionRef }] : [];
 	}
@@ -224,7 +320,9 @@ export function normalizeClaudeEvent(rawEvent: Record<string, unknown>): Provide
 
 			if (contentItem.type === "tool_result") {
 				const content =
-					typeof contentItem.content === "string" ? contentItem.content : JSON.stringify(contentItem);
+					typeof contentItem.content === "string"
+						? contentItem.content
+						: JSON.stringify(contentItem);
 
 				events.push({
 					type: "host-event",
@@ -248,6 +346,20 @@ export function normalizeClaudeEvent(rawEvent: Record<string, unknown>): Provide
 		return normalizeClaudeResult(rawEvent);
 	}
 
+	if (type === "progress" || type === "system") {
+		const retryStatus = parseClaudeRetryStatus(rawEvent);
+
+		if (retryStatus) {
+			return [
+				{
+					type: "session-status",
+					status: "retrying",
+					detail: retryStatus,
+				},
+			];
+		}
+	}
+
 	return [
 		{
 			type: "host-event",
@@ -259,7 +371,9 @@ export function normalizeClaudeEvent(rawEvent: Record<string, unknown>): Provide
 	];
 }
 
-async function* streamClaudeProcess(runInput: ProviderAdapterRunInput): AsyncGenerator<ProviderAdapterEvent> {
+async function* streamClaudeProcess(
+	runInput: ProviderAdapterRunInput,
+): AsyncGenerator<ProviderAdapterEvent> {
 	const subprocess = Bun.spawn(createClaudeCommand(runInput.session, runInput.prompt), {
 		cwd: runInput.session.cwd,
 		stdout: "pipe",
@@ -339,7 +453,9 @@ async function* streamClaudeProcess(runInput: ProviderAdapterRunInput): AsyncGen
 	}
 }
 
-export async function parseClaudeHistoricalSession(path: string): Promise<HistoricalSession | null> {
+export async function parseClaudeHistoricalSession(
+	path: string,
+): Promise<HistoricalSession | null> {
 	if (path.includes("/subagents/")) {
 		return null;
 	}
@@ -418,7 +534,10 @@ export class ClaudeProviderAdapter implements ProviderAdapter {
 		return streamClaudeProcess(runInput);
 	}
 
-	resumeSession(session: HostSession, runInput: ProviderAdapterRunInput): AsyncGenerator<ProviderAdapterEvent> {
+	resumeSession(
+		session: HostSession,
+		runInput: ProviderAdapterRunInput,
+	): AsyncGenerator<ProviderAdapterEvent> {
 		return streamClaudeProcess({ ...runInput, session });
 	}
 
@@ -426,6 +545,8 @@ export class ClaudeProviderAdapter implements ProviderAdapter {
 		const rootPath = `${Bun.env.HOME ?? ""}/.claude/projects`;
 		const fileList = await listJsonlFiles(rootPath);
 		const sessions = await Promise.all(fileList.map(parseClaudeHistoricalSession));
-		return sessions.filter((session) => session !== null).sort((left, right) => right.updateTime - left.updateTime);
+		return sessions
+			.filter((session) => session !== null)
+			.sort((left, right) => right.updateTime - left.updateTime);
 	}
 }

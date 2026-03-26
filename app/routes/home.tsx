@@ -2,6 +2,7 @@ import {
 	Check,
 	ChevronRight,
 	CircleStop,
+	CircleX,
 	FolderOpen,
 	Loader2,
 	LogOut,
@@ -115,9 +116,78 @@ const STATUS_STYLES: Record<SessionStatus, string> = {
 	idle: "bg-foreground/20",
 	running: "bg-foreground animate-status-pulse",
 	waiting: "bg-foreground/50 animate-status-pulse",
+	retrying: "bg-amber-500 animate-status-pulse",
 	failed: "bg-foreground/40",
 	interrupted: "bg-foreground/30",
 };
+
+function formatStatus(session: HostSession, now: number) {
+	if (session.status === "retrying") {
+		const seconds =
+			session.statusDetail.nextRetryTime === null
+				? null
+				: Math.max(0, Math.ceil((session.statusDetail.nextRetryTime - now) / 1000));
+		return seconds === null ? "retrying" : `retrying in ${seconds}s`;
+	}
+
+	if (session.status === "waiting") {
+		return session.statusDetail.waitKind === "approval" ? "waiting approval" : "waiting";
+	}
+
+	return session.status;
+}
+
+function getStatusMessage(session: HostSession) {
+	if (session.status === "retrying") {
+		return session.statusDetail.message;
+	}
+
+	if (session.status === "waiting") {
+		return session.statusDetail.waitKind === "approval"
+			? "Waiting for approval."
+			: session.statusDetail.waitKind === "question"
+				? "Waiting for input."
+				: null;
+	}
+
+	if (session.status === "failed") {
+		return session.statusDetail.message;
+	}
+
+	return null;
+}
+
+function getSidebarMeta(session: HostSession, now: number) {
+	if (session.status === "failed") {
+		return "Failed";
+	}
+
+	if (session.status === "interrupted") {
+		return "Interrupted";
+	}
+
+	if (session.status === "retrying") {
+		const seconds =
+			session.statusDetail.nextRetryTime === null
+				? null
+				: Math.max(0, Math.ceil((session.statusDetail.nextRetryTime - now) / 1000));
+		return seconds === null ? "Retrying" : `Retry in ${seconds}s`;
+	}
+
+	if (session.status === "waiting") {
+		return session.statusDetail.waitKind === "approval" ? "Waiting approval" : "Waiting";
+	}
+
+	return session.cwd.split("/").slice(-2).join("/");
+}
+
+function getSidebarTitle(session: HostSession) {
+	if (session.status === "failed" && session.statusDetail.message) {
+		return session.statusDetail.message;
+	}
+
+	return session.cwd;
+}
 
 function StatusDot({ status }: { status: SessionStatus }) {
 	return (
@@ -139,11 +209,7 @@ type GroupedEntry = ToolGroup | PassthroughGroup;
 function groupStream(entries: StreamEntry[]): GroupedEntry[] {
 	const resultMap = new Map<string, HostEvent>();
 	for (const e of entries) {
-		if (
-			!isUserMessage(e) &&
-			e.kind === "tool-result" &&
-			typeof e.data.toolUseId === "string"
-		) {
+		if (!isUserMessage(e) && e.kind === "tool-result" && typeof e.data.toolUseId === "string") {
 			resultMap.set(e.data.toolUseId, e);
 		}
 	}
@@ -159,7 +225,7 @@ function groupStream(entries: StreamEntry[]): GroupedEntry[] {
 
 		if (entry.kind === "tool-call") {
 			const uid = entry.data.toolUseId as string | null;
-			const result = uid ? resultMap.get(uid) ?? null : null;
+			const result = uid ? (resultMap.get(uid) ?? null) : null;
 			if (result) consumedIds.add(result.id);
 			grouped.push({ type: "tool", call: entry, result });
 			continue;
@@ -238,22 +304,12 @@ function ToolCard({ call, result }: { call: HostEvent; result: HostEvent | null 
 				</span>
 
 				{/* Preview */}
-				<span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
-					{preview}
-				</span>
+				<span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">{preview}</span>
 
 				{/* Status indicator */}
-				{result && !isError && (
-					<Check className="size-3 shrink-0 text-foreground/25" />
-				)}
-				{isError && (
-					<X className="size-3 shrink-0 text-destructive/60" />
-				)}
-				{pending && (
-					<span className="shrink-0 text-[10px] text-muted-foreground/40">
-						running
-					</span>
-				)}
+				{result && !isError && <Check className="size-3 shrink-0 text-foreground/25" />}
+				{isError && <X className="size-3 shrink-0 text-destructive/60" />}
+				{pending && <span className="shrink-0 text-[10px] text-muted-foreground/40">running</span>}
 			</button>
 
 			{/* Expanded result */}
@@ -320,9 +376,7 @@ function PendingRequestBanner({
 	return (
 		<div className="border-t border-border bg-accent px-5 py-3">
 			<div className="mx-auto flex max-w-3xl items-center justify-between gap-4">
-				<span className="min-w-0 truncate text-xs text-foreground/80">
-					{request.prompt}
-				</span>
+				<span className="min-w-0 truncate text-xs text-foreground/80">{request.prompt}</span>
 				<div className="flex shrink-0 gap-2">
 					<button
 						type="button"
@@ -356,9 +410,7 @@ function EmptyState({ onNew }: { onNew: () => void }) {
 					<Terminal className="size-6 text-muted-foreground/40" />
 				</div>
 				<p className="text-xs font-medium text-foreground/60">No session selected</p>
-				<p className="mt-1.5 text-[11px] text-muted-foreground">
-					Create a session to start
-				</p>
+				<p className="mt-1.5 text-[11px] text-muted-foreground">Create a session to start</p>
 				<button
 					type="button"
 					onClick={onNew}
@@ -394,6 +446,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 	const [newTitle, setNewTitle] = useState("");
 	const [isCreating, setIsCreating] = useState(false);
 	const [initialLoading, setInitialLoading] = useState(true);
+	const [now, setNow] = useState(() => Date.now());
+	const [streamState, setStreamState] = useState<"connected" | "reconnecting">("connected");
 
 	// Group tool-calls with their results
 	const grouped = useMemo(() => groupStream(stream), [stream]);
@@ -421,6 +475,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 		setStream([]);
 		setPendingRequests([]);
 		setSession(null);
+		setStreamState("connected");
 
 		const controller = connectSSE(
 			token,
@@ -430,19 +485,13 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 					if (msg.type === "snapshot") {
 						setSession(msg.payload.session);
 						setStream(msg.payload.events);
-						setPendingRequests(
-							msg.payload.pendingRequests.filter((r) => r.status === "pending"),
-						);
+						setPendingRequests(msg.payload.pendingRequests.filter((r) => r.status === "pending"));
 						setSessions((prev) =>
-							prev.map((s) =>
-								s.id === msg.payload.session.id ? msg.payload.session : s,
-							),
+							prev.map((s) => (s.id === msg.payload.session.id ? msg.payload.session : s)),
 						);
 					} else if (msg.type === "session") {
 						setSession(msg.payload);
-						setSessions((prev) =>
-							prev.map((s) => (s.id === msg.payload.id ? msg.payload : s)),
-						);
+						setSessions((prev) => prev.map((s) => (s.id === msg.payload.id ? msg.payload : s)));
 					} else if (msg.type === "event") {
 						setStream((prev) => [...prev, msg.payload]);
 					} else if (msg.type === "request") {
@@ -455,6 +504,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 				});
 			},
 			(err) => console.error("SSE error:", err),
+			(state) => setStreamState(state),
 		);
 
 		return () => controller.abort();
@@ -466,6 +516,14 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 			scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
 		}
 	}, [stream]);
+
+	useEffect(() => {
+		const timer = setInterval(() => {
+			setNow(Date.now());
+		}, 1000);
+
+		return () => clearInterval(timer);
+	}, []);
 
 	function handleScroll() {
 		const el = scrollRef.current;
@@ -496,7 +554,15 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 	}, [token, newCwd, newTitle]);
 
 	const handleSend = useCallback(async () => {
-		if (!token || !selectedId || !prompt.trim() || session?.status === "running") return;
+		if (
+			!token ||
+			!selectedId ||
+			!prompt.trim() ||
+			session?.status === "running" ||
+			session?.status === "retrying"
+		) {
+			return;
+		}
 		const text = prompt;
 		setPrompt("");
 		if (textareaRef.current) textareaRef.current.style.height = "auto";
@@ -551,7 +617,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 
 	if (!token) return null;
 
-	const canSend = !!selectedId && prompt.trim().length > 0 && session?.status !== "running";
+	const isSessionBusy = session?.status === "running" || session?.status === "retrying";
+	const canSend = !!selectedId && prompt.trim().length > 0 && !isSessionBusy;
 
 	return (
 		<div className="flex h-screen overflow-hidden bg-background">
@@ -598,6 +665,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 									key={s.id}
 									type="button"
 									onClick={() => setSelectedId(s.id)}
+									title={getSidebarTitle(s)}
 									className={`group w-full rounded-md px-2.5 py-2 text-left transition ${
 										selectedId === s.id
 											? "bg-accent text-foreground"
@@ -606,12 +674,13 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 								>
 									<div className="flex items-center gap-2">
 										<StatusDot status={s.status} />
-										<span className="line-clamp-1 text-xs">
-											{s.title}
-										</span>
+										<span className="line-clamp-1 text-xs">{s.title}</span>
+										{s.status === "failed" && (
+											<CircleX className="ml-auto size-3 shrink-0 text-destructive/70" />
+										)}
 									</div>
 									<p className="mt-0.5 ml-3.5 truncate text-[10px] text-muted-foreground">
-										{s.cwd.split("/").slice(-2).join("/")}
+										{getSidebarMeta(s, now)}
 									</p>
 								</button>
 							))}
@@ -642,22 +711,23 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 						<header className="flex h-12 shrink-0 items-center justify-between border-b border-border px-5">
 							<div className="min-w-0">
 								<div className="flex items-center gap-2">
-									<h1 className="truncate text-xs font-medium text-foreground">
-										{session.title}
-									</h1>
-									<span className="shrink-0 text-[10px] text-muted-foreground">
-										{session.cwd}
-									</span>
+									<h1 className="truncate text-xs font-medium text-foreground">{session.title}</h1>
+									<span className="shrink-0 text-[10px] text-muted-foreground">{session.cwd}</span>
 								</div>
 							</div>
 							<div className="flex shrink-0 items-center gap-3">
 								<div className="flex items-center gap-1.5">
 									<StatusDot status={session.status} />
 									<span className="text-[10px] text-muted-foreground">
-										{session.status}
+										{formatStatus(session, now)}
 									</span>
+									{streamState === "reconnecting" && (
+										<span className="rounded border border-border px-1.5 py-px text-[9px] uppercase tracking-[0.12em] text-muted-foreground">
+											Reconnecting
+										</span>
+									)}
 								</div>
-								{session.status === "running" && (
+								{(session.status === "running" || session.status === "retrying") && (
 									<button
 										type="button"
 										onClick={handleInterrupt}
@@ -676,21 +746,26 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 							onScroll={handleScroll}
 							className="flex-1 overflow-y-auto px-5 py-4"
 						>
-							{grouped.length === 0 && session.status !== "running" ? (
+							{grouped.length === 0 &&
+							session.status !== "running" &&
+							session.status !== "retrying" ? (
 								<div className="flex h-full items-center justify-center">
-									<p className="text-xs text-muted-foreground/40">
-										Send a message to start
-									</p>
+									<p className="text-xs text-muted-foreground/40">Send a message to start</p>
 								</div>
 							) : (
 								<div className="mx-auto max-w-3xl">
+									{getStatusMessage(session) && (
+										<div className="mb-3 rounded-md border border-border bg-card px-3 py-2 text-[11px] text-muted-foreground">
+											{getStatusMessage(session)}
+										</div>
+									)}
 									{grouped.map((group) => (
 										<GroupedEntryRenderer
 											key={group.type === "tool" ? group.call.id : group.entry.id}
 											group={group}
 										/>
 									))}
-									{session.status === "running" && (
+									{(session.status === "running" || session.status === "retrying") && (
 										<div className="animate-thinking mt-1 flex gap-1 py-2">
 											<span className="size-1 rounded-full bg-foreground" />
 											<span className="size-1 rounded-full bg-foreground" />
@@ -703,10 +778,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 
 						{/* Pending requests */}
 						{pendingRequests.length > 0 && (
-							<PendingRequestBanner
-								request={pendingRequests[0]}
-								onRespond={handleRespond}
-							/>
+							<PendingRequestBanner request={pendingRequests[0]} onRespond={handleRespond} />
 						)}
 
 						{/* Input */}
@@ -723,11 +795,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 										}}
 										onKeyDown={handleKeyDown}
 										placeholder={
-											session.status === "running"
-												? "Claude is working..."
-												: "Message Claude... (Enter to send)"
+											isSessionBusy ? "Claude is working..." : "Message Claude... (Enter to send)"
 										}
-										disabled={session.status === "running"}
+										disabled={isSessionBusy}
 										className="w-full resize-none bg-transparent px-3 py-2.5 pr-10 text-xs text-foreground outline-none placeholder:text-muted-foreground/40 disabled:cursor-not-allowed disabled:opacity-40"
 									/>
 									<button
@@ -760,9 +830,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 					</DialogHeader>
 					<div className="space-y-4 py-1">
 						<div>
-							<label className="mb-1.5 block text-[11px] text-muted-foreground">
-								Directory
-							</label>
+							<label className="mb-1.5 block text-[11px] text-muted-foreground">Directory</label>
 							<div className="relative">
 								<FolderOpen className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
 								<input
@@ -776,8 +844,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 						</div>
 						<div>
 							<label className="mb-1.5 block text-[11px] text-muted-foreground">
-								Title{" "}
-								<span className="text-muted-foreground/40">(optional)</span>
+								Title <span className="text-muted-foreground/40">(optional)</span>
 							</label>
 							<input
 								type="text"

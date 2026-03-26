@@ -8,6 +8,11 @@ type SessionStreamMessage =
 				session: {
 					id: string;
 					status: string;
+					statusDetail: {
+						message: string | null;
+						attempt: number | null;
+						nextRetryTime: number | null;
+					};
 					allowedTools: string[];
 				};
 				events: Array<{
@@ -27,6 +32,11 @@ type SessionStreamMessage =
 			payload: {
 				id: string;
 				status: string;
+				statusDetail: {
+					message: string | null;
+					attempt: number | null;
+					nextRetryTime: number | null;
+				};
 				allowedTools: string[];
 			};
 	  }
@@ -68,9 +78,7 @@ async function nextSseMessage(
 		if (boundary !== -1) {
 			const chunk = state.buffer.slice(0, boundary);
 			state.buffer = state.buffer.slice(boundary + 2);
-			const dataLine = chunk
-				.split("\n")
-				.find((line) => line.startsWith("data: "));
+			const dataLine = chunk.split("\n").find((line) => line.startsWith("data: "));
 
 			if (!dataLine) {
 				continue;
@@ -234,6 +242,36 @@ if (prompt.includes("approved this command")) {
   process.exit(0);
 }
 
+if (prompt.includes("trigger retry")) {
+  emit({
+    type: "progress",
+    data: {
+      toolUseResult: "Request failed with status code 429, retrying in 7s (attempt 2)",
+    },
+  });
+  emit({
+    type: "assistant",
+    message: {
+      content: [
+        {
+          type: "text",
+          text: "Recovered.",
+        },
+      ],
+    },
+  });
+  emit({
+    type: "result",
+    subtype: "success",
+    is_error: false,
+    result: "Recovered.",
+    stop_reason: "end_turn",
+    session_id: sessionId,
+    permission_denials: [],
+  });
+  process.exit(0);
+}
+
 emit({
   type: "assistant",
   message: {
@@ -382,6 +420,64 @@ describe("handleApiRequest", () => {
 		expect(detail.session.status).toBe("idle");
 		expect(detail.session.allowedTools).toEqual(["Bash(git commit:*)"]);
 		expect(detail.pendingRequests).toHaveLength(0);
+
+		await reader.cancel();
+	});
+
+	test("publishes retrying session status before recovery", async () => {
+		const createResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "claude",
+					cwd: testRoot,
+					prompt: "trigger retry",
+				}),
+			}),
+		);
+		expect(createResponse.status).toBe(201);
+		const createJson = await readJson<{ session: { id: string } }>(createResponse);
+
+		const eventsResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${createJson.session.id}/events`, {
+				headers: authHeader,
+			}),
+		);
+		const reader = eventsResponse.body?.getReader();
+
+		if (!reader) {
+			throw new Error("Missing SSE body");
+		}
+
+		const streamState = { buffer: "" };
+		const retryMessage = await waitForMessage(
+			reader,
+			streamState,
+			(message) =>
+				message.type === "session" &&
+				message.payload.status === "retrying" &&
+				message.payload.statusDetail.attempt === 2,
+		);
+		expect(retryMessage.type).toBe("session");
+		if (retryMessage.type !== "session") {
+			throw new Error("Expected session message");
+		}
+		expect(retryMessage.payload.statusDetail.message).toContain("429");
+		expect(retryMessage.payload.statusDetail.nextRetryTime).toBeGreaterThan(Date.now());
+
+		const recoveredMessage = await waitForMessage(
+			reader,
+			streamState,
+			(message) =>
+				message.type === "event" &&
+				message.payload.kind === "text" &&
+				message.payload.data.text === "Recovered.",
+		);
+		expect(recoveredMessage.type).toBe("event");
 
 		await reader.cancel();
 	});
