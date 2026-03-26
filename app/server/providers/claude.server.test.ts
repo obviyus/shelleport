@@ -97,7 +97,8 @@ describe("normalizeClaudeEvent", () => {
 					{
 						type: "tool_result",
 						tool_use_id: "tool-1",
-						content: "rm in '/tmp/x' was blocked. For security, Claude Code may only remove files from the allowed working directories for this session: '/tmp'.",
+						content:
+							"rm in '/tmp/x' was blocked. For security, Claude Code may only remove files from the allowed working directories for this session: '/tmp'.",
 						is_error: true,
 					},
 				],
@@ -111,6 +112,30 @@ describe("normalizeClaudeEvent", () => {
 				blockReason: "sandbox",
 			},
 		});
+	});
+
+	test("maps rate-limit progress into retry status", () => {
+		const events = normalizeClaudeEvent({
+			type: "progress",
+			data: {
+				toolUseResult: "Request failed with status code 429, retrying in 7s (attempt 2)",
+			},
+		});
+
+		expect(events).toHaveLength(1);
+		expect(events[0]).toMatchObject({
+			type: "session-status",
+			status: "retrying",
+			detail: {
+				message: "Request failed with status code 429, retrying in 7s (attempt 2)",
+				attempt: 2,
+			},
+		});
+		expect(events[0].type).toBe("session-status");
+		if (events[0].type !== "session-status") {
+			throw new Error("Expected session-status event");
+		}
+		expect(events[0].detail.nextRetryTime).toBeGreaterThan(Date.now());
 	});
 });
 

@@ -1,14 +1,8 @@
 export type ProviderId = "claude" | "codex";
 
-export type SessionStatus = "idle" | "running" | "waiting" | "failed" | "interrupted";
+export type SessionStatus = "idle" | "running" | "waiting" | "retrying" | "failed" | "interrupted";
 
-export type HostEventKind =
-	| "text"
-	| "tool-call"
-	| "tool-result"
-	| "state"
-	| "error"
-	| "system";
+export type HostEventKind = "text" | "tool-call" | "tool-result" | "state" | "error" | "system";
 
 export type PermissionMode = "default" | "dontAsk";
 
@@ -44,6 +38,7 @@ export type HostSession = {
 	imported: boolean;
 	permissionMode: PermissionMode;
 	allowedTools: string[];
+	statusDetail: SessionStatusDetail;
 	createTime: number;
 	updateTime: number;
 	lastEventSequence: number;
@@ -63,6 +58,14 @@ export type HostEvent = {
 export type PendingRequestKind = "approval" | "question";
 export type PendingRequestStatus = "pending" | "resolved" | "rejected";
 export type BlockReason = "permission" | "sandbox";
+
+export type SessionStatusDetail = {
+	message: string | null;
+	attempt: number | null;
+	nextRetryTime: number | null;
+	waitKind: PendingRequestKind | null;
+	blockReason: BlockReason | null;
+};
 
 export type PendingRequest = {
 	id: string;

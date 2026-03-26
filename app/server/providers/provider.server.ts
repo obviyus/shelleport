@@ -2,6 +2,8 @@ import type {
 	HistoricalSession,
 	HostEventKind,
 	HostSession,
+	SessionStatus,
+	SessionStatusDetail,
 	PendingRequest,
 	ProviderCapabilities,
 	ProviderId,
@@ -26,6 +28,11 @@ export type ProviderAdapterEvent =
 			blockReason: PendingRequest["blockReason"];
 			prompt: string;
 			data: Record<string, unknown>;
+	  }
+	| {
+			type: "session-status";
+			status: SessionStatus;
+			detail: Partial<SessionStatusDetail>;
 	  };
 
 export type ProviderAdapterRunInput = {
@@ -40,6 +47,9 @@ export interface ProviderAdapter {
 	capabilities(): ProviderCapabilities;
 	summary(): ProviderSummary;
 	sendInput(input: ProviderAdapterRunInput): AsyncGenerator<ProviderAdapterEvent>;
-	resumeSession(session: HostSession, input: ProviderAdapterRunInput): AsyncGenerator<ProviderAdapterEvent>;
+	resumeSession(
+		session: HostSession,
+		input: ProviderAdapterRunInput,
+	): AsyncGenerator<ProviderAdapterEvent>;
 	listHistoricalSessions(): Promise<HistoricalSession[]>;
 }

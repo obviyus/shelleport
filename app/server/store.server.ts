@@ -11,6 +11,7 @@ import type {
 	ProviderId,
 	SessionDetail,
 	SessionStatus,
+	SessionStatusDetail,
 } from "~/lib/shelleport";
 import { config, ensureDataDir, getDatabasePath } from "~/server/config.server";
 import { createId, createTimestamp } from "~/server/id.server";
@@ -28,6 +29,7 @@ database.exec(`
 		title TEXT NOT NULL,
 		cwd TEXT NOT NULL,
 		status TEXT NOT NULL,
+		status_detail_json TEXT NOT NULL DEFAULT '{"message":null,"attempt":null,"nextRetryTime":null,"waitKind":null,"blockReason":null}',
 		provider_session_ref TEXT,
 		pid INTEGER,
 		imported INTEGER NOT NULL DEFAULT 0,
@@ -79,6 +81,11 @@ function ensureColumn(tableName: string, columnName: string, sql: string) {
 
 ensureColumn(
 	"host_sessions",
+	"status_detail_json",
+	`ALTER TABLE host_sessions ADD COLUMN status_detail_json TEXT NOT NULL DEFAULT '{"message":null,"attempt":null,"nextRetryTime":null,"waitKind":null,"blockReason":null}'`,
+);
+ensureColumn(
+	"host_sessions",
 	"permission_mode",
 	"ALTER TABLE host_sessions ADD COLUMN permission_mode TEXT NOT NULL DEFAULT 'default'",
 );
@@ -99,6 +106,7 @@ type SqlSessionRow = {
 	title: string;
 	cwd: string;
 	status: string;
+	status_detail_json: string;
 	provider_session_ref: string | null;
 	pid: number | null;
 	imported: number;
@@ -141,6 +149,24 @@ function parseAllowedTools(value: string) {
 	return JSON.parse(value) as string[];
 }
 
+function emptyStatusDetail(): SessionStatusDetail {
+	return {
+		message: null,
+		attempt: null,
+		nextRetryTime: null,
+		waitKind: null,
+		blockReason: null,
+	};
+}
+
+function parseStatusDetail(value: string) {
+	const parsed = JSON.parse(value) as Partial<SessionStatusDetail>;
+	return {
+		...emptyStatusDetail(),
+		...parsed,
+	};
+}
+
 function mapSession(row: SqlSessionRow): HostSession {
 	return {
 		id: row.id,
@@ -148,6 +174,7 @@ function mapSession(row: SqlSessionRow): HostSession {
 		title: row.title,
 		cwd: row.cwd,
 		status: row.status as SessionStatus,
+		statusDetail: parseStatusDetail(row.status_detail_json),
 		providerSessionRef: row.provider_session_ref,
 		pid: row.pid,
 		imported: row.imported === 1,
@@ -167,7 +194,9 @@ function mapEvent(row: SqlEventRow): HostEvent {
 		kind: row.kind as HostEventKind,
 		summary: row.summary,
 		data: parseJsonRecord(row.data_json),
-		rawProviderEvent: row.raw_provider_event_json ? parseJsonRecord(row.raw_provider_event_json) : null,
+		rawProviderEvent: row.raw_provider_event_json
+			? parseJsonRecord(row.raw_provider_event_json)
+			: null,
 		createTime: row.create_time,
 	};
 }
@@ -189,8 +218,8 @@ function mapRequest(row: SqlRequestRow): PendingRequest {
 
 const insertSessionStatement = database.query(
 	`INSERT INTO host_sessions (
-		id, provider, title, cwd, status, provider_session_ref, pid, imported, permission_mode, allowed_tools_json, last_event_sequence, create_time, update_time
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, provider, title, cwd, status, status_detail_json, provider_session_ref, pid, imported, permission_mode, allowed_tools_json, last_event_sequence, create_time, update_time
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 );
 
 const listSessionsStatement = database.query<SqlSessionRow, []>(
@@ -203,7 +232,7 @@ const getSessionStatement = database.query<SqlSessionRow, [string]>(
 
 const updateSessionStatement = database.query(
 	`UPDATE host_sessions
-		SET status = ?, provider_session_ref = ?, pid = ?, title = ?, permission_mode = ?, allowed_tools_json = ?, update_time = ?
+		SET status = ?, status_detail_json = ?, provider_session_ref = ?, pid = ?, title = ?, permission_mode = ?, allowed_tools_json = ?, update_time = ?
 		WHERE id = ?`,
 );
 
@@ -254,7 +283,16 @@ export type CreateStoredSessionInput = {
 };
 
 type SessionUpdate = Partial<
-	Pick<HostSession, "status" | "providerSessionRef" | "pid" | "title" | "permissionMode" | "allowedTools">
+	Pick<
+		HostSession,
+		| "status"
+		| "statusDetail"
+		| "providerSessionRef"
+		| "pid"
+		| "title"
+		| "permissionMode"
+		| "allowedTools"
+	>
 >;
 
 export const sessionStore = {
@@ -269,6 +307,7 @@ export const sessionStore = {
 			title: input.title,
 			cwd: input.cwd,
 			status: "idle",
+			statusDetail: emptyStatusDetail(),
 			providerSessionRef: input.providerSessionRef ?? null,
 			pid: null,
 			imported: input.imported ?? false,
@@ -285,6 +324,7 @@ export const sessionStore = {
 			session.title,
 			session.cwd,
 			session.status,
+			JSON.stringify(session.statusDetail),
 			session.providerSessionRef,
 			session.pid,
 			session.imported ? 1 : 0,
@@ -330,8 +370,11 @@ export const sessionStore = {
 		const next: HostSession = {
 			...current,
 			status: update.status ?? current.status,
+			statusDetail: update.statusDetail ?? current.statusDetail,
 			providerSessionRef:
-				update.providerSessionRef === undefined ? current.providerSessionRef : update.providerSessionRef,
+				update.providerSessionRef === undefined
+					? current.providerSessionRef
+					: update.providerSessionRef,
 			pid: update.pid === undefined ? current.pid : update.pid,
 			title: update.title ?? current.title,
 			permissionMode: update.permissionMode ?? current.permissionMode,
@@ -341,6 +384,7 @@ export const sessionStore = {
 
 		updateSessionStatement.run(
 			next.status,
+			JSON.stringify(next.statusDetail),
 			next.providerSessionRef,
 			next.pid,
 			next.title,
@@ -434,7 +478,11 @@ export const sessionStore = {
 		const row = getRequestStatement.get(requestId);
 		return row ? mapRequest(row) : null;
 	},
-	resolvePendingRequest(requestId: string, status: PendingRequestStatus, data: Record<string, unknown>) {
+	resolvePendingRequest(
+		requestId: string,
+		status: PendingRequestStatus,
+		data: Record<string, unknown>,
+	) {
 		const now = createTimestamp();
 		updateRequestStatement.run(status, now, JSON.stringify(data), requestId);
 		const request = this.getPendingRequest(requestId);
