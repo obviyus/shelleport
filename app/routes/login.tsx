@@ -1,127 +1,115 @@
-import { useId } from "react";
-import { data, Form, redirect, useActionData, useNavigation } from "react-router";
-import { isValidAdminToken } from "~/server/auth.server";
-import { commitSession, getSession } from "~/server/session.server";
-import type { Route } from "./+types/login";
+import { KeyRound, Loader2, Terminal } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router";
+import { getToken, setToken, validateToken } from "~/lib/api";
 
-type ActionData = {
-	fieldErrors?: FieldErrors;
-};
+export default function Login() {
+	const navigate = useNavigate();
+	const inputRef = useRef<HTMLInputElement>(null);
+	const [value, setValue] = useState("");
+	const [error, setError] = useState<string | null>(null);
+	const [loading, setLoading] = useState(false);
+	const [checking, setChecking] = useState(true);
 
-type FieldErrors = {
-	token?: string;
-};
+	useEffect(() => {
+		const existing = getToken();
+		if (existing) {
+			validateToken(existing)
+				.then(() => navigate("/", { replace: true }))
+				.catch(() => setChecking(false));
+		} else {
+			setChecking(false);
+		}
+	}, [navigate]);
 
-export async function loader({ request }: Route.LoaderArgs) {
-	const session = await getSession(request.headers.get("Cookie"));
+	useEffect(() => {
+		if (!checking) inputRef.current?.focus();
+	}, [checking]);
 
-	if (session.get("authenticated")) {
-		throw redirect("/");
+	async function handleSubmit(e: React.FormEvent) {
+		e.preventDefault();
+		const token = value.trim();
+		if (!token) return;
+
+		setLoading(true);
+		setError(null);
+
+		try {
+			await validateToken(token);
+			setToken(token);
+			navigate("/", { replace: true });
+		} catch {
+			setError("Invalid token. Check your SHELLEPORT_ADMIN_TOKEN.");
+			setLoading(false);
+		}
 	}
 
-	const errorValue = session.get("error");
-	const error = typeof errorValue === "string" ? errorValue : null;
-	return data(
-		{ error },
-		{
-			headers: {
-				"Set-Cookie": await commitSession(session),
-			},
-		},
-	);
-}
-
-export async function action({ request }: Route.ActionArgs) {
-	const formData = await request.formData();
-	const tokenEntry = formData.get("token");
-	const tokenValue = typeof tokenEntry === "string" ? tokenEntry.trim() : "";
-
-	const fieldErrors: FieldErrors = {};
-
-	if (tokenValue.length === 0) {
-		fieldErrors.token = "Admin token is required";
+	if (checking) {
+		return (
+			<main className="grid h-screen place-items-center bg-background">
+				<Loader2 className="size-4 animate-spin text-muted-foreground" />
+			</main>
+		);
 	}
-
-	if (Object.keys(fieldErrors).length > 0) {
-		return data({ fieldErrors }, 400);
-	}
-
-	const session = await getSession(request.headers.get("Cookie"));
-
-	const invalidCredentialsResponse = async () => {
-		session.flash("error", "Invalid admin token");
-
-		return redirect("/login", {
-			headers: {
-				"Set-Cookie": await commitSession(session),
-			},
-		});
-	};
-
-	if (!isValidAdminToken(tokenValue)) {
-		return invalidCredentialsResponse();
-	}
-
-	session.set("authenticated", true);
-
-	return redirect("/", {
-		headers: {
-			"Set-Cookie": await commitSession(session),
-		},
-	});
-}
-
-export default function Login({ loaderData }: Route.ComponentProps) {
-	const tokenId = useId();
-	const actionData = useActionData<ActionData>();
-	const navigation = useNavigation();
-	const isSubmitting = navigation.state === "submitting";
-	const fieldErrors = actionData?.fieldErrors ?? {};
 
 	return (
-		<main className="grid min-h-screen place-items-center bg-[radial-gradient(circle_at_top,rgba(255,214,10,0.18),transparent_38%),linear-gradient(135deg,#07131a_0%,#10232c_40%,#d5e6ec_100%)] px-4 py-10 text-white">
-			<section className="w-full max-w-md rounded-[2rem] border border-white/15 bg-slate-950/70 p-10 shadow-[0_30px_120px_rgba(0,0,0,0.35)] backdrop-blur">
-				<header className="mb-8">
-					<p className="font-mono text-xs uppercase tracking-[0.4em] text-cyan-200/70">shelleport</p>
-					<h1 className="mt-4 text-4xl font-semibold tracking-tight">Host-local agent control.</h1>
-					<p className="mt-3 text-sm leading-6 text-slate-300">
-						One admin token. One machine. Sessions stay on this host.
+		<main className="relative flex h-screen items-center justify-center bg-background px-4">
+			{/* Subtle radial glow */}
+			<div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_500px_350px_at_50%_42%,oklch(0.12_0_0),transparent)]" />
+
+			<div className="relative z-10 w-full max-w-[320px]">
+				{/* Brand */}
+				<div className="mb-12 text-center">
+					<div className="mx-auto mb-5 flex size-12 items-center justify-center rounded-lg border border-border bg-card">
+						<Terminal className="size-5 text-foreground/70" />
+					</div>
+					<h1 className="text-sm font-semibold uppercase tracking-[0.2em] text-foreground">
+						shelleport
+					</h1>
+					<p className="mt-2 text-xs text-muted-foreground">
+						Remote Claude Code control plane
 					</p>
-				</header>
+				</div>
 
-				{loaderData.error ? (
-					<div className="mb-6 rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
-						{loaderData.error}
-					</div>
-				) : null}
-
-				<Form className="space-y-6" method="post" replace>
-					<div className="space-y-2.5">
-						<label className="text-sm font-medium text-slate-200" htmlFor={tokenId}>
-							Admin token
-						</label>
+				{/* Form */}
+				<form onSubmit={handleSubmit} className="space-y-3">
+					<div className="relative">
+						<KeyRound className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
 						<input
-							autoComplete="current-password"
-							className="w-full rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-sm text-white shadow-sm transition placeholder:text-slate-500 focus-visible:border-cyan-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/20"
-							id={tokenId}
-							name="token"
-							placeholder="Paste SHELLEPORT_ADMIN_TOKEN"
+							ref={inputRef}
 							type="password"
+							placeholder="Paste admin token"
+							autoComplete="current-password"
+							value={value}
+							onChange={(e) => setValue(e.target.value)}
+							className="h-10 w-full rounded-md border border-border bg-card pl-9 pr-3 text-xs text-foreground outline-none transition placeholder:text-muted-foreground focus:border-foreground/20 focus:ring-1 focus:ring-foreground/10"
 						/>
-						{fieldErrors.token ? (
-							<p className="text-sm text-rose-200">{fieldErrors.token}</p>
-						) : null}
 					</div>
+
+					{error && (
+						<p className="text-xs text-destructive">{error}</p>
+					)}
 
 					<button
-						className="flex w-full items-center justify-center rounded-2xl bg-cyan-300 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40 disabled:cursor-not-allowed disabled:bg-cyan-300/60"
-						disabled={isSubmitting}
 						type="submit"
+						disabled={loading || !value.trim()}
+						className="flex h-10 w-full items-center justify-center gap-2 rounded-md bg-foreground text-xs font-medium text-background transition hover:bg-foreground/90 disabled:opacity-30"
 					>
-						{isSubmitting ? "Authorizing..." : "Enter machine"}
+						{loading ? (
+							<>
+								<Loader2 className="size-3.5 animate-spin" />
+								Connecting...
+							</>
+						) : (
+							"Connect"
+						)}
 					</button>
-				</Form>
-			</section>
+				</form>
+
+				<p className="mt-10 text-center text-[11px] text-muted-foreground/50">
+					Token stored locally in your browser
+				</p>
+			</div>
 		</main>
 	);
 }
