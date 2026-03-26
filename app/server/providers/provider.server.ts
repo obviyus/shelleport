@@ -2,6 +2,7 @@ import type {
 	HistoricalSession,
 	HostEventKind,
 	HostSession,
+	SessionAttachment,
 	SessionStatus,
 	SessionStatusDetail,
 	PendingRequest,
@@ -38,6 +39,7 @@ export type ProviderAdapterEvent =
 export type ProviderAdapterRunInput = {
 	session: HostSession;
 	prompt: string;
+	attachments: SessionAttachment[];
 	signal: AbortSignal;
 };
 

@@ -23,7 +23,7 @@ const claudeCapabilities: ProviderCapabilities = {
 	hasStructuredEvents: true,
 	supportsApprovals: true,
 	supportsQuestions: false,
-	supportsImages: false,
+	supportsImages: true,
 	supportsFork: false,
 	supportsWorktree: true,
 	liveResume: "managed-only",
@@ -53,7 +53,24 @@ function classifyClaudeBlockReason(content: string) {
 	return null;
 }
 
-function createClaudeCommand(session: HostSession, prompt: string) {
+function formatClaudePrompt(prompt: string, attachments: ProviderAdapterRunInput["attachments"]) {
+	if (attachments.length === 0) {
+		return prompt;
+	}
+
+	const imageLines = attachments.map((attachment, index) =>
+		attachments.length === 1
+			? `Use this image as context: ${attachment.path}`
+			: `Image ${index + 1}: ${attachment.path}`,
+	);
+
+	return prompt.trim().length === 0
+		? imageLines.join("\n")
+		: `${imageLines.join("\n")}\n\n${prompt}`;
+}
+
+function createClaudeCommand(input: ProviderAdapterRunInput) {
+	const { session } = input;
 	const command = [
 		getClaudeBin(),
 		"-p",
@@ -72,7 +89,7 @@ function createClaudeCommand(session: HostSession, prompt: string) {
 		command.push("-r", session.providerSessionRef);
 	}
 
-	command.push(prompt);
+	command.push(formatClaudePrompt(input.prompt, input.attachments));
 
 	return command;
 }
@@ -374,7 +391,7 @@ export function normalizeClaudeEvent(rawEvent: Record<string, unknown>): Provide
 async function* streamClaudeProcess(
 	runInput: ProviderAdapterRunInput,
 ): AsyncGenerator<ProviderAdapterEvent> {
-	const subprocess = Bun.spawn(createClaudeCommand(runInput.session, runInput.prompt), {
+	const subprocess = Bun.spawn(createClaudeCommand(runInput), {
 		cwd: runInput.session.cwd,
 		stdout: "pipe",
 		stderr: "pipe",
