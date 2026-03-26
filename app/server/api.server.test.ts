@@ -387,20 +387,38 @@ describe("handleApiRequest", () => {
 	});
 
 	test("rejects missing auth", async () => {
-		let response: Response | null = null;
-
-		try {
-			await handleApiRequest(
-				new Request("http://localhost/api/sessions", {
-					headers: {
-						"content-type": "application/json",
-					},
-				}),
-			);
-		} catch (error) {
-			response = error instanceof Response ? error : null;
-		}
-
+		const response = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				headers: {
+					"content-type": "application/json",
+				},
+			}),
+		);
 		expect(response?.status).toBe(401);
+		expect(await response.json()).toMatchObject({
+			code: "unauthorized",
+		});
+	});
+
+	test("rejects invalid create-session cwd", async () => {
+		const response = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "claude",
+					cwd: "relative/path",
+					prompt: "hello",
+				}),
+			}),
+		);
+
+		expect(response.status).toBe(400);
+		expect(await response.json()).toMatchObject({
+			code: "invalid_cwd",
+		});
 	});
 });

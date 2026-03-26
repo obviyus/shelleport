@@ -9,6 +9,7 @@ import type {
 	SessionInputPayload,
 	SessionStreamMessage,
 } from "~/lib/shelleport";
+import { ApiError } from "~/server/api-error.server";
 import { getProvider } from "~/server/providers/registry.server";
 import { sessionStore } from "~/server/store.server";
 
@@ -64,7 +65,7 @@ async function consumeProviderRun(sessionId: string, prompt: string, mode: "send
 	let session = sessionStore.getSession(sessionId);
 
 	if (!session) {
-		throw new Error(`Unknown session: ${sessionId}`);
+		throw new ApiError(404, "session_not_found", `Unknown session: ${sessionId}`);
 	}
 
 	const provider = getProvider(session.provider);
@@ -82,7 +83,7 @@ async function consumeProviderRun(sessionId: string, prompt: string, mode: "send
 
 	if (!session) {
 		activeRuns.delete(sessionId);
-		throw new Error(`Unknown session: ${sessionId}`);
+		throw new ApiError(404, "session_not_found", `Unknown session: ${sessionId}`);
 	}
 
 	publishSession(session);
@@ -145,6 +146,7 @@ async function consumeProviderRun(sessionId: string, prompt: string, mode: "send
 			summary: "Run failed",
 			data: {
 				message: error instanceof Error ? error.message : String(error),
+				code: error instanceof ApiError ? error.code : "run_failed",
 			},
 			rawProviderEvent: null,
 		});
@@ -199,7 +201,7 @@ export const sessionBroker = {
 		const provider = getProvider(input.provider);
 
 		if (!provider.capabilities().canCreate) {
-			throw new Error(`${provider.label} cannot start managed sessions in v1`);
+			throw new ApiError(400, "provider_cannot_create", `${provider.label} cannot start managed sessions in v1`);
 		}
 
 		const session = sessionStore.createSession({
@@ -224,7 +226,7 @@ export const sessionBroker = {
 		);
 
 		if (!historicalSession) {
-			throw new Error("Historical session not found");
+			throw new ApiError(404, "historical_session_not_found", "Historical session not found");
 		}
 
 		return sessionStore.createSession({
@@ -239,11 +241,11 @@ export const sessionBroker = {
 	},
 	async sendInput(sessionId: string, input: SessionInputPayload) {
 		if (activeRuns.has(sessionId)) {
-			throw new Error("Session already running");
+			throw new ApiError(409, "session_already_running", "Session already running");
 		}
 
 		if (input.prompt.trim().length === 0) {
-			throw new Error("Prompt is required");
+			throw new ApiError(400, "prompt_required", "Prompt is required");
 		}
 
 		void consumeProviderRun(sessionId, input.prompt, "send");
@@ -254,7 +256,7 @@ export const sessionBroker = {
 		const activeRun = activeRuns.get(sessionId);
 
 		if (!activeRun) {
-			throw new Error("Session is not running");
+			throw new ApiError(409, "session_not_running", "Session is not running");
 		}
 
 		activeRun.abortController.abort();
@@ -267,13 +269,13 @@ export const sessionBroker = {
 		const request = sessionStore.getPendingRequest(requestId);
 
 		if (!request || request.status !== "pending") {
-			throw new Error("Pending request not found");
+			throw new ApiError(404, "request_not_found", "Pending request not found");
 		}
 
 		const session = sessionStore.getSession(request.sessionId);
 
 		if (!session) {
-			throw new Error(`Unknown session: ${request.sessionId}`);
+			throw new ApiError(404, "session_not_found", `Unknown session: ${request.sessionId}`);
 		}
 
 		const activeRun = activeRuns.get(session.id);
@@ -308,7 +310,7 @@ export const sessionBroker = {
 		const toolRule = requestedToolRule ?? storedToolRule;
 
 		if (!toolRule) {
-			throw new Error("toolRule is required to approve this request");
+			throw new ApiError(400, "tool_rule_required", "toolRule is required to approve this request");
 		}
 
 		const allowedTools = normalizeAllowedTools([...session.allowedTools, toolRule]);
@@ -318,7 +320,7 @@ export const sessionBroker = {
 		});
 
 		if (!updatedSession) {
-			throw new Error(`Unknown session: ${session.id}`);
+			throw new ApiError(404, "session_not_found", `Unknown session: ${session.id}`);
 		}
 
 		publishSession(updatedSession);
@@ -331,7 +333,11 @@ export const sessionBroker = {
 		publishRequest(resolvedRequest);
 
 		if (!updatedSession.providerSessionRef) {
-			throw new Error("Session cannot resume without a provider session reference");
+			throw new ApiError(
+				409,
+				"session_not_resumable",
+				"Session cannot resume without a provider session reference",
+			);
 		}
 
 		const resumePrompt =
