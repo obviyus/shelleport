@@ -14,6 +14,8 @@ import { fetchDirectory } from "~/client/api";
 import type { DirectoryEntry, DirectoryListing } from "~/shared/shelleport";
 
 type SessionLauncherProps = {
+	createDisabledReason: string | null;
+	createLabel: string;
 	defaultPath: string;
 	isCreating: boolean;
 	onCreate: (cwd: string, title: string) => void | Promise<void>;
@@ -396,7 +398,13 @@ function DirectoryColumn({
 	);
 }
 
-export function SessionLauncher({ defaultPath, isCreating, onCreate }: SessionLauncherProps) {
+export function SessionLauncher({
+	createDisabledReason,
+	createLabel,
+	defaultPath,
+	isCreating,
+	onCreate,
+}: SessionLauncherProps) {
 	const titleInputId = useId();
 	const [title, setTitle] = useState("");
 	const [currentPath, setCurrentPath] = useState(defaultPath);
@@ -615,7 +623,7 @@ export function SessionLauncher({ defaultPath, isCreating, onCreate }: SessionLa
 					<button
 						type="button"
 						onClick={() => void onCreate(currentPath, title.trim())}
-						disabled={isCreating}
+						disabled={isCreating || createDisabledReason !== null}
 						className="flex h-10 shrink-0 items-center gap-2 rounded-md bg-foreground px-4 text-xs font-medium text-background transition hover:bg-foreground/90 focus-visible:ring-2 focus-visible:ring-foreground/20 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-30"
 					>
 						{isCreating ? (
@@ -623,9 +631,14 @@ export function SessionLauncher({ defaultPath, isCreating, onCreate }: SessionLa
 						) : (
 							<Plus aria-hidden="true" className="size-3.5" />
 						)}
-						Create session
+						{`Create ${createLabel} session`}
 					</button>
 				</div>
+				{createDisabledReason && (
+					<div className="mx-auto mt-3 w-full max-w-[110rem] rounded-md border border-border bg-card/86 px-3 py-2 text-[11px] text-muted-foreground">
+						{createDisabledReason}
+					</div>
+				)}
 				{error && (
 					<div className="mx-auto mt-3 w-full max-w-[110rem] rounded-md border border-destructive/25 bg-destructive/8 px-3 py-2 text-[11px] text-destructive">
 						{error}

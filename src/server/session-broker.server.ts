@@ -296,12 +296,21 @@ export const sessionBroker = {
 	},
 	createSession(input: CreateSessionInput) {
 		const provider = getProvider(input.provider);
+		const providerSummary = provider.summary();
 
 		if (!provider.capabilities().canCreate) {
 			throw new ApiError(
 				400,
 				"provider_cannot_create",
 				`${provider.label} cannot start managed sessions in v1`,
+			);
+		}
+
+		if (providerSummary.status !== "ready") {
+			throw new ApiError(
+				400,
+				"provider_not_ready",
+				providerSummary.statusDetail ?? `${provider.label} is not available`,
 			);
 		}
 

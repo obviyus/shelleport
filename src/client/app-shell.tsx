@@ -134,6 +134,17 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		() => orderSessionLimits(providerLimits.claude),
 		[providerLimits.claude],
 	);
+	const creatableProviders = useMemo(
+		() =>
+			providers.filter((provider) => provider.capabilities.canCreate && provider.status === "ready"),
+		[providers],
+	);
+	const createProvider = creatableProviders[0] ?? null;
+	const createDisabledReason =
+		createProvider !== null
+			? null
+			: providers.find((provider) => provider.capabilities.canCreate)?.statusDetail ??
+				"No managed provider is available.";
 
 	function mergeClaudeLimit(previous: SessionLimit[], next: SessionLimit) {
 		if (!next.window) {
@@ -311,7 +322,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 
 	const handleCreateSession = useCallback(
 		async (cwd: string, title: string) => {
-			if (!cwd.trim()) {
+			if (!cwd.trim() || !createProvider) {
 				return;
 			}
 
@@ -319,7 +330,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 
 			try {
 				const result = await createSession({
-					provider: "claude",
+					provider: createProvider.id,
 					cwd: cwd.trim(),
 					title: title || undefined,
 				});
@@ -332,7 +343,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 				setIsCreating(false);
 			}
 		},
-		[navigate],
+		[createProvider, navigate, refreshSessions, sessionQuery],
 	);
 
 	const handleSend = useCallback(async () => {
@@ -998,6 +1009,8 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 					</>
 				) : (
 					<SessionLauncher
+						createDisabledReason={createDisabledReason}
+						createLabel={createProvider?.label ?? "managed"}
 						defaultPath={boot.defaultCwd}
 						isCreating={isCreating}
 						onCreate={handleCreateSession}

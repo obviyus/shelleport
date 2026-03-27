@@ -931,10 +931,15 @@ export class ClaudeProviderAdapter implements ProviderAdapter {
 	}
 
 	summary(): ProviderSummary {
+		const isAvailable = Bun.which(getClaudeBin()) !== null;
+
 		return {
 			id: this.id,
 			label: this.label,
-			status: "ready",
+			status: isAvailable ? "ready" : "partial",
+			statusDetail: isAvailable
+				? null
+				: "Claude CLI not found in PATH. Install it or set SHELLEPORT_CLAUDE_BIN.",
 			capabilities: this.capabilities(),
 		};
 	}

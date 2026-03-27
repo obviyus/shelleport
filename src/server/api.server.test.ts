@@ -431,6 +431,51 @@ describe("handleApiRequest", () => {
 		).toBe(true);
 	});
 
+	test("rejects managed Claude sessions when the CLI is unavailable", async () => {
+		Bun.env.SHELLEPORT_CLAUDE_BIN = join(testRoot, "missing-claude");
+		try {
+			const providersResponse = await handleApiRequest(
+				new Request("http://localhost/api/providers", {
+					headers: authHeader,
+				}),
+			);
+			expect(providersResponse.status).toBe(200);
+			const providersBody = await readJson<{
+				providers: Array<{
+					id: string;
+					status: string;
+					statusDetail: string | null;
+				}>;
+			}>(providersResponse);
+			expect(providersBody.providers.find((provider) => provider.id === "claude")).toMatchObject({
+				id: "claude",
+				status: "partial",
+				statusDetail: "Claude CLI not found in PATH. Install it or set SHELLEPORT_CLAUDE_BIN.",
+			});
+
+			const createResponse = await handleApiRequest(
+				new Request("http://localhost/api/sessions", {
+					method: "POST",
+					headers: {
+						...authHeader,
+						"content-type": "application/json",
+					},
+					body: JSON.stringify({
+						provider: "claude",
+						cwd: testRoot,
+					}),
+				}),
+			);
+			expect(createResponse.status).toBe(400);
+			const createBody = await readJson<{ error: string }>(createResponse);
+			expect(createBody.error).toBe(
+				"Claude CLI not found in PATH. Install it or set SHELLEPORT_CLAUDE_BIN.",
+			);
+		} finally {
+			Bun.env.SHELLEPORT_CLAUDE_BIN = fakeClaudePath;
+		}
+	});
+
 	test("persists create-session prompts in session history", async () => {
 		const createResponse = await handleApiRequest(
 			new Request("http://localhost/api/sessions", {
