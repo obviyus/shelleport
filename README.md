@@ -22,7 +22,7 @@ shelleport serve
 Or download the latest binary from [Releases](https://github.com/obviyus/shelleport/releases) and run:
 
 ```bash
-./shelleport-v0.1.0-darwin-arm64 serve
+shelleport serve
 ```
 
 ### Install as a Service
@@ -30,7 +30,7 @@ Or download the latest binary from [Releases](https://github.com/obviyus/shellep
 Shelleport can install itself as a background service that starts automatically:
 
 ```bash
-./shelleport-v0.1.0-darwin-arm64 install-service
+shelleport install-service
 ```
 
 This writes a service definition for your platform (launchd on macOS, systemd on Linux) and prints the command to activate it.
@@ -38,7 +38,7 @@ This writes a service definition for your platform (launchd on macOS, systemd on
 ### Health Check
 
 ```bash
-./shelleport-v0.1.0-darwin-arm64 doctor
+shelleport doctor
 ```
 
 Verifies your data directory, CLI availability, host/port config, and token status.
@@ -55,7 +55,7 @@ Verifies your data directory, CLI availability, host/port config, and token stat
 - [x] Rate limit detection with live retry countdown
 - [x] Native single-file per-platform binaries built with `bun build --compile`
 - [x] Background service install (launchd / systemd)
-- [ ] Codex live sessions and historical import
+- [ ] Codex App Server support
 - [ ] Skills support
 - [ ] Automations support
 - [ ] Settings page
