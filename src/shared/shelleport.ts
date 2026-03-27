@@ -4,10 +4,10 @@ export type SessionStatus = "idle" | "running" | "waiting" | "retrying" | "faile
 
 export type HostEventKind = "text" | "tool-call" | "tool-result" | "state" | "error" | "system";
 
-export type PermissionMode = "default" | "dontAsk";
+export type PermissionMode = "default" | "bypassPermissions";
 
 export function getDefaultPermissionMode(providerId: ProviderId): PermissionMode {
-	return providerId === "claude" ? "dontAsk" : "default";
+	return providerId === "claude" ? "bypassPermissions" : "default";
 }
 
 export type ProviderCapabilities = {

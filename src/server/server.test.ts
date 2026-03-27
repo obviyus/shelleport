@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
 	createServerFetchHandler,
 	getInstallServiceHost,
+	getInstallServiceUser,
 	getServiceEnvironment,
 	parseCliOptions,
 } from "../../server";
@@ -61,6 +62,15 @@ describe("parseCliOptions", () => {
 			version: true,
 		});
 	});
+
+	test("parses install-service user override", async () => {
+		const options = await parseCliOptions(["install-service", "--service-user", "ubuntu"]);
+
+		expect(options).toMatchObject({
+			command: "install-service",
+			serviceUser: "ubuntu",
+		});
+	});
 });
 
 describe("getInstallServiceHost", () => {
@@ -74,14 +84,22 @@ describe("getInstallServiceHost", () => {
 });
 
 describe("getServiceEnvironment", () => {
-	test("captures current PATH", () => {
+	test("captures current PATH", async () => {
 		const originalPath = process.env.PATH;
 		process.env.PATH = "/tmp/bin:/usr/bin";
 
 		try {
-			expect(getServiceEnvironment().path).toBe("/tmp/bin:/usr/bin");
+			expect((await getServiceEnvironment("/home/ubuntu")).path).toBe(
+				"/home/ubuntu/.local/bin:/tmp/bin:/usr/bin",
+			);
 		} finally {
 			process.env.PATH = originalPath;
 		}
+	});
+});
+
+describe("getInstallServiceUser", () => {
+	test("prefers explicit service user", () => {
+		expect(getInstallServiceUser("ubuntu")).toBe("ubuntu");
 	});
 });

@@ -12,8 +12,8 @@ const installRoot = join(packageRoot, ".shelleport");
 const binaryPath = join(installRoot, "shelleport");
 const repository = "obviyus/shelleport";
 
-export function getSystemdServicePath(home = process.env.HOME ?? process.cwd()) {
-	return join(home, ".config", "systemd", "user", "shelleport.service");
+export function getSystemdServicePath() {
+	return "/etc/systemd/system/shelleport.service";
 }
 
 function getTarget() {
@@ -197,12 +197,24 @@ async function serviceFileExists(path) {
 	}
 }
 
-async function findClaudeBinary() {
+function readSystemdUser(text) {
+	const match = text.match(/^User=(.+)$/m);
+	return match?.[1]?.trim() ?? null;
+}
+
+function readSystemdHome(text) {
+	const match = text.match(/^Environment=HOME=(.+)$/m);
+	return match?.[1]?.trim() ?? null;
+}
+
+function getUserHome(user) {
+	return user === "root" ? "/root" : `/home/${user}`;
+}
+
+async function findClaudeBinary(home) {
 	if (process.env.SHELLEPORT_CLAUDE_BIN) {
 		return process.env.SHELLEPORT_CLAUDE_BIN;
 	}
-
-	const home = process.env.HOME;
 
 	if (!home) {
 		return null;
@@ -236,6 +248,13 @@ export function upsertSystemdEnvironment(text, key, value) {
 	return `${text.slice(0, index)}${line}\n${text.slice(index)}`;
 }
 
+function buildServicePath(home) {
+	const pathEntries = [`${home}/.local/bin`, ...(process.env.PATH ?? "").split(":")].filter(
+		Boolean,
+	);
+	return [...new Set(pathEntries)].join(":");
+}
+
 export async function patchInstalledSystemdService() {
 	if (process.platform !== "linux") {
 		return false;
@@ -248,8 +267,12 @@ export async function patchInstalledSystemdService() {
 	}
 
 	let text = await readFile(servicePath, "utf8");
-	const path = process.env.PATH ?? "";
-	const claudeBin = await findClaudeBinary();
+	const serviceUser = readSystemdUser(text);
+	const serviceHome =
+		readSystemdHome(text) ??
+		(serviceUser ? getUserHome(serviceUser) : (process.env.HOME ?? process.cwd()));
+	const path = buildServicePath(serviceHome);
+	const claudeBin = await findClaudeBinary(serviceHome);
 
 	if (path) {
 		text = upsertSystemdEnvironment(text, "PATH", path);
@@ -260,7 +283,7 @@ export async function patchInstalledSystemdService() {
 	}
 
 	await writeFile(servicePath, text);
-	await runCommand("systemctl", ["--user", "daemon-reload"]);
+	await runCommand("systemctl", ["daemon-reload"]);
 	return true;
 }
 
@@ -297,7 +320,7 @@ export async function restartInstalledService() {
 		return false;
 	}
 
-	await runCommand("systemctl", ["--user", "restart", "shelleport.service"]);
+	await runCommand("systemctl", ["restart", "shelleport.service"]);
 	return true;
 }
 

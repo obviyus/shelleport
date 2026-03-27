@@ -539,7 +539,7 @@ describe("handleApiRequest", () => {
 		expect(createResponse.status).toBe(201);
 		expect(await readJson<{ session: { permissionMode: string } }>(createResponse)).toMatchObject({
 			session: {
-				permissionMode: "dontAsk",
+				permissionMode: "bypassPermissions",
 			},
 		});
 	});

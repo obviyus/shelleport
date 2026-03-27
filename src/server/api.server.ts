@@ -75,7 +75,7 @@ function assertPermissionMode(permissionMode: unknown) {
 	if (
 		permissionMode === undefined ||
 		permissionMode === "default" ||
-		permissionMode === "dontAsk"
+		permissionMode === "bypassPermissions"
 	) {
 		return permissionMode;
 	}
@@ -83,7 +83,7 @@ function assertPermissionMode(permissionMode: unknown) {
 	throw new ApiError(
 		400,
 		"invalid_permission_mode",
-		'permissionMode must be "default" or "dontAsk"',
+		'permissionMode must be "default" or "bypassPermissions"',
 	);
 }
 

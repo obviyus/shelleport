@@ -44,10 +44,11 @@ shelleport serve --public
 Shelleport can install itself as a background service that starts automatically:
 
 ```bash
-shelleport install-service --tailscale
+sudo shelleport install-service --tailscale --service-user ubuntu
 ```
 
 This writes a service definition for your platform and starts it immediately.
+On Linux this now writes a plain systemd unit at `/etc/systemd/system/shelleport.service` and runs it as the selected `--service-user`.
 By default, service installs bind `0.0.0.0`. Pass `--tailscale` to bind the machine's Tailscale IPv4 instead.
 
 ### Upgrade
@@ -58,7 +59,7 @@ If you installed shelleport from npm, upgrade the downloaded runtime binary in p
 shelleport upgrade
 ```
 
-On Linux, this also restarts `shelleport.service` automatically when the user systemd service is installed.
+On Linux, this also restarts the system `shelleport.service` automatically when it is installed.
 
 ### Health Check
 
@@ -122,6 +123,7 @@ CLI flags:
 - `--public` bind to `0.0.0.0`
 - `--tailscale` bind to the machine's Tailscale IPv4
 - `--port <port>` override the port
+- `--service-user <user>` Linux systemd service user for `install-service`
 - `-h, --help` show usage
 - `-v, --version` show version
 
