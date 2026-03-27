@@ -1,12 +1,10 @@
-import { mkdtemp, rename, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 const host = "127.0.0.1";
 const port = 41000 + Math.floor(Math.random() * 1000);
 const binaryPath = join(process.cwd(), "dist", "shelleport");
-const buildPath = join(process.cwd(), "build");
-const hiddenBuildPath = join(process.cwd(), `build.smoke-${process.pid}-${Date.now()}`);
 const dataDir = await mkdtemp(join(tmpdir(), "shelleport-smoke-"));
 
 async function waitFor(url: string) {
@@ -28,13 +26,16 @@ async function waitFor(url: string) {
 }
 
 async function assertPage(pathname: string, status: number, text: string, cookie?: string) {
-	const response = await fetch(`http://${host}:${port}${pathname}`, cookie
-		? {
-				headers: {
-					Cookie: cookie,
-				},
-			}
-		: undefined);
+	const response = await fetch(
+		`http://${host}:${port}${pathname}`,
+		cookie
+			? {
+					headers: {
+						Cookie: cookie,
+					},
+				}
+			: undefined,
+	);
 	const body = await response.text();
 
 	if (response.status !== status) {
@@ -44,11 +45,11 @@ async function assertPage(pathname: string, status: number, text: string, cookie
 	if (!body.includes(text)) {
 		throw new Error(`Missing ${pathname} marker: ${text}`);
 	}
+
+	return body;
 }
 
-await Bun.$`bun run build`;
 await Bun.$`bun run compile`;
-await rename(buildPath, hiddenBuildPath);
 
 const child = Bun.spawn([binaryPath, "serve"], {
 	env: {
@@ -64,7 +65,7 @@ const child = Bun.spawn([binaryPath, "serve"], {
 
 try {
 	await waitFor(`http://${host}:${port}/health`);
-	await assertPage("/login", 200, "Paste admin token");
+	await assertPage("/login", 200, '<div id="root"></div>');
 	const loginResponse = await fetch(`http://${host}:${port}/api/auth/session`, {
 		body: JSON.stringify({ token: "smoke-token" }),
 		headers: {
@@ -102,13 +103,19 @@ try {
 	}
 
 	const session = (await createResponse.json()) as { session: { id: string } };
+	const homepage = await assertPage("/", 200, '<div id="root"></div>', cookie);
 
-	await assertPage("/", 200, "window.__SHELLEPORT_BOOT__", cookie);
-	await assertPage(`/sessions/${session.session.id}`, 200, `"sessionId":"${session.session.id}"`, cookie);
-	await assertPage("/assets/client.js", 200, "hydrateRoot");
+	await assertPage(`/sessions/${session.session.id}`, 200, '<div id="root"></div>', cookie);
+
+	const scriptPath = homepage.match(/<script[^>]+src="([^"]+)"/)?.[1];
+
+	if (!scriptPath) {
+		throw new Error("Missing client script");
+	}
+
+	await assertPage(scriptPath, 200, "createRoot");
 } finally {
 	child.kill();
 	await child.exited.catch(() => {});
-	await rename(hiddenBuildPath, buildPath);
 	await rm(dataDir, { force: true, recursive: true });
 }

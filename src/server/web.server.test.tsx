@@ -2,13 +2,11 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { ClientAssets } from "~/server/client-assets.server";
 import type { SessionDetail, HostSession } from "~/shared/shelleport";
 
-let tempDir = "";
-let clientAssets: ClientAssets;
 let dataDir = "";
-let handleWebRequest: typeof import("~/server/web.server").handleWebRequest;
+let tempDir = "";
+let buildAppBootData: typeof import("~/server/web.server").buildAppBootData;
 let sessionBroker: typeof import("~/server/session-broker.server").sessionBroker;
 const sessionId = "session-test";
 const testSession: HostSession = {
@@ -44,32 +42,11 @@ beforeAll(async () => {
 	Bun.env.SHELLEPORT_ADMIN_TOKEN = "test-token";
 	tempDir = await mkdtemp(join(tmpdir(), "shelleport-web-test-"));
 	dataDir = join(tempDir, "data");
-	const stylePath = join(tempDir, "client.css");
-	const scriptPath = join(tempDir, "client.js");
 
 	await Bun.$`mkdir -p ${dataDir}`.quiet();
-	await Bun.write(stylePath, "body{background:black}");
-	await Bun.write(scriptPath, "console.log('client')");
-
-	clientAssets = {
-		entryScriptPath: "/assets/client.js",
-		files: [
-			{
-				cacheControl: "public, max-age=31536000, immutable",
-				publicPath: "/assets/client.css",
-				sourcePath: stylePath,
-			},
-			{
-				cacheControl: "public, max-age=31536000, immutable",
-				publicPath: "/assets/client.js",
-				sourcePath: scriptPath,
-			},
-		],
-		stylePaths: ["/assets/client.css"],
-	};
 
 	Bun.env.SHELLEPORT_DATA_DIR = dataDir;
-	({ handleWebRequest } = await import("~/server/web.server"));
+	({ buildAppBootData } = await import("~/server/web.server"));
 	({ sessionBroker } = await import("~/server/session-broker.server"));
 	sessionBroker.listSessions = () => [testSession];
 	sessionBroker.getSessionDetail = (requestedSessionId) =>
@@ -85,91 +62,63 @@ afterAll(async () => {
 	delete Bun.env.SHELLEPORT_DATA_DIR;
 });
 
-async function request(pathname: string, init?: RequestInit) {
-	return handleWebRequest(new Request(`http://localhost${pathname}`, init), {
-		clientAssets,
-		defaultCwd: "/tmp/project",
+function request(pathname: string, cookie?: string) {
+	return new Request(`http://localhost${pathname}`, {
+		headers: cookie
+			? {
+					Cookie: cookie,
+				}
+			: undefined,
 	});
 }
 
-describe("handleWebRequest", () => {
-	test("serves embedded assets", async () => {
-		const response = await request("/assets/client.js");
-
-		expect(response.status).toBe(200);
-		expect(response.headers.get("Cache-Control")).toBe("public, max-age=31536000, immutable");
-		expect(await response.text()).toContain("console.log");
-	});
-
-	test("renders login shell", async () => {
-		const response = await request("/login");
-		const body = await response.text();
-
-		expect(response.status).toBe(200);
-		expect(body).toContain("window.__SHELLEPORT_BOOT__");
-		expect(body).toContain('href="/assets/client.css"');
-		expect(body).toContain('src="/assets/client.js"');
-		expect(body).toContain("Paste admin token");
-		expect(body).toContain('"kind":"login"');
-	});
-
-	test("redirects home shell without auth", async () => {
-		const response = await request("/");
-
-		expect(response.status).toBe(302);
-		expect(response.headers.get("Location")).toBe("/login");
-	});
-
-	test("redirects archived shell without auth", async () => {
-		const response = await request("/archived");
-
-		expect(response.status).toBe(302);
-		expect(response.headers.get("Location")).toBe("/login");
-	});
-
-	test("renders home shell with auth", async () => {
-		const response = await request("/", {
-			headers: {
-				Cookie: "shelleport_admin=test-token",
-			},
+describe("buildAppBootData", () => {
+	test("returns login route for unauthenticated app pages", () => {
+		const boot = buildAppBootData(request("/"), {
+			defaultCwd: "/tmp/project",
+			pathname: "/",
 		});
-		const body = await response.text();
 
-		expect(response.status).toBe(200);
-		expect(body).toContain('"kind":"home"');
-		expect(body).toContain('"defaultCwd":"/tmp/project"');
-		expect(body).toContain('"authenticated":true');
-		expect(body).toContain('"title":"Web test session"');
+		expect(boot.authenticated).toBe(false);
+		expect(boot.route.kind).toBe("login");
+		expect(boot.route.pathname).toBe("/login");
 	});
 
-	test("renders session shell with auth", async () => {
-		const response = await request(`/sessions/${sessionId}`, {
-			headers: {
-				Cookie: "shelleport_admin=test-token",
-			},
+	test("returns home route for authenticated login page", () => {
+		const boot = buildAppBootData(request("/login", "shelleport_admin=test-token"), {
+			defaultCwd: "/tmp/project",
+			pathname: "/login",
 		});
-		const body = await response.text();
 
-		expect(response.status).toBe(200);
-		expect(body).toContain('"kind":"session"');
-		expect(body).toContain(`"sessionId":"${sessionId}"`);
-		expect(body).toContain('"sessionDetail":');
+		expect(boot.authenticated).toBe(true);
+		expect(boot.route.kind).toBe("home");
+		expect(boot.route.pathname).toBe("/");
 	});
 
-	test("redirects logout and clears auth cookie", async () => {
-		const response = await request("/logout");
+	test("includes session detail for authenticated session route", () => {
+		const boot = buildAppBootData(request(`/sessions/${sessionId}`, "shelleport_admin=test-token"), {
+			defaultCwd: "/tmp/project",
+			pathname: `/sessions/${sessionId}`,
+		});
 
-		expect(response.status).toBe(302);
-		expect(response.headers.get("Location")).toBe("/login");
-		expect(response.headers.get("Set-Cookie")).toContain("shelleport_admin=");
+		expect(boot.authenticated).toBe(true);
+		expect(boot.route.kind).toBe("session");
+		if (boot.route.kind === "session") {
+			expect(boot.route.params.sessionId).toBe(sessionId);
+		}
+		if (boot.authenticated) {
+			expect(boot.sessionDetail?.session.id).toBe(sessionId);
+		}
 	});
 
-	test("renders not found page with 404", async () => {
-		const response = await request("/missing");
-		const body = await response.text();
+	test("returns not-found route for missing authenticated session", () => {
+		const boot = buildAppBootData(request("/sessions/missing", "shelleport_admin=test-token"), {
+			defaultCwd: "/tmp/project",
+			pathname: "/sessions/missing",
+		});
 
-		expect(response.status).toBe(404);
-		expect(body).toContain("Page not found");
-		expect(body).toContain('"kind":"not-found"');
+		expect(boot.authenticated).toBe(true);
+		expect(boot.route.kind).toBe("not-found");
+		expect(boot.route.pathname).toBe("/sessions/missing");
 	});
 });

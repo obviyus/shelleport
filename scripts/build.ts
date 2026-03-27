@@ -1,21 +1,13 @@
-import { join } from "node:path";
-import tailwind from "bun-plugin-tailwind";
+const outdir = "./build/server";
 
-const outdir = join(process.cwd(), "build", "client");
-
-async function buildClient() {
+async function buildServer() {
+	const { default: tailwindPlugin } = await import("bun-plugin-tailwind");
 	const result = await Bun.build({
-		entrypoints: ["./src/client/client.tsx"],
+		entrypoints: ["./server.ts"],
 		minify: true,
-		naming: {
-			asset: "[name].[ext]",
-			chunk: "[name].[ext]",
-			entry: "[name].[ext]",
-		},
 		outdir,
-		plugins: [tailwind],
-		splitting: false,
-		target: "browser",
+		plugins: [tailwindPlugin],
+		target: "bun",
 	});
 
 	if (!result.success) {
@@ -23,22 +15,12 @@ async function buildClient() {
 			console.error(log.message);
 		}
 
-		throw new Error("Client build failed");
-	}
-
-	const entry = result.outputs.find((output) => output.path.endsWith("/client.js"));
-
-	if (!entry) {
-		throw new Error("Missing browser entry: client.js");
-	}
-
-	const style = result.outputs.find((output) => output.path.endsWith("/client.css"));
-
-	if (!style) {
-		throw new Error("Missing browser stylesheet: client.css");
+		throw new Error("Server build failed");
 	}
 }
 
-await Bun.$`rm -rf ${outdir} build/server`.quiet();
-await Bun.$`mkdir -p ${outdir}`.quiet();
-await buildClient();
+if (import.meta.main) {
+	await Bun.$`rm -rf ${outdir}`.quiet();
+	await Bun.$`mkdir -p ${outdir}`.quiet();
+	await buildServer();
+}

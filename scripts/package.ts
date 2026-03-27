@@ -2,31 +2,24 @@ import { createHash } from "node:crypto";
 import { basename, join } from "node:path";
 
 const packageJson = await Bun.file("package.json").json();
-const serverEntryPath = join(process.cwd(), "server.ts");
-const clientScriptPath = join(process.cwd(), "build", "client", "client.js");
-const clientStylePath = join(process.cwd(), "build", "client", "client.css");
 const version = packageJson.version;
 
 const releaseTargets = [
 	{
 		binaryName: `shelleport-v${version}-darwin-arm64`,
 		bunTarget: "bun-darwin-arm64",
-		slug: "darwin-arm64",
 	},
 	{
 		binaryName: `shelleport-v${version}-darwin-x64`,
 		bunTarget: "bun-darwin-x64",
-		slug: "darwin-x64",
 	},
 	{
 		binaryName: `shelleport-v${version}-linux-arm64`,
 		bunTarget: "bun-linux-arm64",
-		slug: "linux-arm64",
 	},
 	{
 		binaryName: `shelleport-v${version}-linux-x64`,
 		bunTarget: "bun-linux-x64",
-		slug: "linux-x64",
 	},
 ] as const;
 
@@ -41,39 +34,26 @@ const currentPlatformTarget =
 					? releaseTargets[3]
 					: null;
 
-function getCompileEntrySource() {
-	return [
-		`import clientScript from ${JSON.stringify(clientScriptPath)} with { type: "file" };`,
-		`import clientStyle from ${JSON.stringify(clientStylePath)} with { type: "file" };`,
-		`import { runServe } from ${JSON.stringify(serverEntryPath)};`,
-		"",
-		"await runServe({",
-		'\tentryScriptPath: "/assets/client.js",',
-		"\tfiles: [",
-		"\t\t{",
-		'\t\t\tcacheControl: "public, max-age=31536000, immutable",',
-		'\t\t\tpublicPath: "/assets/client.css",',
-		"\t\t\tsourcePath: clientStyle,",
-		"\t\t},",
-		"\t\t{",
-		'\t\t\tcacheControl: "public, max-age=31536000, immutable",',
-		'\t\t\tpublicPath: "/assets/client.js",',
-		"\t\t\tsourcePath: clientScript,",
-		"\t\t},",
-		"\t],",
-		'\tstylePaths: ["/assets/client.css"],',
-		"});",
-		"",
-	].join("\n");
-}
+async function buildBinary(outputPath: string, bunTarget: Bun.Build.CompileTarget) {
+	const result = await Bun.build({
+		compile: {
+			autoloadBunfig: false,
+			autoloadDotenv: false,
+			outfile: outputPath,
+			target: bunTarget,
+		},
+		entrypoints: ["./server.ts"],
+		minify: true,
+		target: "bun",
+	});
 
-async function buildBinary(outputPath: string, bunTarget: string) {
-	const stagingDir = join("dist", ".compile");
-	const entryPath = join(stagingDir, `${bunTarget}.ts`);
+	if (!result.success) {
+		for (const log of result.logs) {
+			console.error(log.message);
+		}
 
-	await Bun.$`mkdir -p ${stagingDir}`.quiet();
-	await Bun.write(entryPath, getCompileEntrySource());
-	await Bun.$`bun build --compile --target=${bunTarget} --outfile=${outputPath} ${entryPath}`;
+		throw new Error(`Binary build failed for ${bunTarget}`);
+	}
 }
 
 async function writeChecksums(files: string[], outputPath: string) {
@@ -92,9 +72,8 @@ async function buildRelease() {
 	const releaseDir = "dist/release";
 	const binaries: string[] = [];
 
-	await Bun.$`rm -rf ${releaseDir} dist/.compile`.quiet();
+	await Bun.$`rm -rf ${releaseDir}`.quiet();
 	await Bun.$`mkdir -p ${releaseDir}`.quiet();
-	await Bun.$`bun run build`;
 
 	for (const target of releaseTargets) {
 		const outputPath = join(releaseDir, target.binaryName);
@@ -111,8 +90,7 @@ async function buildLocal() {
 		throw new Error(`Unsupported local compile target: ${process.platform}-${process.arch}`);
 	}
 
-	await Bun.$`rm -rf dist/shelleport dist/.compile`.quiet();
-	await Bun.$`bun run build`;
+	await Bun.$`rm -rf dist/shelleport`.quiet();
 	await buildBinary("dist/shelleport", currentPlatformTarget.bunTarget);
 }
 

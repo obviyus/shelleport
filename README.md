@@ -118,8 +118,9 @@ All endpoints require `Authorization: Bearer <token>`.
 ## Development
 
 ```bash
-bun run dev          # Rebuild and restart the Bun server on code changes
-bun run build        # Build browser assets
+bun run dev          # Bun fullstack dev server with HTML import + HMR
+bun run build        # Ahead-of-time fullstack Bun bundle into build/server
+NODE_ENV=production bun ./build/server/server.js serve  # Run built bundle
 bun run compile      # Build the local standalone binary
 bun run typecheck    # Type-check with tsgo
 bun run lint         # Lint with oxlint
