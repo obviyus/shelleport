@@ -1,6 +1,5 @@
-import { File as CodeFile } from "@pierre/diffs/react";
-import { getFiletypeFromFileName } from "@pierre/diffs";
 import { ChevronRight, Loader2, X } from "lucide-react";
+import { type ComponentType, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type {
@@ -14,6 +13,17 @@ import type {
 type ImagePreview = {
 	name: string;
 	url: string;
+};
+
+type CodeFileProps = {
+	file: {
+		contents: string;
+		lang: string;
+		name: string;
+	};
+	options: {
+		theme: string;
+	};
 };
 
 export type DraftImage = ImagePreview & {
@@ -311,7 +321,82 @@ function getHighlightedLanguage(call: HostEvent, fileName: string, content: stri
 		return "diff";
 	}
 
-	return getFiletypeFromFileName(fileName);
+	return getLanguageFromFileName(fileName);
+}
+
+function getLanguageFromFileName(fileName: string) {
+	const extension = fileName.split(".").at(-1)?.toLowerCase() ?? "";
+
+	switch (extension) {
+		case "cjs":
+		case "js":
+		case "mjs":
+			return "javascript";
+		case "cts":
+		case "mts":
+		case "ts":
+			return "typescript";
+		case "tsx":
+			return "tsx";
+		case "jsx":
+			return "jsx";
+		case "md":
+			return "markdown";
+		case "sh":
+		case "zsh":
+			return "bash";
+		case "yml":
+			return "yaml";
+		default:
+			return extension || "text";
+	}
+}
+
+function LazyCodeFile({
+	content,
+	fileName,
+	language,
+}: {
+	content: string;
+	fileName: string;
+	language: string;
+}) {
+	const [CodeFile, setCodeFile] = useState<ComponentType<CodeFileProps> | null>(null);
+
+	useEffect(() => {
+		let cancelled = false;
+
+		void import("@pierre/diffs/react").then((module) => {
+			if (!cancelled) {
+				setCodeFile(() => module.File);
+			}
+		});
+
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+
+	if (!CodeFile) {
+		return (
+			<pre className="overflow-x-auto px-3 py-2.5 text-[11px] leading-[1.7] whitespace-pre-wrap text-foreground/80">
+				{truncate(content, 12_000)}
+			</pre>
+		);
+	}
+
+	return (
+		<CodeFile
+			file={{
+				contents: truncate(content, 50_000),
+				lang: language,
+				name: fileName,
+			}}
+			options={{
+				theme: "github-dark",
+			}}
+		/>
+	);
 }
 
 function replaceImageExtension(name: string) {
@@ -528,6 +613,7 @@ function UserMessageRenderer({ event }: { event: HostEvent }) {
 }
 
 function ToolCard({ call, result }: { call: HostEvent; result: HostEvent | null }) {
+	const [shouldRenderCode, setShouldRenderCode] = useState(false);
 	const output = result ? readString(result.data.output) : "";
 	const hasOutput = output.length > 0;
 	const isRunning = result === null;
@@ -538,7 +624,14 @@ function ToolCard({ call, result }: { call: HostEvent; result: HostEvent | null 
 	const strippedRead = call.data.toolName === "Read" ? stripReadLineNumbers(output) : null;
 
 	return (
-		<details className="animate-event-enter group mb-4 overflow-hidden rounded-lg border border-foreground/10 bg-card/92 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]">
+		<details
+			className="animate-event-enter group mb-4 overflow-hidden rounded-lg border border-foreground/10 bg-card/92 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]"
+			onToggle={(event) => {
+				if (event.currentTarget.open) {
+					setShouldRenderCode(true);
+				}
+			}}
+		>
 			<summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 transition hover:bg-accent/45">
 				<ChevronRight className="size-3 shrink-0 text-muted-foreground transition group-open:rotate-90" />
 				<div className="min-w-0 flex-1">
@@ -579,16 +672,13 @@ function ToolCard({ call, result }: { call: HostEvent; result: HostEvent | null 
 								)}
 							</div>
 							<div className="tool-code-view">
-								<CodeFile
-									file={{
-										contents: truncate(content, 50_000),
-										lang: language,
-										name: fileName,
-									}}
-									options={{
-										theme: "github-dark",
-									}}
-								/>
+								{shouldRenderCode ? (
+									<LazyCodeFile content={content} fileName={fileName} language={language} />
+								) : (
+									<div className="px-3 py-2 text-[11px] text-muted-foreground/72">
+										Open to load preview
+									</div>
+								)}
 							</div>
 						</div>
 					)

@@ -1,44 +1,17 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type ClientAssets } from "~/server/client-assets.server";
+import appShell from "~/client/index.html";
 import { config, ensureDataDir, getClaudeBin } from "~/server/config.server";
 import { handleApiRequest } from "~/server/api.server";
-import { handleWebRequest } from "~/server/web.server";
+import { clearAuthCookie } from "~/server/auth.server";
 
 const serverFilePath = fileURLToPath(import.meta.url);
 const usingBunRuntime =
 	process.execPath.endsWith("/bun") || process.execPath.endsWith("/bun-debug");
+const isDevelopment = usingBunRuntime && Bun.env.NODE_ENV !== "production";
 
 function getCliCommand() {
 	return usingBunRuntime ? ["bun", "run", serverFilePath] : [process.execPath];
-}
-
-async function getDiskClientAssets(): Promise<ClientAssets> {
-	const assetDir = join(process.cwd(), "build", "client");
-	const clientAssets = {
-		entryScriptPath: "/assets/client.js",
-		files: [
-			{
-				cacheControl: "public, max-age=31536000, immutable",
-				publicPath: "/assets/client.css",
-				sourcePath: join(assetDir, "client.css"),
-			},
-			{
-				cacheControl: "public, max-age=31536000, immutable",
-				publicPath: "/assets/client.js",
-				sourcePath: join(assetDir, "client.js"),
-			},
-		],
-		stylePaths: ["/assets/client.css"],
-	} satisfies ClientAssets;
-
-	for (const asset of clientAssets.files) {
-		if (!(await Bun.file(asset.sourcePath).exists())) {
-			throw new Error(`Missing client asset: ${asset.sourcePath}. Run \`bun run build\`.`);
-		}
-	}
-
-	return clientAssets;
 }
 
 async function runDoctor() {
@@ -147,9 +120,7 @@ WantedBy=default.target
 	console.log("Run: systemctl --user enable --now shelleport.service");
 }
 
-export async function createServerFetchHandler(clientAssetsOverride?: ClientAssets) {
-	const clientAssets = clientAssetsOverride ?? (await getDiskClientAssets());
-
+export async function createServerFetchHandler() {
 	return async function fetch(request: Request) {
 		const url = new URL(request.url);
 
@@ -165,10 +136,17 @@ export async function createServerFetchHandler(clientAssetsOverride?: ClientAsse
 				});
 			}
 
-			return await handleWebRequest(request, {
-				clientAssets,
-				defaultCwd: process.cwd(),
-			});
+			if (url.pathname === "/logout") {
+				return new Response(null, {
+					status: 302,
+					headers: {
+						Location: "/login",
+						"Set-Cookie": clearAuthCookie(),
+					},
+				});
+			}
+
+			return new Response("Not Found", { status: 404 });
 		} catch (error) {
 			if (error instanceof Response) {
 				return error;
@@ -185,16 +163,28 @@ export async function createServerFetchHandler(clientAssetsOverride?: ClientAsse
 	};
 }
 
-export async function runServe(clientAssetsOverride?: ClientAssets) {
+export async function runServe() {
 	await ensureDataDir();
-	const fetch = await createServerFetchHandler(clientAssetsOverride);
+	const fetch = await createServerFetchHandler();
 
 	console.log(`Server starting on ${config.defaultHost}:${config.defaultPort}`);
 
 	Bun.serve({
+		development: isDevelopment
+			? {
+					console: true,
+					hmr: true,
+				}
+			: false,
 		fetch,
 		hostname: config.defaultHost,
 		port: config.defaultPort,
+		routes: {
+			"/": appShell,
+			"/archived": appShell,
+			"/login": appShell,
+			"/sessions/:sessionId": appShell,
+		},
 		error(error) {
 			console.error("Server error:", error);
 			return new Response("Server Error", { status: 500 });

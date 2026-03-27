@@ -8,6 +8,7 @@ import type {
 	SessionDetail,
 	SessionStreamMessage,
 } from "~/shared/shelleport";
+import type { AppBootData } from "~/client/boot";
 
 function headers(json = false): HeadersInit {
 	const h: Record<string, string> = {};
@@ -27,7 +28,12 @@ function mergeHeaders(json: boolean, initHeaders?: HeadersInit) {
 	return merged;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(
+	path: string,
+	init?: RequestInit & {
+		redirectOnUnauthorized?: boolean;
+	},
+): Promise<T> {
 	const isJsonBody = init?.body !== undefined && !(init.body instanceof FormData);
 	const res = await fetch(path, {
 		...init,
@@ -36,7 +42,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 	});
 
 	if (res.status === 401) {
-		window.location.href = "/login";
+		if (init?.redirectOnUnauthorized !== false) {
+			window.location.href = "/login";
+		}
+
 		throw new Error("Unauthorized");
 	}
 
@@ -49,7 +58,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export function validateSession() {
-	return request<{ authenticated: true }>("/api/auth/session");
+	return request<{ authenticated: true }>("/api/auth/session", {
+		redirectOnUnauthorized: false,
+	});
+}
+
+export function fetchBootstrap(pathname: string) {
+	const params = new URLSearchParams({ pathname });
+	return request<{ boot: AppBootData }>(`/api/bootstrap?${params.toString()}`);
 }
 
 export function login(token: string) {

@@ -24,8 +24,9 @@
 	"scripts": {
 		"build": "bun run ./scripts/build.ts",
 		"compile": "bun run ./scripts/package.ts local",
-		"dev": "bun --watch ./scripts/dev.ts",
-		"start": "bun run build && bun run server.ts serve",
+		"dev": "bun --hot server.ts serve",
+		"start": "bun run build && cd ./build/server && NODE_ENV=production bun ./server.js serve",
+		"start:source": "NODE_ENV=production bun run server.ts serve",
 		"doctor": "bun run server.ts doctor",
 		"install-service": "bun run server.ts install-service",
 		"postinstall": "node ./scripts/postinstall.js",

@@ -21,6 +21,7 @@ import { isApiError, ApiError } from "~/server/api-error.server";
 import { sessionBroker } from "~/server/session-broker.server";
 import { sessionStore } from "~/server/store.server";
 import { getProvider, listProviders } from "~/server/providers/registry.server";
+import { buildAppBootData } from "~/server/web.server";
 
 async function readJson<T>(request: Request) {
 	try {
@@ -313,6 +314,21 @@ async function listDirectory(path: string): Promise<DirectoryListing> {
 async function dispatchApiRequest(request: Request) {
 	const url = new URL(request.url);
 	const segments = url.pathname.split("/").filter(Boolean);
+
+	if (request.method === "GET" && url.pathname === "/api/bootstrap") {
+		const requestedPath = url.searchParams.get("pathname") ?? "/";
+
+		if (!requestedPath.startsWith("/")) {
+			throw new ApiError(400, "invalid_pathname", "pathname must start with /");
+		}
+
+		return Response.json({
+			boot: buildAppBootData(request, {
+				defaultCwd: process.cwd(),
+				pathname: requestedPath,
+			}),
+		});
+	}
 
 	if (url.pathname === "/api/auth/session") {
 		if (request.method === "GET") {
