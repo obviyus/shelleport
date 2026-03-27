@@ -83,6 +83,7 @@ function DirectoryColumn({
 	const [activeEntryPath, setActiveEntryPath] = useState<string | null>(null);
 	const [hoveredEntryPath, setHoveredEntryPath] = useState<string | null>(null);
 	const listId = useId();
+	const searchInputId = useId();
 	const searchRef = useRef<HTMLInputElement>(null);
 	const entryRefs = useRef<Record<string, HTMLButtonElement | HTMLDivElement | null>>({});
 	const normalizedQuery = deferredQuery.trim().toLocaleLowerCase();
@@ -265,7 +266,7 @@ function DirectoryColumn({
 				isActiveColumn
 					? "border-foreground/18 bg-card shadow-[0_18px_50px_oklch(0_0_0_/_0.28)]"
 					: "border-foreground/10 bg-card/82 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.02)]"
-			} outline-none ${isFocusedColumn ? "ring-1 ring-foreground/18" : ""}`}
+			} outline-none focus-visible:ring-1 focus-visible:ring-foreground/18 ${isFocusedColumn ? "ring-1 ring-foreground/18" : ""}`}
 		>
 			<header className="border-b border-foreground/8 px-3 py-2.5">
 				<div className="flex items-center justify-between gap-2">
@@ -278,8 +279,15 @@ function DirectoryColumn({
 					{isLoading && <Loader2 className="size-3 animate-spin text-muted-foreground/78" />}
 				</div>
 				<div className="relative mt-2">
-					<Search className="pointer-events-none absolute top-1/2 left-2.5 size-3 -translate-y-1/2 text-muted-foreground/62" />
+					<label htmlFor={searchInputId} className="sr-only">
+						Search {getPathName(path)}
+					</label>
+					<Search
+						aria-hidden="true"
+						className="pointer-events-none absolute top-1/2 left-2.5 size-3 -translate-y-1/2 text-muted-foreground/62"
+					/>
 					<input
+						id={searchInputId}
 						ref={searchRef}
 						type="text"
 						value={query}
@@ -290,9 +298,10 @@ function DirectoryColumn({
 								event.preventDefault();
 							}
 						}}
-						placeholder="Search"
+						placeholder="Search…"
 						aria-controls={listId}
-						className="h-8 w-full rounded-md border border-foreground/10 bg-background/55 pr-2 pl-7 text-[11px] text-foreground outline-none transition placeholder:text-muted-foreground/54 focus:border-foreground/20 focus:ring-1 focus:ring-foreground/12"
+						autoComplete="off"
+						className="h-8 w-full rounded-md border border-foreground/10 bg-background/55 pr-2 pl-7 text-[11px] text-foreground outline-none transition placeholder:text-muted-foreground/54 focus-visible:border-foreground/20 focus-visible:ring-1 focus-visible:ring-foreground/12"
 					/>
 				</div>
 			</header>
@@ -328,6 +337,7 @@ function DirectoryColumn({
 											onMouseLeave={() => setHoveredEntryPath((current) => (current === entry.path ? null : current))}
 											role="option"
 											aria-selected={isSelected}
+											style={{ contentVisibility: "auto", containIntrinsicSize: "36px" }}
 											className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[11px] transition ${
 												isFocusedColumn && isActive
 													? "bg-foreground/88 text-background ring-1 ring-background/20 shadow-[0_10px_30px_oklch(1_0_0_/_0.08)]"
@@ -341,15 +351,18 @@ function DirectoryColumn({
 													? "bg-foreground/14 text-foreground"
 													: ""
 											}`}
-										>
-										{isSelected ? (
-											<FolderOpen className="size-3.5 shrink-0" />
-										) : (
-											<Folder className="size-3.5 shrink-0 text-muted-foreground/74" />
-										)}
-										<span className="min-w-0 flex-1 truncate">{entry.name}</span>
-										<ChevronRight className="size-3 shrink-0 opacity-60" />
-									</button>
+											>
+											{isSelected ? (
+												<FolderOpen aria-hidden="true" className="size-3.5 shrink-0" />
+											) : (
+												<Folder
+													aria-hidden="true"
+													className="size-3.5 shrink-0 text-muted-foreground/74"
+												/>
+											)}
+											<span className="min-w-0 flex-1 truncate">{entry.name}</span>
+											<ChevronRight aria-hidden="true" className="size-3 shrink-0 opacity-60" />
+										</button>
 								) : (
 									<div
 										key={entry.path}
@@ -360,6 +373,7 @@ function DirectoryColumn({
 											aria-selected={false}
 											onMouseEnter={() => setHoveredEntryPath(entry.path)}
 											onMouseLeave={() => setHoveredEntryPath((current) => (current === entry.path ? null : current))}
+											style={{ contentVisibility: "auto", containIntrinsicSize: "36px" }}
 											className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-[11px] ${
 												isFocusedColumn && isActive
 													? "bg-foreground/88 text-background ring-1 ring-background/20"
@@ -370,7 +384,7 @@ function DirectoryColumn({
 														: "text-muted-foreground/62"
 											}`}
 										>
-										<FileText className="size-3.5 shrink-0" />
+										<FileText aria-hidden="true" className="size-3.5 shrink-0" />
 										<span className="min-w-0 truncate">{entry.name}</span>
 									</div>
 								);
@@ -402,6 +416,7 @@ export function SessionLauncher({
 	onCreate,
 	token,
 }: SessionLauncherProps) {
+	const titleInputId = useId();
 	const [title, setTitle] = useState("");
 	const [currentPath, setCurrentPath] = useState(defaultPath);
 	const [activeColumnPath, setActiveColumnPath] = useState(defaultPath);
@@ -477,6 +492,7 @@ export function SessionLauncher({
 	}, [pathChain, visibleColumnCount]);
 
 	useEffect(() => {
+		let cancelled = false;
 		const missingPaths = pathChain.filter(
 			(path) => directoryMap[path] === undefined && loadingPaths[path] === undefined,
 		);
@@ -497,6 +513,10 @@ export function SessionLauncher({
 
 		void Promise.all(missingPaths.map((path) => fetchDirectory(token, path)))
 			.then((listings) => {
+				if (cancelled) {
+					return;
+				}
+
 				startTransition(() => {
 					setDirectoryMap((current) => {
 						const next = { ...current };
@@ -520,6 +540,10 @@ export function SessionLauncher({
 				});
 			})
 			.catch((nextError: Error) => {
+				if (cancelled) {
+					return;
+				}
+
 				startTransition(() => {
 					setLoadingPaths((current) => {
 						const next = { ...current };
@@ -533,7 +557,11 @@ export function SessionLauncher({
 					setError(nextError.message);
 				});
 			});
-	}, [directoryMap, loadingPaths, pathChain, token]);
+
+		return () => {
+			cancelled = true;
+		};
+	}, [directoryMap, pathChain, token]);
 
 	useEffect(() => {
 		const browser = browserRef.current;
@@ -574,15 +602,21 @@ export function SessionLauncher({
 						</p>
 					</div>
 					<div className="w-full max-w-sm shrink-0">
-						<label className="mb-1.5 block text-[10px] font-medium uppercase tracking-[0.14em] text-foreground/56">
+						<label
+							htmlFor={titleInputId}
+							className="mb-1.5 block text-[10px] font-medium uppercase tracking-[0.14em] text-foreground/56"
+						>
 							Title
 						</label>
 						<input
+							id={titleInputId}
+							name="title"
 							type="text"
 							value={title}
 							onChange={(event) => setTitle(event.target.value)}
-							placeholder="Optional session title"
-							className="h-10 w-full rounded-md border border-foreground/10 bg-card/90 px-3 text-xs text-foreground outline-none transition placeholder:text-muted-foreground/58 focus:border-foreground/22 focus:ring-1 focus:ring-foreground/14"
+							autoComplete="off"
+							placeholder="Optional session title…"
+							className="h-10 w-full rounded-md border border-foreground/10 bg-card/90 px-3 text-xs text-foreground outline-none transition placeholder:text-muted-foreground/58 focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
 						/>
 					</div>
 				</div>
@@ -590,22 +624,26 @@ export function SessionLauncher({
 
 			<div className="border-b border-border px-6 py-3">
 				<div className="mx-auto flex w-full max-w-[110rem] items-center justify-between gap-4">
-					<div className="min-w-0 flex-1 rounded-md border border-foreground/10 bg-card/86 px-3 py-2 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]">
-						<div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.14em] text-foreground/52">
-							<FolderOpen className="size-3" />
-							Selected Directory
-						</div>
+						<div className="min-w-0 flex-1 rounded-md border border-foreground/10 bg-card/86 px-3 py-2 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]">
+							<div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.14em] text-foreground/52">
+								<FolderOpen aria-hidden="true" className="size-3" />
+								Selected Directory
+							</div>
 						<p className="mt-1 truncate text-xs text-foreground/88">{currentPath}</p>
 					</div>
-					<button
-						type="button"
-						onClick={() => void onCreate(currentPath, title.trim())}
-						disabled={isCreating}
-						className="flex h-10 shrink-0 items-center gap-2 rounded-md bg-foreground px-4 text-xs font-medium text-background transition hover:bg-foreground/90 disabled:opacity-30"
-					>
-						{isCreating ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
-						Create session
-					</button>
+						<button
+							type="button"
+							onClick={() => void onCreate(currentPath, title.trim())}
+							disabled={isCreating}
+							className="flex h-10 shrink-0 items-center gap-2 rounded-md bg-foreground px-4 text-xs font-medium text-background transition hover:bg-foreground/90 focus-visible:ring-2 focus-visible:ring-foreground/20 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-30"
+						>
+							{isCreating ? (
+								<Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
+							) : (
+								<Plus aria-hidden="true" className="size-3.5" />
+							)}
+							Create session
+						</button>
 				</div>
 				{error && (
 					<div className="mx-auto mt-3 w-full max-w-[110rem] rounded-md border border-destructive/25 bg-destructive/8 px-3 py-2 text-[11px] text-destructive">
