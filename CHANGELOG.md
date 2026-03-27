@@ -4,6 +4,12 @@ All notable changes to shelleport are documented here.
 
 ## Unreleased
 
+## 0.0.10 - 2026-03-27
+
+### Fixed
+
+- Release check formatting regression in `api.server` image upload tests
+
 ## 0.0.9 - 2026-03-27
 
 ### Added

@@ -992,7 +992,9 @@ describe("handleApiRequest", () => {
 			throw new Error("Missing SSE body");
 		}
 
-		const imageBytes = await Bun.file(join(process.cwd(), "public/assets/preview.jpg")).arrayBuffer();
+		const imageBytes = await Bun.file(
+			join(process.cwd(), "public/assets/preview.jpg"),
+		).arrayBuffer();
 		const formData = new FormData();
 		formData.set("prompt", "Tell me what you received.");
 		formData.append("images", new File([imageBytes], "diagram.png", { type: "image/jpeg" }));
@@ -1070,13 +1072,12 @@ describe("handleApiRequest", () => {
 			throw new Error("Missing SSE body");
 		}
 
-		const imageBytes = await Bun.file(join(process.cwd(), "public/assets/preview.jpg")).arrayBuffer();
+		const imageBytes = await Bun.file(
+			join(process.cwd(), "public/assets/preview.jpg"),
+		).arrayBuffer();
 		const formData = new FormData();
 		formData.set("prompt", "Normalize this image.");
-		formData.append(
-			"images",
-			new File([imageBytes], "preview.png", { type: "image/png" }),
-		);
+		formData.append("images", new File([imageBytes], "preview.png", { type: "image/png" }));
 
 		const inputResponse = await handleApiRequest(
 			new Request(`http://localhost/api/sessions/${sessionId}/input`, {
