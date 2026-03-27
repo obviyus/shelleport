@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.5 - 2026-03-27
+
+- auto-install the native runtime on first CLI run when the package manager skipped the install hook
+
 ## 0.0.4 - 2026-03-27
 
 - fix GitHub Actions to use `bun run check` and `bun run test`, so tag builds honor the serialized test runner
