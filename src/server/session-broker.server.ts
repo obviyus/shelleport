@@ -5,6 +5,7 @@ import type {
 	ImportSessionPayload,
 	PendingRequest,
 	SessionArchivePayload,
+	SessionMetaPayload,
 	RequestResponsePayload,
 	SessionLimit,
 	SessionStatusDetail,
@@ -384,6 +385,19 @@ export const sessionBroker = {
 	},
 	setSessionArchived(sessionId: string, input: SessionArchivePayload) {
 		const session = sessionStore.updateSession(sessionId, { archived: input.archived });
+
+		if (!session) {
+			throw new ApiError(404, "session_not_found", `Unknown session: ${sessionId}`);
+		}
+
+		publishSession(session);
+		return session;
+	},
+	updateSessionMeta(sessionId: string, input: SessionMetaPayload) {
+		const session = sessionStore.updateSession(sessionId, {
+			title: input.title?.trim(),
+			pinned: input.pinned,
+		});
 
 		if (!session) {
 			throw new ApiError(404, "session_not_found", `Unknown session: ${sessionId}`);

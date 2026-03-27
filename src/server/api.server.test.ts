@@ -651,6 +651,88 @@ describe("handleApiRequest", () => {
 		).toBe(false);
 	});
 
+	test("renames and pins sessions", async () => {
+		const firstResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "claude",
+					cwd: testRoot,
+					title: "Alpha",
+				}),
+			}),
+		);
+		expect(firstResponse.status).toBe(201);
+		const firstSession = await readJson<{ session: { id: string } }>(firstResponse);
+
+		await Bun.sleep(5);
+
+		const secondResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "claude",
+					cwd: testRoot,
+					title: "Bravo",
+				}),
+			}),
+		);
+		expect(secondResponse.status).toBe(201);
+		const secondSession = await readJson<{ session: { id: string } }>(secondResponse);
+
+		const renameResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${firstSession.session.id}/meta`, {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({ title: "Pinned Alpha", pinned: true }),
+			}),
+		);
+		expect(renameResponse.status).toBe(200);
+		expect(
+			await readJson<{ session: { title: string; pinned: boolean } }>(renameResponse),
+		).toMatchObject({
+			session: {
+				title: "Pinned Alpha",
+				pinned: true,
+			},
+		});
+
+		const listResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				headers: authHeader,
+			}),
+		);
+		expect(listResponse.status).toBe(200);
+		const listJson = await readJson<{
+			sessions: Array<{
+				id: string;
+				title: string;
+				pinned: boolean;
+			}>;
+		}>(listResponse);
+		expect(listJson.sessions[0]).toMatchObject({
+			id: firstSession.session.id,
+			title: "Pinned Alpha",
+			pinned: true,
+		});
+		expect(listJson.sessions[1]).toMatchObject({
+			id: secondSession.session.id,
+			title: "Bravo",
+			pinned: false,
+		});
+	});
+
 	test("starts a session, streams SSE, and resumes after approval", async () => {
 		const createResponse = await handleApiRequest(
 			new Request("http://localhost/api/sessions", {

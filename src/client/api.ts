@@ -6,6 +6,7 @@ import type {
 	ProviderSummary,
 	RequestResponsePayload,
 	SessionDetail,
+	SessionMetaPayload,
 	SessionStreamMessage,
 } from "~/shared/shelleport";
 import type { AppBootData } from "~/client/boot";
@@ -124,6 +125,13 @@ export function setSessionArchived(sessionId: string, archived: boolean) {
 	return request<{ session: HostSession }>(`/api/sessions/${sessionId}/archive`, {
 		method: "POST",
 		body: JSON.stringify({ archived }),
+	});
+}
+
+export function updateSessionMeta(sessionId: string, payload: SessionMetaPayload) {
+	return request<{ session: HostSession }>(`/api/sessions/${sessionId}/meta`, {
+		method: "POST",
+		body: JSON.stringify(payload),
 	});
 }
 
