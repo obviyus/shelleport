@@ -141,8 +141,13 @@ function MarkdownMessage({ text }: { text: string }) {
 
 function getToolPreview(event: HostEvent): string {
 	const input = event.data.input as Record<string, unknown> | undefined;
+	const inputJson = readString(event.data.inputJson);
 
 	if (!input) {
+		if (inputJson.length > 0) {
+			return inputJson.slice(0, 100);
+		}
+
 		return event.summary;
 	}
 
@@ -529,31 +534,77 @@ type ToolGroup = {
 	type: "tool";
 };
 
+type AssistantTextRunGroup = {
+	entries: HostEvent[];
+	type: "assistant-text-run";
+};
+
 type PassthroughGroup = {
 	entry: HostEvent;
 	type: "single";
 };
 
-export type GroupedEntry = ToolGroup | PassthroughGroup;
+export type GroupedEntry = ToolGroup | AssistantTextRunGroup | PassthroughGroup;
+
+function isAssistantTextEvent(event: HostEvent | undefined) {
+	return !!event && event.kind === "text" && event.data.role === "assistant";
+}
 
 export function groupStream(entries: HostEvent[]): GroupedEntry[] {
 	const grouped: GroupedEntry[] = [];
 
 	for (let index = 0; index < entries.length; index += 1) {
 		const entry = entries[index];
-		const next = entries[index + 1];
 
 		if (entry.kind === "tool-call") {
-			if (next?.kind === "tool-result") {
-				grouped.push({ call: entry, result: next, type: "tool" });
+			let call = entry;
+			const toolUseId = typeof entry.data.toolUseId === "string" ? entry.data.toolUseId : null;
+
+			while (true) {
+				const nextCall = entries[index + 1];
+
+				if (
+					nextCall?.kind === "tool-call" &&
+					toolUseId &&
+					nextCall.data.toolUseId === toolUseId
+				) {
+					index += 1;
+					call = nextCall;
+					continue;
+				}
+
+				break;
+			}
+
+			const next = entries[index + 1];
+
+			if (
+				next?.kind === "tool-result" &&
+				(!toolUseId ||
+					typeof next.data.toolUseId !== "string" ||
+					next.data.toolUseId === toolUseId)
+			) {
+				grouped.push({ call, result: next, type: "tool" });
 				index += 1;
 			} else {
-				grouped.push({ call: entry, result: null, type: "tool" });
+				grouped.push({ call, result: null, type: "tool" });
 			}
 			continue;
 		}
 
 		if (entry.kind === "tool-result" && entries[index - 1]?.kind === "tool-call") {
+			continue;
+		}
+
+		if (isAssistantTextEvent(entry)) {
+			const run = [entry];
+
+			while (isAssistantTextEvent(entries[index + 1])) {
+				index += 1;
+				run.push(entries[index]);
+			}
+
+			grouped.push({ entries: run, type: "assistant-text-run" });
 			continue;
 		}
 
@@ -564,11 +615,15 @@ export function groupStream(entries: HostEvent[]): GroupedEntry[] {
 }
 
 export function GroupedEntryRenderer({ group }: { group: GroupedEntry }) {
-	return group.type === "tool" ? (
-		<ToolCard call={group.call} result={group.result} />
-	) : (
-		<EventRenderer event={group.entry} />
-	);
+	if (group.type === "tool") {
+		return <ToolCard call={group.call} result={group.result} />;
+	}
+
+	if (group.type === "assistant-text-run") {
+		return <AssistantTextRunRenderer entries={group.entries} />;
+	}
+
+	return <EventRenderer event={group.entry} />;
 }
 
 function UserMessageRenderer({ event }: { event: HostEvent }) {
@@ -687,6 +742,21 @@ function ToolCard({ call, result }: { call: HostEvent; result: HostEvent | null 
 				)}
 			</div>
 		</details>
+	);
+}
+
+function AssistantTextRunRenderer({ entries }: { entries: HostEvent[] }) {
+	return (
+		<div className="animate-event-enter mb-4">
+			<div className="mb-1 px-1 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/55">
+				Claude
+			</div>
+			<div className="overflow-hidden rounded-xl rounded-tl-sm border border-foreground/10 bg-card/95 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]">
+				<div className="px-4 py-3 text-xs leading-[1.8] text-foreground/88">
+					<MarkdownMessage text={entries.map((entry) => readString(entry.data.text)).join("")} />
+				</div>
+			</div>
+		</div>
 	);
 }
 

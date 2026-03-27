@@ -3,6 +3,7 @@ import { join } from "node:path";
 import {
 	createClaudeBashToolRule,
 	normalizeClaudeEvent,
+	normalizeClaudeStreamEvent,
 	parseClaudeHistoricalSession,
 } from "~/server/providers/claude.server";
 
@@ -136,6 +137,82 @@ describe("normalizeClaudeEvent", () => {
 			throw new Error("Expected session-status event");
 		}
 		expect(events[0].detail.nextRetryTime).toBeGreaterThan(Date.now());
+	});
+
+	test("maps partial assistant text deltas", () => {
+		const events = normalizeClaudeStreamEvent({
+			type: "stream_event",
+			event: {
+				type: "content_block_delta",
+				index: 0,
+				delta: {
+					type: "text_delta",
+					text: "par",
+				},
+			},
+		});
+
+		expect(events).toHaveLength(1);
+		expect(events[0]).toMatchObject({
+			type: "host-event",
+			kind: "text",
+			data: {
+				role: "assistant",
+				text: "par",
+				partial: true,
+			},
+		});
+	});
+
+	test("maps partial tool input deltas", () => {
+		const state = new Map();
+
+		const startEvents = normalizeClaudeStreamEvent(
+			{
+				type: "stream_event",
+				event: {
+					type: "content_block_start",
+					index: 1,
+					content_block: {
+						type: "tool_use",
+						id: "tool-1",
+						name: "Bash",
+						input: {},
+					},
+				},
+			},
+			state,
+		);
+
+		const deltaEvents = normalizeClaudeStreamEvent(
+			{
+				type: "stream_event",
+				event: {
+					type: "content_block_delta",
+					index: 1,
+					delta: {
+						type: "input_json_delta",
+						partial_json: "{\"command\":\"ls\"}",
+					},
+				},
+			},
+			state,
+		);
+
+		expect(startEvents).toHaveLength(1);
+		expect(deltaEvents).toHaveLength(1);
+		expect(deltaEvents[0]).toMatchObject({
+			type: "host-event",
+			kind: "tool-call",
+			data: {
+				toolName: "Bash",
+				toolUseId: "tool-1",
+				input: {
+					command: "ls",
+				},
+				partial: true,
+			},
+		});
 	});
 });
 
