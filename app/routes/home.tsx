@@ -48,11 +48,20 @@ import type { Route } from "./+types/home";
 // ---------------------------------------------------------------------------
 
 /** Client-side user message injected into the event stream */
+type ImagePreview = {
+	name: string;
+	url: string;
+};
+
+type DraftImage = ImagePreview & {
+	file: File;
+};
+
 type UserMessage = {
 	id: string;
 	kind: "user-message";
 	text: string;
-	attachments: string[];
+	attachments: ImagePreview[];
 	createTime: number;
 };
 
@@ -63,8 +72,20 @@ function isUserMessage(entry: StreamEntry): entry is UserMessage {
 	return "kind" in entry && entry.kind === "user-message";
 }
 
+function revokeUserMessagePreviews(entries: StreamEntry[]) {
+	for (const entry of entries) {
+		if (!isUserMessage(entry)) {
+			continue;
+		}
+
+		for (const attachment of entry.attachments) {
+			URL.revokeObjectURL(attachment.url);
+		}
+	}
+}
+
 let userMsgCounter = 0;
-function createUserMessage(text: string, attachments: string[]): UserMessage {
+function createUserMessage(text: string, attachments: ImagePreview[]): UserMessage {
 	return {
 		id: `user-msg-${++userMsgCounter}`,
 		kind: "user-message",
@@ -111,6 +132,58 @@ function getToolPreview(event: HostEvent): string {
 function truncate(text: string, max: number): string {
 	if (text.length <= max) return text;
 	return `${text.slice(0, max)}\n… (${text.length - max} more chars)`;
+}
+
+function replaceImageExtension(name: string) {
+	return name.replace(/\.[A-Za-z0-9]+$/, "") || "image";
+}
+
+async function normalizeDraftImage(file: File) {
+	const objectUrl = URL.createObjectURL(file);
+
+	try {
+		const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+			const element = new Image();
+			element.onload = () => resolve(element);
+			element.onerror = () => reject(new Error("Could not process image"));
+			element.src = objectUrl;
+		});
+		const canvas = document.createElement("canvas");
+		canvas.width = image.naturalWidth;
+		canvas.height = image.naturalHeight;
+		const context = canvas.getContext("2d");
+
+		if (!context) {
+			throw new Error("Could not process image");
+		}
+
+		context.drawImage(image, 0, 0);
+
+		const blob = await new Promise<Blob>((resolve, reject) => {
+			canvas.toBlob((nextBlob) => {
+				if (!nextBlob) {
+					reject(new Error("Could not process image"));
+					return;
+				}
+
+				resolve(nextBlob);
+			}, "image/png");
+		});
+
+		const normalizedName = `${replaceImageExtension(file.name)}.png`;
+		const normalizedFile = new File([blob], normalizedName, {
+			type: "image/png",
+			lastModified: Date.now(),
+		});
+
+		return {
+			file: normalizedFile,
+			name: normalizedFile.name,
+			url: URL.createObjectURL(normalizedFile),
+		};
+	} finally {
+		URL.revokeObjectURL(objectUrl);
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -266,14 +339,18 @@ function UserMessageRenderer({ message }: { message: UserMessage }) {
 		<div className="animate-event-enter my-3 flex justify-end">
 			<div className="max-w-[80%] rounded-md border border-foreground/8 bg-accent px-3 py-2">
 				{message.attachments.length > 0 && (
-					<div className="mb-2 flex flex-wrap justify-end gap-1.5">
+					<div className="mb-2 flex flex-wrap justify-end gap-2">
 						{message.attachments.map((attachment) => (
-							<span
-								key={attachment}
-								className="rounded border border-foreground/10 bg-background/70 px-2 py-1 text-[10px] text-foreground/60"
+							<div
+								key={attachment.url}
+								className="overflow-hidden rounded-md border border-foreground/10 bg-background/70"
 							>
-								{attachment}
-							</span>
+								<img
+									src={attachment.url}
+									alt={attachment.name}
+									className="h-20 w-20 object-cover"
+								/>
+							</div>
 						))}
 					</div>
 				)}
@@ -452,6 +529,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
+	const draftImagesRef = useRef<DraftImage[]>([]);
+	const streamRef = useRef<StreamEntry[]>([]);
 	const isAtBottom = useRef(true);
 
 	const [token] = useState(() => getToken());
@@ -462,7 +541,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 	const [stream, setStream] = useState<StreamEntry[]>([]);
 	const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
 	const [prompt, setPrompt] = useState("");
-	const [draftImages, setDraftImages] = useState<File[]>([]);
+	const [draftImages, setDraftImages] = useState<DraftImage[]>([]);
 	const [showNewSession, setShowNewSession] = useState(false);
 	const [newCwd, setNewCwd] = useState(loaderData.defaultCwd);
 	const [newTitle, setNewTitle] = useState("");
@@ -473,6 +552,14 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 
 	// Group tool-calls with their results
 	const grouped = useMemo(() => groupStream(stream), [stream]);
+
+	useEffect(() => {
+		draftImagesRef.current = draftImages;
+	}, [draftImages]);
+
+	useEffect(() => {
+		streamRef.current = stream;
+	}, [stream]);
 
 	// Auth guard
 	useEffect(() => {
@@ -502,10 +589,19 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 		if (!selectedId || !token) return;
 
 		setStream([]);
+		revokeUserMessagePreviews(streamRef.current);
 		setPendingRequests([]);
 		setSession(null);
 		setStreamState("connected");
-		setDraftImages([]);
+		setDraftImages((prev) => {
+			for (const image of prev) {
+				URL.revokeObjectURL(image.url);
+			}
+			return [];
+		});
+		if (fileInputRef.current) {
+			fileInputRef.current.value = "";
+		}
 
 		const controller = connectSSE(
 			token,
@@ -514,7 +610,10 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 				startTransition(() => {
 					if (msg.type === "snapshot") {
 						setSession(msg.payload.session);
-						setStream(msg.payload.events);
+						setStream((prev) => {
+							revokeUserMessagePreviews(prev);
+							return msg.payload.events;
+						});
 						setPendingRequests(msg.payload.pendingRequests.filter((r) => r.status === "pending"));
 						setSessions((prev) =>
 							prev.map((s) => (s.id === msg.payload.session.id ? msg.payload.session : s)),
@@ -555,6 +654,16 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 		return () => clearInterval(timer);
 	}, []);
 
+	useEffect(() => {
+		return () => {
+			for (const image of draftImagesRef.current) {
+				URL.revokeObjectURL(image.url);
+			}
+
+			revokeUserMessagePreviews(streamRef.current);
+		};
+	}, []);
+
 	function handleScroll() {
 		const el = scrollRef.current;
 		if (!el) return;
@@ -589,7 +698,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 		}
 		const text = prompt;
 		const images = draftImages;
-		const attachmentNames = images.map((image) => image.name);
+		const attachmentPreviews = images.map(({ name, url }) => ({ name, url }));
 
 		if (text.trim().length === 0 && images.length === 0) {
 			return;
@@ -597,12 +706,20 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 
 		setPrompt("");
 		setDraftImages([]);
+		if (fileInputRef.current) {
+			fileInputRef.current.value = "";
+		}
 		if (textareaRef.current) textareaRef.current.style.height = "auto";
 
-		setStream((prev) => [...prev, createUserMessage(text, attachmentNames)]);
+		setStream((prev) => [...prev, createUserMessage(text, attachmentPreviews)]);
 
 		try {
-			await sendInput(token, selectedId, text, images);
+			await sendInput(
+				token,
+				selectedId,
+				text,
+				images.map((image) => image.file),
+			);
 		} catch {
 			setPrompt(text);
 			setDraftImages(images);
@@ -630,8 +747,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 		[token],
 	);
 
-	const addDraftImages = useCallback((files: File[]) => {
-		setDraftImages((prev) => [...prev, ...files]);
+	const addDraftImages = useCallback(async (files: File[]) => {
+		const normalizedImages = await Promise.all(files.map(normalizeDraftImage));
+		setDraftImages((prev) => [...prev, ...normalizedImages]);
 	}, []);
 
 	const handleImageSelect = useCallback(
@@ -641,10 +759,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 			);
 
 			if (files.length > 0) {
-				addDraftImages(files);
+				void addDraftImages(files);
 			}
-
-			event.target.value = "";
 		},
 		[addDraftImages],
 	);
@@ -661,7 +777,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 			}
 
 			event.preventDefault();
-			addDraftImages(files);
+			void addDraftImages(files);
 		},
 		[addDraftImages],
 	);
@@ -873,24 +989,35 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 									{draftImages.length > 0 && (
 										<div className="flex flex-wrap gap-2 border-b border-border px-3 py-2">
 											{draftImages.map((image, index) => (
-												<span
-													key={`${image.name}-${image.size}-${index}`}
-													className="inline-flex items-center gap-1.5 rounded border border-border bg-background px-2 py-1 text-[10px] text-foreground/70"
+												<div
+													key={image.url}
+													className="relative overflow-hidden rounded-md border border-border bg-background"
 												>
-													{image.name}
+													<img
+														src={image.url}
+														alt={image.name}
+														className="h-20 w-20 object-cover"
+													/>
 													<button
 														type="button"
 														onClick={() =>
-															setDraftImages((prev) =>
-																prev.filter((_, itemIndex) => itemIndex !== index),
-															)
+															setDraftImages((prev) => {
+																const nextImages = [...prev];
+																const [removedImage] = nextImages.splice(index, 1);
+
+																if (removedImage) {
+																	URL.revokeObjectURL(removedImage.url);
+																}
+
+																return nextImages;
+															})
 														}
-														className="text-muted-foreground transition hover:text-foreground"
+														className="absolute top-1 right-1 flex size-5 items-center justify-center rounded-full bg-background/90 text-foreground/60 shadow-sm transition hover:text-foreground"
 														aria-label={`Remove ${image.name}`}
 													>
 														<X className="size-3" />
 													</button>
-												</span>
+												</div>
 											))}
 										</div>
 									)}
