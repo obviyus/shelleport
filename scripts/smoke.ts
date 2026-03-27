@@ -7,6 +7,7 @@ const port = 41000 + Math.floor(Math.random() * 1000);
 const binaryPath = join(process.cwd(), "dist", "shelleport");
 const dataDir = await mkdtemp(join(tmpdir(), "shelleport-smoke-"));
 const adminToken = "smoke-token";
+const claudeBin = "true";
 
 async function waitFor(url: string) {
 	const deadline = Date.now() + 15_000;
@@ -52,6 +53,7 @@ async function assertPage(pathname: string, status: number, text: string, cookie
 
 await Bun.$`bun run compile`;
 Bun.env.SHELLEPORT_DATA_DIR = dataDir;
+Bun.env.SHELLEPORT_CLAUDE_BIN = claudeBin;
 (await import("~/server/auth.server")).setAdminToken(adminToken);
 
 const child = Bun.spawn([binaryPath, "serve"], {
@@ -60,6 +62,7 @@ const child = Bun.spawn([binaryPath, "serve"], {
 		HOST: host,
 		PORT: String(port),
 		SHELLEPORT_DATA_DIR: dataDir,
+		SHELLEPORT_CLAUDE_BIN: claudeBin,
 	},
 	stderr: "pipe",
 	stdout: "pipe",
