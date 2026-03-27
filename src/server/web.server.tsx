@@ -1,9 +1,12 @@
 import { renderToReadableStream } from "react-dom/server";
-import type { ClientAsset, ClientAssets } from "~/server/client-assets.server";
 import { App } from "~/client/app";
 import type { AppBootData } from "~/client/boot";
 import { StaticRouterProvider } from "~/client/router";
-import { matchAppRoute } from "~/client/routes";
+import { isAppShellRoute, matchAppRoute } from "~/client/routes";
+import { clearAuthCookie, isAuthenticated } from "~/server/auth.server";
+import type { ClientAsset, ClientAssets } from "~/server/client-assets.server";
+import { listProviders } from "~/server/providers/registry.server";
+import { sessionBroker } from "~/server/session-broker.server";
 
 type WebServerOptions = {
 	clientAssets: ClientAssets;
@@ -22,24 +25,14 @@ function serializeBootData(boot: AppBootData) {
 	return JSON.stringify(boot).replaceAll("<", "\\u003c");
 }
 
-function LogoutPage() {
-	return (
-		<html lang="en" className="dark">
-			<head>
-				<meta charSet="utf-8" />
-				<meta name="viewport" content="width=device-width, initial-scale=1" />
-				<title>shelleport</title>
-			</head>
-			<body className="bg-background text-foreground">
-				<script
-					dangerouslySetInnerHTML={{
-						__html:
-							'localStorage.removeItem("shelleport_token");window.location.replace("/login");',
-					}}
-				/>
-			</body>
-		</html>
-	);
+function redirect(location: string, headers?: HeadersInit) {
+	const responseHeaders = new Headers(headers);
+	responseHeaders.set("Location", location);
+
+	return new Response(null, {
+		status: 302,
+		headers: responseHeaders,
+	});
 }
 
 function Document({ boot, clientAssets }: { boot: AppBootData; clientAssets: ClientAssets }) {
@@ -56,7 +49,7 @@ function Document({ boot, clientAssets }: { boot: AppBootData; clientAssets: Cli
 			<body>
 				<div id="root">
 					<StaticRouterProvider route={boot.route}>
-						<App defaultCwd={boot.defaultCwd} />
+						<App boot={boot} />
 					</StaticRouterProvider>
 				</div>
 				<script
@@ -91,14 +84,45 @@ export async function handleWebRequest(request: Request, options: WebServerOptio
 	}
 
 	if (url.pathname === "/logout") {
-		return renderHtmlResponse(<LogoutPage />, 200);
+		return redirect("/login", {
+			"Set-Cookie": clearAuthCookie(),
+		});
 	}
 
-	const route = matchAppRoute(url.pathname);
-	const boot = {
-		defaultCwd: options.defaultCwd,
-		route,
-	} satisfies AppBootData;
+	let route = matchAppRoute(url.pathname);
+	const authenticated = isAuthenticated(request);
+	let sessionDetail = route.kind === "session" ? sessionBroker.getSessionDetail(route.params.sessionId) : null;
+
+	if (route.kind === "login" && authenticated) {
+		return redirect("/");
+	}
+
+	if (isAppShellRoute(route) && !authenticated) {
+		return redirect("/login");
+	}
+
+	if (authenticated && route.kind === "session" && !sessionDetail) {
+		route = {
+			kind: "not-found",
+			pathname: route.pathname,
+			params: {},
+		};
+	}
+
+	const boot = authenticated
+		? ({
+				authenticated: true,
+				defaultCwd: options.defaultCwd,
+				providers: listProviders(),
+				route,
+				sessionDetail: route.kind === "session" ? sessionDetail : null,
+				sessions: sessionBroker.listSessions(),
+			} satisfies AppBootData)
+		: ({
+				authenticated: false,
+				defaultCwd: options.defaultCwd,
+				route,
+			} satisfies AppBootData);
 
 	return renderHtmlResponse(
 		<Document boot={boot} clientAssets={options.clientAssets} />,

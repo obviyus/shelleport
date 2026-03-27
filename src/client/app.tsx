@@ -1,9 +1,10 @@
 import { AppShell } from "~/client/app-shell";
+import type { AppBootData } from "~/client/boot";
 import { LoginPage } from "~/client/login-page";
 import { NotFoundPage } from "~/client/not-found-page";
 import { useCurrentRoute } from "~/client/router";
 
-export function App({ defaultCwd }: { defaultCwd: string }) {
+export function App({ boot }: { boot: AppBootData }) {
 	const route = useCurrentRoute();
 
 	if (route.kind === "login") {
@@ -14,5 +15,9 @@ export function App({ defaultCwd }: { defaultCwd: string }) {
 		return <NotFoundPage />;
 	}
 
-	return <AppShell defaultCwd={defaultCwd} />;
+	if (!boot.authenticated) {
+		return <LoginPage />;
+	}
+
+	return <AppShell boot={boot} />;
 }

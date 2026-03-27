@@ -27,8 +27,14 @@ async function waitFor(url: string) {
 	throw new Error(`Timed out waiting for ${url}`);
 }
 
-async function assertPage(pathname: string, status: number, text: string) {
-	const response = await fetch(`http://${host}:${port}${pathname}`);
+async function assertPage(pathname: string, status: number, text: string, cookie?: string) {
+	const response = await fetch(`http://${host}:${port}${pathname}`, cookie
+		? {
+				headers: {
+					Cookie: cookie,
+				},
+			}
+		: undefined);
 	const body = await response.text();
 
 	if (response.status !== status) {
@@ -59,8 +65,46 @@ const child = Bun.spawn([binaryPath, "serve"], {
 try {
 	await waitFor(`http://${host}:${port}/health`);
 	await assertPage("/login", 200, "Paste admin token");
-	await assertPage("/", 200, "window.__SHELLEPORT_BOOT__");
-	await assertPage("/sessions/test", 200, '"sessionId":"test"');
+	const loginResponse = await fetch(`http://${host}:${port}/api/auth/session`, {
+		body: JSON.stringify({ token: "smoke-token" }),
+		headers: {
+			"Content-Type": "application/json",
+		},
+		method: "POST",
+	});
+
+	if (loginResponse.status !== 200) {
+		throw new Error(`Unexpected login status: ${loginResponse.status}`);
+	}
+
+	const setCookie = loginResponse.headers.get("Set-Cookie");
+
+	if (!setCookie) {
+		throw new Error("Missing auth cookie");
+	}
+
+	const cookie = setCookie.split(";")[0];
+	const createResponse = await fetch(`http://${host}:${port}/api/sessions`, {
+		body: JSON.stringify({
+			cwd: process.cwd(),
+			provider: "claude",
+			title: "Smoke session",
+		}),
+		headers: {
+			"Content-Type": "application/json",
+			Cookie: cookie,
+		},
+		method: "POST",
+	});
+
+	if (createResponse.status !== 201) {
+		throw new Error(`Unexpected create-session status: ${createResponse.status}`);
+	}
+
+	const session = (await createResponse.json()) as { session: { id: string } };
+
+	await assertPage("/", 200, "window.__SHELLEPORT_BOOT__", cookie);
+	await assertPage(`/sessions/${session.session.id}`, 200, `"sessionId":"${session.session.id}"`, cookie);
 	await assertPage("/assets/client.js", 200, "hydrateRoot");
 } finally {
 	child.kill();
