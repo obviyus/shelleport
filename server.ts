@@ -3,7 +3,12 @@ import { fileURLToPath } from "node:url";
 import devAppShell from "~/client/index.html";
 import { config, ensureDataDir, getClaudeBin } from "~/server/config.server";
 import { handleApiRequest } from "~/server/api.server";
-import { clearAuthCookie } from "~/server/auth.server";
+import {
+	clearAuthCookie,
+	ensureAuthSetup,
+	getAuthStatus,
+	rotateAdminToken,
+} from "~/server/auth.server";
 
 const serverFilePath = fileURLToPath(import.meta.url);
 const usingBunRuntime =
@@ -52,6 +57,7 @@ function getContentType(pathname: string) {
 
 async function runDoctor() {
 	await ensureDataDir();
+	const authStatus = getAuthStatus();
 
 	const checks = [
 		{
@@ -85,7 +91,7 @@ async function runDoctor() {
 	console.log(`port: ${config.defaultPort}`);
 	console.log(`data_dir: ${config.dataDir}`);
 	console.log(
-		`admin_token: ${config.adminToken === "dev-token" ? "dev-token (change me)" : "configured"}`,
+		`admin_token: ${authStatus.configuredByEnv ? "env-configured" : authStatus.hasStoredTokenHash ? "stored-hash" : "uninitialized"}`,
 	);
 }
 
@@ -154,6 +160,15 @@ WantedBy=default.target
 	console.log(`Wrote ${servicePath}`);
 	console.log("Run: systemctl --user daemon-reload");
 	console.log("Run: systemctl --user enable --now shelleport.service");
+}
+
+async function runToken() {
+	await ensureDataDir();
+	const token = rotateAdminToken();
+	console.log("Save this admin token now. It will not be shown again.");
+	console.log(token);
+	console.log("");
+	console.log("Existing sessions were signed out.");
 }
 
 export async function createServerFetchHandler(
@@ -227,6 +242,7 @@ export async function createServerFetchHandler(
 
 export async function runServe() {
 	await ensureDataDir();
+	const authSetup = ensureAuthSetup();
 	const productionAssets = await getProductionShellPath();
 	const fetch = await createServerFetchHandler(
 		productionAssets?.clientAssetPaths ?? null,
@@ -238,6 +254,12 @@ export async function runServe() {
 			: config.defaultHost;
 
 	console.log(`Server starting on http://${browserHost}:${config.defaultPort}`);
+	if (authSetup.generatedToken) {
+		console.log("");
+		console.log("Save this admin token now. It will not be shown again.");
+		console.log(authSetup.generatedToken);
+		console.log("");
+	}
 
 	Bun.serve({
 		development: isDevelopment
@@ -269,6 +291,8 @@ if (import.meta.main) {
 
 	if (command === "doctor") {
 		await runDoctor();
+	} else if (command === "token") {
+		await runToken();
 	} else if (command === "install-service") {
 		await runInstallService();
 	} else {

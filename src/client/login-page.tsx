@@ -42,7 +42,7 @@ export function LoginPage() {
 			await login(token);
 			window.location.replace("/");
 		} catch {
-			setError("Invalid token. Check your SHELLEPORT_ADMIN_TOKEN.");
+			setError("Invalid token.");
 			setLoading(false);
 		}
 	}

@@ -11,9 +11,6 @@ export const config = {
 	get defaultHost() {
 		return Bun.env.HOST ?? "127.0.0.1";
 	},
-	get adminToken() {
-		return Bun.env.SHELLEPORT_ADMIN_TOKEN ?? "dev-token";
-	},
 	get dataDir() {
 		return Bun.env.SHELLEPORT_DATA_DIR ?? join(xdgDataHome, "shelleport");
 	},
