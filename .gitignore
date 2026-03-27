@@ -4,8 +4,6 @@
 /dist/
 /.shelleport-delete-test
 
-# React Router
-/.react-router/
 /build/
 
 # Project

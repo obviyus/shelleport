@@ -9,7 +9,7 @@
 		"jsx": "react-jsx",
 		"rootDirs": ["."],
 		"paths": {
-			"~/*": ["./app/*"]
+			"~/*": ["./src/*"]
 		},
 		"esModuleInterop": true,
 		"verbatimModuleSyntax": true,

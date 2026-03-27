@@ -9,7 +9,7 @@ async function buildStyles() {
 			"--bun",
 			"@tailwindcss/cli",
 			"-i",
-			"./app/app.css",
+			"./src/client/styles.css",
 			"-o",
 			join(outdir, "client.css"),
 			"--minify",
@@ -27,7 +27,7 @@ async function buildStyles() {
 
 async function buildClient() {
 	const result = await Bun.build({
-		entrypoints: ["./app/client.tsx"],
+		entrypoints: ["./src/client/client.tsx"],
 		minify: true,
 		naming: {
 			asset: "[name].[ext]",

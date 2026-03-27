@@ -32,10 +32,10 @@
 		"release:build": "bun run ./scripts/package.ts release",
 		"format": "oxfmt --check .",
 		"format:write": "oxfmt --write .",
-		"lint": "oxlint --type-aware app server.ts scripts bin",
-		"lint:fix": "oxlint --type-aware app server.ts scripts bin --fix",
+		"lint": "oxlint --type-aware src server.ts scripts bin",
+		"lint:fix": "oxlint --type-aware src server.ts scripts bin --fix",
 		"smoke": "bun run ./scripts/smoke.ts",
-		"test:claude": "bun test ./app/server/api.claude.integration.ts --timeout 120000",
+		"test:claude": "bun test ./src/server/api.claude.integration.ts --timeout 120000",
 		"typecheck": "bunx tsgo --noEmit -p tsconfig.json",
 		"test": "bun test"
 	},
