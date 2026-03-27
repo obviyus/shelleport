@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.7 - 2026-03-27
+
+- fix release binaries to serve the same Bun browser-build assets as dev, including Tailwind CSS
+- add runtime install progress and clickable startup URL output
+- harden auth with one-time generated admin token, hash-only storage, separate session cookie, and `shelleport token`
+- remove the `SHELLEPORT_ADMIN_TOKEN` env path; single auth model only
+
 ## 0.0.6 - 2026-03-27
 
 - restore `sessionBroker` methods in `web.server` tests so file order in CI no longer poisons API tests
