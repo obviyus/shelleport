@@ -3,6 +3,15 @@ import { readdir } from "node:fs/promises";
 const browserOutdir = "./src/client/.generated";
 const serverOutdir = "./build/server";
 
+async function rewriteBrowserShell(fileName: string) {
+	const shellPath = `${browserOutdir}/${fileName}`;
+	const shellHtml = await Bun.file(shellPath).text();
+	await Bun.write(
+		shellPath,
+		shellHtml.replaceAll('href="./', 'href="/').replaceAll('src="./', 'src="/'),
+	);
+}
+
 async function writeBrowserManifest() {
 	const entries = await readdir(browserOutdir, { withFileTypes: true });
 	const files = entries
@@ -20,6 +29,7 @@ async function writeBrowserManifest() {
 		);
 		if (fileName.endsWith(".html")) {
 			shellImportName = importName;
+			await rewriteBrowserShell(fileName);
 			continue;
 		}
 
