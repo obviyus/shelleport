@@ -91,3 +91,15 @@ Providers yield events; the broker consumes them. To add a new provider, impleme
 - **motion v12**: Use for animations and transitions.
 - **Routing**: No React Router. No route-module files. No framework loaders/actions.
 - **Auth**: No cookie sessions. No dual auth path. Bearer only.
+
+## Bun bundler guardrails
+
+- Bun owns browser assets. Do not reintroduce manual asset manifests, manual hashed filenames, or custom `/assets/client.js` serving.
+- HTML entry owns browser assets. Keep stylesheet/script tags in `src/client/index.html`; do not move CSS ownership back into ad hoc server wiring.
+- Tailwind requires Bun plugin wiring. Keep `[serve.static].plugins = ["bun-plugin-tailwind"]` in `bunfig.toml`. If CSS looks half-uncompiled, check this first.
+- Dev path: `bun --hot server.ts serve` + `Bun.serve({ development: { hmr: true, console: true } })`. Do not build custom client watchers.
+- Prod path: build first, then run built output from `build/server`. Do not run source directly for production.
+- Packaging path: use `Bun.build({ compile: ... })` from `server.ts`. Let Bun embed HTML-imported frontend automatically.
+- If using Bun HTML imports, prefer app routes + API endpoints through `Bun.serve` routes/fetch. Avoid parallel legacy serving paths.
+- If changing build config, keep production explicit: `NODE_ENV=production`, minified build, Bun fullstack bundle.
+- If changing client boot data, remember Bun HMR updates frontend modules, but already-mounted pages will not magically re-fetch `/api/bootstrap`. Refresh when validating server-only boot changes.
