@@ -1,6 +1,6 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import appShell from "~/client/index.html";
+import devAppShell from "~/client/index.html";
 import { config, ensureDataDir, getClaudeBin } from "~/server/config.server";
 import { handleApiRequest } from "~/server/api.server";
 import { clearAuthCookie } from "~/server/auth.server";
@@ -12,6 +12,42 @@ const isDevelopment = usingBunRuntime && Bun.env.NODE_ENV !== "production";
 
 function getCliCommand() {
 	return usingBunRuntime ? ["bun", "run", serverFilePath] : [process.execPath];
+}
+
+async function getProductionShellPath() {
+	if (isDevelopment) {
+		return null;
+	}
+
+	return import("./src/server/client-assets.generated.js");
+}
+
+function getContentType(pathname: string) {
+	if (pathname.endsWith(".css")) {
+		return "text/css; charset=utf-8";
+	}
+
+	if (pathname.endsWith(".js")) {
+		return "text/javascript; charset=utf-8";
+	}
+
+	if (pathname.endsWith(".html")) {
+		return "text/html; charset=utf-8";
+	}
+
+	if (pathname.endsWith(".woff2")) {
+		return "font/woff2";
+	}
+
+	if (pathname.endsWith(".svg")) {
+		return "image/svg+xml";
+	}
+
+	if (pathname.endsWith(".png")) {
+		return "image/png";
+	}
+
+	return "application/octet-stream";
 }
 
 async function runDoctor() {
@@ -120,11 +156,23 @@ WantedBy=default.target
 	console.log("Run: systemctl --user enable --now shelleport.service");
 }
 
-export async function createServerFetchHandler() {
+export async function createServerFetchHandler(
+	clientAssets: Record<string, string> | null = null,
+	shellPath: string | null = null,
+) {
 	return async function fetch(request: Request) {
 		const url = new URL(request.url);
 
 		try {
+			const clientAssetPath = clientAssets?.[url.pathname];
+			if (clientAssetPath) {
+				return new Response(Bun.file(clientAssetPath), {
+					headers: {
+						"Content-Type": getContentType(url.pathname),
+					},
+				});
+			}
+
 			if (url.pathname.startsWith("/api/")) {
 				return await handleApiRequest(request);
 			}
@@ -142,6 +190,20 @@ export async function createServerFetchHandler() {
 					headers: {
 						Location: "/login",
 						"Set-Cookie": clearAuthCookie(),
+					},
+				});
+			}
+
+			if (
+				shellPath &&
+				(url.pathname === "/" ||
+					url.pathname === "/archived" ||
+					url.pathname === "/login" ||
+					url.pathname.startsWith("/sessions/"))
+			) {
+				return new Response(Bun.file(shellPath), {
+					headers: {
+						"Content-Type": "text/html; charset=utf-8",
 					},
 				});
 			}
@@ -165,7 +227,11 @@ export async function createServerFetchHandler() {
 
 export async function runServe() {
 	await ensureDataDir();
-	const fetch = await createServerFetchHandler();
+	const productionAssets = await getProductionShellPath();
+	const fetch = await createServerFetchHandler(
+		productionAssets?.clientAssetPaths ?? null,
+		productionAssets?.clientShellPath ?? null,
+	);
 	const browserHost =
 		config.defaultHost === "0.0.0.0" || config.defaultHost === "::"
 			? "localhost"
@@ -183,12 +249,14 @@ export async function runServe() {
 		fetch,
 		hostname: config.defaultHost,
 		port: config.defaultPort,
-		routes: {
-			"/": appShell,
-			"/archived": appShell,
-			"/login": appShell,
-			"/sessions/:sessionId": appShell,
-		},
+		routes: isDevelopment
+			? {
+					"/": devAppShell,
+					"/archived": devAppShell,
+					"/login": devAppShell,
+					"/sessions/:sessionId": devAppShell,
+				}
+			: undefined,
 		error(error) {
 			console.error("Server error:", error);
 			return new Response("Server Error", { status: 500 });
