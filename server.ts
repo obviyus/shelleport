@@ -1,17 +1,44 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { type ClientAssets } from "~/server/client-assets.server";
 import { config, ensureDataDir, getClaudeBin } from "~/server/config.server";
 import { handleApiRequest } from "~/server/api.server";
+import { handleWebRequest } from "~/server/web.server";
+
+const serverFilePath = fileURLToPath(import.meta.url);
+const usingBunRuntime =
+	process.execPath.endsWith("/bun") || process.execPath.endsWith("/bun-debug");
 
 function getCliCommand() {
-	const executablePath = process.execPath;
-	const serverFilePath = fileURLToPath(import.meta.url);
+	return usingBunRuntime ? ["bun", "run", serverFilePath] : [process.execPath];
+}
 
-	if (executablePath.endsWith("/bun") || executablePath.endsWith("/bun-debug")) {
-		return ["bun", "run", serverFilePath];
+async function getDiskClientAssets(): Promise<ClientAssets> {
+	const assetDir = join(process.cwd(), "build", "client");
+	const clientAssets = {
+		entryScriptPath: "/assets/client.js",
+		files: [
+			{
+				cacheControl: "public, max-age=31536000, immutable",
+				publicPath: "/assets/client.css",
+				sourcePath: join(assetDir, "client.css"),
+			},
+			{
+				cacheControl: "public, max-age=31536000, immutable",
+				publicPath: "/assets/client.js",
+				sourcePath: join(assetDir, "client.js"),
+			},
+		],
+		stylePaths: ["/assets/client.css"],
+	} satisfies ClientAssets;
+
+	for (const asset of clientAssets.files) {
+		if (!(await Bun.file(asset.sourcePath).exists())) {
+			throw new Error(`Missing client asset: ${asset.sourcePath}. Run \`bun run build\`.`);
+		}
 	}
 
-	return [executablePath];
+	return clientAssets;
 }
 
 async function runDoctor() {
@@ -48,13 +75,17 @@ async function runDoctor() {
 	console.log(`host: ${config.defaultHost}`);
 	console.log(`port: ${config.defaultPort}`);
 	console.log(`data_dir: ${config.dataDir}`);
-	console.log(`admin_token: ${config.adminToken === "dev-token" ? "dev-token (change me)" : "configured"}`);
+	console.log(
+		`admin_token: ${config.adminToken === "dev-token" ? "dev-token (change me)" : "configured"}`,
+	);
 }
 
 async function runInstallService() {
 	await ensureDataDir();
 	const command = [...getCliCommand(), "serve"];
-	const workingDirectory = dirname(fileURLToPath(import.meta.url));
+	const workingDirectory = usingBunRuntime
+		? dirname(fileURLToPath(import.meta.url))
+		: dirname(process.execPath);
 
 	if (process.platform === "darwin") {
 		const launchAgentsDir = join(Bun.env.HOME ?? workingDirectory, "Library", "LaunchAgents");
@@ -116,45 +147,54 @@ WantedBy=default.target
 	console.log("Run: systemctl --user enable --now shelleport.service");
 }
 
-async function runServe() {
-	await ensureDataDir();
-	const port = config.defaultPort;
+export async function createServerFetchHandler(clientAssetsOverride?: ClientAssets) {
+	const clientAssets = clientAssetsOverride ?? (await getDiskClientAssets());
 
-	console.log(`Server starting on ${config.defaultHost}:${port}`);
+	return async function fetch(request: Request) {
+		const url = new URL(request.url);
+
+		try {
+			if (url.pathname.startsWith("/api/")) {
+				return await handleApiRequest(request);
+			}
+
+			if (url.pathname === "/health") {
+				return Response.json({
+					name: config.appName,
+					status: "ok",
+				});
+			}
+
+			return await handleWebRequest(request, {
+				clientAssets,
+				defaultCwd: process.cwd(),
+			});
+		} catch (error) {
+			if (error instanceof Response) {
+				return error;
+			}
+
+			console.error("Error processing request:", error);
+			return Response.json(
+				{
+					error: error instanceof Error ? error.message : "Internal Server Error",
+				},
+				{ status: 500 },
+			);
+		}
+	};
+}
+
+export async function runServe(clientAssetsOverride?: ClientAssets) {
+	await ensureDataDir();
+	const fetch = await createServerFetchHandler(clientAssetsOverride);
+
+	console.log(`Server starting on ${config.defaultHost}:${config.defaultPort}`);
 
 	Bun.serve({
+		fetch,
 		hostname: config.defaultHost,
-		port,
-		async fetch(request: Request) {
-			const url = new URL(request.url);
-
-			try {
-				if (url.pathname.startsWith("/api/")) {
-					return await handleApiRequest(request);
-				}
-
-				if (url.pathname === "/" || url.pathname === "/health") {
-					return Response.json({
-						name: config.appName,
-						status: "ok",
-					});
-				}
-
-				return new Response("Not found", { status: 404 });
-			} catch (error) {
-				if (error instanceof Response) {
-					return error;
-				}
-
-				console.error("Error processing request:", error);
-				return Response.json(
-					{
-						error: error instanceof Error ? error.message : "Internal Server Error",
-					},
-					{ status: 500 },
-				);
-			}
-		},
+		port: config.defaultPort,
 		error(error) {
 			console.error("Server error:", error);
 			return new Response("Server Error", { status: 500 });
@@ -162,12 +202,14 @@ async function runServe() {
 	});
 }
 
-const command = Bun.argv[2] ?? "serve";
+if (import.meta.main) {
+	const command = Bun.argv[2] ?? "serve";
 
-if (command === "doctor") {
-	await runDoctor();
-} else if (command === "install-service") {
-	await runInstallService();
-} else {
-	await runServe();
+	if (command === "doctor") {
+		await runDoctor();
+	} else if (command === "install-service") {
+		await runInstallService();
+	} else {
+		await runServe();
+	}
 }

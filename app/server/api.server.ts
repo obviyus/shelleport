@@ -296,7 +296,7 @@ async function listDirectory(path: string): Promise<DirectoryListing> {
 }
 
 async function dispatchApiRequest(request: Request) {
-	await requireApiAuth(request);
+	requireApiAuth(request);
 
 	const url = new URL(request.url);
 	const segments = url.pathname.split("/").filter(Boolean);

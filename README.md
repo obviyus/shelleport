@@ -2,7 +2,7 @@
 
 **A web UI for your coding agents, anywhere.**
 
-Start, monitor, and interact with AI coding sessions on any machine. All from your browser, all from a single binary.
+Start, monitor, and interact with AI coding sessions on any machine. All from your browser.
 
 ## Getting Started
 
@@ -12,10 +12,17 @@ Start, monitor, and interact with AI coding sessions on any machine. All from yo
 
 ### Install & Run
 
-Download the latest binary from [Releases](https://github.com/obviyus/shelleport/releases) and run:
+Install with npm:
 
 ```bash
-./shelleport serve
+npm i -g shelleport
+shelleport serve
+```
+
+Or download the latest binary from [Releases](https://github.com/obviyus/shelleport/releases) and run:
+
+```bash
+./shelleport-v0.1.0-darwin-arm64 serve
 ```
 
 ### Install as a Service
@@ -23,7 +30,7 @@ Download the latest binary from [Releases](https://github.com/obviyus/shelleport
 Shelleport can install itself as a background service that starts automatically:
 
 ```bash
-./shelleport install-service
+./shelleport-v0.1.0-darwin-arm64 install-service
 ```
 
 This writes a service definition for your platform (launchd on macOS, systemd on Linux) and prints the command to activate it.
@@ -31,7 +38,7 @@ This writes a service definition for your platform (launchd on macOS, systemd on
 ### Health Check
 
 ```bash
-./shelleport doctor
+./shelleport-v0.1.0-darwin-arm64 doctor
 ```
 
 Verifies your data directory, CLI availability, host/port config, and token status.
@@ -46,7 +53,7 @@ Verifies your data directory, CLI availability, host/port config, and token stat
 - [x] Session archive, restore, interrupt, and terminate
 - [x] Historical session import from `~/.claude/projects`
 - [x] Rate limit detection with live retry countdown
-- [x] Single binary compilation via `bun build --compile`
+- [x] Native single-file per-platform binaries built with `bun build --compile`
 - [x] Background service install (launchd / systemd)
 - [ ] Codex live sessions and historical import
 - [ ] Skills support
@@ -55,10 +62,10 @@ Verifies your data directory, CLI availability, host/port config, and token stat
 
 ## Supported Agents
 
-| Agent | Live Sessions | Historical Import |
-|:------|:-------------:|:-----------------:|
-| **Claude Code** | Yes | Yes |
-| **Codex** | Planned | Planned |
+| Agent           | Live Sessions | Historical Import |
+| :-------------- | :-----------: | :---------------: |
+| **Claude Code** |      Yes      |        Yes        |
+| **Codex**       |    Planned    |      Planned      |
 
 The provider system is extensible — add new agents by implementing the `ProviderAdapter` interface.
 
@@ -66,11 +73,11 @@ The provider system is extensible — add new agents by implementing the `Provid
 
 ### Environment Variables
 
-| Variable | Default | Description |
-|:---------|:--------|:------------|
+| Variable                 | Default     | Description                                |
+| :----------------------- | :---------- | :----------------------------------------- |
 | `SHELLEPORT_ADMIN_TOKEN` | `dev-token` | Bearer token for API and UI authentication |
-| `HOST` | `127.0.0.1` | Bind address |
-| `PORT` | `3000` | Bind port |
+| `HOST`                   | `127.0.0.1` | Bind address                               |
+| `PORT`                   | `3000`      | Bind port                                  |
 
 ### Data Storage
 
@@ -111,10 +118,13 @@ All endpoints require `Authorization: Bearer <token>`.
 ## Development
 
 ```bash
-bun run dev          # Start dev server with HMR
+bun run dev          # Rebuild and restart the Bun server on code changes
+bun run build        # Build browser assets
+bun run compile      # Build the local standalone binary
 bun run typecheck    # Type-check with tsgo
 bun run lint         # Lint with oxlint
 bun run format       # Check formatting with oxfmt
 bun run test         # Run tests
+bun run smoke        # Verify the compiled binary works without build/
 bun run test:claude  # Run Claude integration tests
 ```

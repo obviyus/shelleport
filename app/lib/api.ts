@@ -30,11 +30,23 @@ function headers(token: string, json = false): HeadersInit {
 	return h;
 }
 
+function mergeHeaders(token: string, json: boolean, initHeaders?: HeadersInit) {
+	const merged = new Headers(headers(token, json));
+
+	if (initHeaders) {
+		for (const [key, value] of new Headers(initHeaders).entries()) {
+			merged.set(key, value);
+		}
+	}
+
+	return merged;
+}
+
 async function request<T>(path: string, token: string, init?: RequestInit): Promise<T> {
 	const isJsonBody = init?.body !== undefined && !(init.body instanceof FormData);
 	const res = await fetch(path, {
 		...init,
-		headers: { ...headers(token, isJsonBody), ...init?.headers },
+		headers: mergeHeaders(token, isJsonBody, init?.headers),
 	});
 
 	if (res.status === 401) {
