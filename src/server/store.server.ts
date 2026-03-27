@@ -79,6 +79,7 @@ database.exec(`
 		status TEXT,
 		resets_at INTEGER,
 		is_using_overage INTEGER,
+		utilization REAL,
 		update_time INTEGER NOT NULL,
 		PRIMARY KEY (provider, window)
 	);
@@ -139,6 +140,11 @@ ensureColumn(
 	"block_reason",
 	"ALTER TABLE pending_requests ADD COLUMN block_reason TEXT",
 );
+ensureColumn(
+	"app_provider_limits",
+	"utilization",
+	"ALTER TABLE app_provider_limits ADD COLUMN utilization REAL",
+);
 
 type SqlSessionRow = {
 	id: string;
@@ -197,6 +203,7 @@ type SqlProviderLimitRow = {
 	status: string | null;
 	resets_at: number | null;
 	is_using_overage: number | null;
+	utilization: number | null;
 	update_time: number;
 };
 
@@ -366,14 +373,19 @@ const listProviderLimitsStatement = database.query<SqlProviderLimitRow, [string]
 	"SELECT * FROM app_provider_limits WHERE provider = ? ORDER BY update_time DESC",
 );
 
+const getProviderLimitStatement = database.query<SqlProviderLimitRow, [string, string]>(
+	"SELECT * FROM app_provider_limits WHERE provider = ? AND window = ? LIMIT 1",
+);
+
 const upsertProviderLimitStatement = database.query(
 	`INSERT INTO app_provider_limits (
-		provider, window, status, resets_at, is_using_overage, update_time
-	) VALUES (?, ?, ?, ?, ?, ?)
+		provider, window, status, resets_at, is_using_overage, utilization, update_time
+	) VALUES (?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(provider, window) DO UPDATE SET
 		status = excluded.status,
 		resets_at = excluded.resets_at,
 		is_using_overage = excluded.is_using_overage,
+		utilization = excluded.utilization,
 		update_time = excluded.update_time`,
 );
 
@@ -397,6 +409,7 @@ function mapProviderLimit(row: SqlProviderLimitRow): SessionLimit {
 		resetsAt: row.resets_at,
 		window: row.window,
 		isUsingOverage: row.is_using_overage === null ? null : row.is_using_overage === 1,
+		utilization: row.utilization,
 	};
 }
 
@@ -536,12 +549,18 @@ export const sessionStore = {
 			return;
 		}
 
+		const current = getProviderLimitStatement.get(provider, limit.window);
 		upsertProviderLimitStatement.run(
 			provider,
 			limit.window,
-			limit.status,
-			limit.resetsAt,
-			limit.isUsingOverage === null ? null : limit.isUsingOverage ? 1 : 0,
+			limit.status ?? current?.status ?? null,
+			limit.resetsAt ?? current?.resets_at ?? null,
+			limit.isUsingOverage === null
+				? (current?.is_using_overage ?? null)
+				: limit.isUsingOverage
+					? 1
+					: 0,
+			limit.utilization ?? current?.utilization ?? null,
 			createTimestamp(),
 		);
 	},

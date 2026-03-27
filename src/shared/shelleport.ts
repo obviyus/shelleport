@@ -83,6 +83,7 @@ export type SessionLimit = {
 	resetsAt: number | null;
 	window: string | null;
 	isUsingOverage: boolean | null;
+	utilization: number | null;
 };
 
 export type ProviderLimitState = {
