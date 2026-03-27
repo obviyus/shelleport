@@ -261,7 +261,11 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		}
 
 		try {
-			await sendInput(selectedId, nextPrompt, nextImages.map((image) => image.file));
+			await sendInput(
+				selectedId,
+				nextPrompt,
+				nextImages.map((image) => image.file),
+			);
 		} catch {
 			setPrompt(nextPrompt);
 			setDraftImages(nextImages);
@@ -307,16 +311,13 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		[isArchivedView, navigate, selectedId],
 	);
 
-	const handleRespond = useCallback(
-		async (requestId: string, payload: RequestResponsePayload) => {
-			try {
-				await respondToRequest(requestId, payload);
-			} catch (error) {
-				console.error("Failed to respond:", error);
-			}
-		},
-		[],
-	);
+	const handleRespond = useCallback(async (requestId: string, payload: RequestResponsePayload) => {
+		try {
+			await respondToRequest(requestId, payload);
+		} catch (error) {
+			console.error("Failed to respond:", error);
+		}
+	}, []);
 
 	const addDraftImages = useCallback(async (files: File[]) => {
 		const normalizedImages = await Promise.all(files.map(normalizeDraftImage));
@@ -636,7 +637,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 												group.type === "tool"
 													? group.call.id
 													: group.type === "assistant-text-run"
-														? group.entries[0]?.id ?? "assistant-text-run"
+														? (group.entries[0]?.id ?? "assistant-text-run")
 														: group.entry.id
 											}
 											group={group}

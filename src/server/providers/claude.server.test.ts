@@ -192,7 +192,7 @@ describe("normalizeClaudeEvent", () => {
 					index: 1,
 					delta: {
 						type: "input_json_delta",
-						partial_json: "{\"command\":\"ls\"}",
+						partial_json: '{"command":"ls"}',
 					},
 				},
 			},

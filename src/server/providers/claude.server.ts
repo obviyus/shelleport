@@ -365,7 +365,9 @@ export function normalizeClaudeStreamEvent(
 	}
 
 	const delta =
-		event.delta && typeof event.delta === "object" ? (event.delta as Record<string, unknown>) : null;
+		event.delta && typeof event.delta === "object"
+			? (event.delta as Record<string, unknown>)
+			: null;
 
 	if (!delta) {
 		return [];

@@ -96,10 +96,13 @@ describe("buildAppBootData", () => {
 	});
 
 	test("includes session detail for authenticated session route", () => {
-		const boot = buildAppBootData(request(`/sessions/${sessionId}`, "shelleport_admin=test-token"), {
-			defaultCwd: "/tmp/project",
-			pathname: `/sessions/${sessionId}`,
-		});
+		const boot = buildAppBootData(
+			request(`/sessions/${sessionId}`, "shelleport_admin=test-token"),
+			{
+				defaultCwd: "/tmp/project",
+				pathname: `/sessions/${sessionId}`,
+			},
+		);
 
 		expect(boot.authenticated).toBe(true);
 		expect(boot.route.kind).toBe("session");

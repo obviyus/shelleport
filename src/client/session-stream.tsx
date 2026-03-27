@@ -563,11 +563,7 @@ export function groupStream(entries: HostEvent[]): GroupedEntry[] {
 			while (true) {
 				const nextCall = entries[index + 1];
 
-				if (
-					nextCall?.kind === "tool-call" &&
-					toolUseId &&
-					nextCall.data.toolUseId === toolUseId
-				) {
+				if (nextCall?.kind === "tool-call" && toolUseId && nextCall.data.toolUseId === toolUseId) {
 					index += 1;
 					call = nextCall;
 					continue;
@@ -580,9 +576,7 @@ export function groupStream(entries: HostEvent[]): GroupedEntry[] {
 
 			if (
 				next?.kind === "tool-result" &&
-				(!toolUseId ||
-					typeof next.data.toolUseId !== "string" ||
-					next.data.toolUseId === toolUseId)
+				(!toolUseId || typeof next.data.toolUseId !== "string" || next.data.toolUseId === toolUseId)
 			) {
 				grouped.push({ call, result: next, type: "tool" });
 				index += 1;

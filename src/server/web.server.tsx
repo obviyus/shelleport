@@ -12,7 +12,8 @@ type BootOptions = {
 export function buildAppBootData(request: Request, options: BootOptions): AppBootData {
 	let route = matchAppRoute(options.pathname);
 	const authenticated = isAuthenticated(request);
-	let sessionDetail = route.kind === "session" ? sessionBroker.getSessionDetail(route.params.sessionId) : null;
+	let sessionDetail =
+		route.kind === "session" ? sessionBroker.getSessionDetail(route.params.sessionId) : null;
 
 	if (route.kind === "login" && authenticated) {
 		route = {

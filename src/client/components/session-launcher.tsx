@@ -396,11 +396,7 @@ function DirectoryColumn({
 	);
 }
 
-export function SessionLauncher({
-	defaultPath,
-	isCreating,
-	onCreate,
-}: SessionLauncherProps) {
+export function SessionLauncher({ defaultPath, isCreating, onCreate }: SessionLauncherProps) {
 	const titleInputId = useId();
 	const [title, setTitle] = useState("");
 	const [currentPath, setCurrentPath] = useState(defaultPath);
