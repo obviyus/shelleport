@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.6 - 2026-03-27
+
+- restore `sessionBroker` methods in `web.server` tests so file order in CI no longer poisons API tests
+
 ## 0.0.5 - 2026-03-27
 
 - auto-install the native runtime on first CLI run when the package manager skipped the install hook
