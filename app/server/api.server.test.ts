@@ -532,9 +532,12 @@ describe("handleApiRequest", () => {
 			throw new Error("Missing SSE body");
 		}
 
+		const imageBytes = await Bun.file(
+			join(process.cwd(), "public/assets/architecture_diagram.png"),
+		).arrayBuffer();
 		const formData = new FormData();
 		formData.set("prompt", "Tell me what you received.");
-		formData.append("images", new File(["fake-image"], "diagram.png", { type: "image/png" }));
+		formData.append("images", new File([imageBytes], "diagram.png", { type: "image/jpeg" }));
 
 		const inputResponse = await handleApiRequest(
 			new Request(`http://localhost/api/sessions/${sessionId}/input`, {
@@ -564,7 +567,7 @@ describe("handleApiRequest", () => {
 		expect(text).toContain("Use this image as context:");
 		expect(text).toContain("Tell me what you received.");
 
-		const uploadedPathMatch = text.match(/\/[^\s]+\.png/);
+		const uploadedPathMatch = text.match(/\/[^\s]+\.(jpg|png|gif|webp)/);
 		expect(uploadedPathMatch).not.toBeNull();
 
 		const uploadedPath = uploadedPathMatch?.[0];
@@ -575,6 +578,76 @@ describe("handleApiRequest", () => {
 
 		const uploadedFile = Bun.file(uploadedPath);
 		expect(await uploadedFile.exists()).toBe(true);
+
+		await reader.cancel();
+	});
+
+	test("normalizes uploaded image format from actual bytes", async () => {
+		const createResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "claude",
+					cwd: testRoot,
+					title: "Normalized image",
+				}),
+			}),
+		);
+		expect(createResponse.status).toBe(201);
+		const createJson = await readJson<{ session: { id: string } }>(createResponse);
+		const sessionId = createJson.session.id;
+
+		const eventsResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}/events`, {
+				headers: authHeader,
+			}),
+		);
+		const reader = eventsResponse.body?.getReader();
+
+		if (!reader) {
+			throw new Error("Missing SSE body");
+		}
+
+		const imageBytes = await Bun.file(
+			join(process.cwd(), "public/assets/architecture_diagram.png"),
+		).arrayBuffer();
+		const formData = new FormData();
+		formData.set("prompt", "Normalize this image.");
+		formData.append(
+			"images",
+			new File([imageBytes], "architecture_diagram.png", { type: "image/png" }),
+		);
+
+		const inputResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}/input`, {
+				method: "POST",
+				headers: authHeader,
+				body: formData,
+			}),
+		);
+		expect(inputResponse.status).toBe(202);
+
+		const streamState = { buffer: "" };
+		const textMessage = await waitForMessage(
+			reader,
+			streamState,
+			(message) =>
+				message.type === "event" &&
+				message.payload.kind === "text" &&
+				typeof message.payload.data.text === "string" &&
+				message.payload.data.text.includes(`.shelleport/uploads/${sessionId}/`),
+		);
+		expect(textMessage.type).toBe("event");
+		if (textMessage.type !== "event") {
+			throw new Error("Expected text event");
+		}
+
+		const text = String(textMessage.payload.data.text);
+		expect(text).toContain(".jpg");
 
 		await reader.cancel();
 	});
