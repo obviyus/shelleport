@@ -4,6 +4,18 @@ All notable changes to shelleport are documented here.
 
 ## Unreleased
 
+## 0.0.14 - 2026-03-27
+
+### Changed
+
+- `install-service` now starts the service immediately instead of printing follow-up daemon commands
+- Service installs now default to `0.0.0.0`, while `--tailscale` still binds the machine's Tailscale IPv4
+- Default port is now `1206`
+
+### Fixed
+
+- Added a real `--version` CLI flag and parser coverage for packaged CLI argument handling
+
 ## 0.0.13 - 2026-03-27
 
 ### Fixed
