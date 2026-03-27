@@ -136,15 +136,17 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	);
 	const creatableProviders = useMemo(
 		() =>
-			providers.filter((provider) => provider.capabilities.canCreate && provider.status === "ready"),
+			providers.filter(
+				(provider) => provider.capabilities.canCreate && provider.status === "ready",
+			),
 		[providers],
 	);
 	const createProvider = creatableProviders[0] ?? null;
 	const createDisabledReason =
 		createProvider !== null
 			? null
-			: providers.find((provider) => provider.capabilities.canCreate)?.statusDetail ??
-				"No managed provider is available.";
+			: (providers.find((provider) => provider.capabilities.canCreate)?.statusDetail ??
+				"No managed provider is available.");
 
 	function mergeClaudeLimit(previous: SessionLimit[], next: SessionLimit) {
 		if (!next.window) {
