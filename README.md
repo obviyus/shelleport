@@ -111,6 +111,8 @@ CLI flags:
 - `--public` bind to `0.0.0.0`
 - `--tailscale` bind to the machine's Tailscale IPv4
 - `--port <port>` override the port
+- `-h, --help` show usage
+- `-v, --version` show version
 
 ### Data Storage
 

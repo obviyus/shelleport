@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createServerFetchHandler } from "../../server";
+import { createServerFetchHandler, parseCliOptions } from "../../server";
 
 describe("createServerFetchHandler", () => {
 	test("serves health", async () => {
@@ -21,6 +21,39 @@ describe("createServerFetchHandler", () => {
 		expect(await response.json()).toEqual({
 			code: "unauthorized",
 			error: "Unauthorized",
+		});
+	});
+});
+
+describe("parseCliOptions", () => {
+	test("parses doctor port override", async () => {
+		const options = await parseCliOptions(["doctor", "--port", "3456"]);
+
+		expect(options).toMatchObject({
+			command: "doctor",
+			help: false,
+			port: 3456,
+			version: false,
+		});
+	});
+
+	test("parses help without a command", async () => {
+		const options = await parseCliOptions(["--help"]);
+
+		expect(options).toMatchObject({
+			command: "serve",
+			help: true,
+			version: false,
+		});
+	});
+
+	test("parses version without starting the server", async () => {
+		const options = await parseCliOptions(["--version"]);
+
+		expect(options).toMatchObject({
+			command: "serve",
+			help: false,
+			version: true,
 		});
 	});
 });

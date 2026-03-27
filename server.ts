@@ -2,6 +2,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { config, ensureDataDir, getClaudeBin } from "~/server/config.server";
 import { browserOutdir, buildBrowser, readBrowserBuild } from "./scripts/build";
+import packageJson from "./package.json";
 
 const serverFilePath = fileURLToPath(import.meta.url);
 const usingBunRuntime =
@@ -15,6 +16,7 @@ type CliOptions = {
 	help: boolean;
 	host: string;
 	port: number;
+	version: boolean;
 };
 
 function getCliCommand() {
@@ -68,12 +70,13 @@ async function getTailscaleIPv4() {
 	return addresses[0];
 }
 
-async function parseCliOptions(argv = Bun.argv.slice(2)): Promise<CliOptions> {
+export async function parseCliOptions(argv = Bun.argv.slice(2)): Promise<CliOptions> {
 	let command: CommandName = "serve";
 	let help = false;
 	let host = config.defaultHost;
 	let port = config.defaultPort;
 	let hostSource: "default" | "explicit" = "default";
+	let version = false;
 
 	for (let index = 0; index < argv.length; index += 1) {
 		const argument = argv[index];
@@ -94,6 +97,11 @@ async function parseCliOptions(argv = Bun.argv.slice(2)): Promise<CliOptions> {
 
 		if (argument === "--help" || argument === "-h") {
 			help = true;
+			continue;
+		}
+
+		if (argument === "--version" || argument === "-v") {
+			version = true;
 			continue;
 		}
 
@@ -161,6 +169,7 @@ async function parseCliOptions(argv = Bun.argv.slice(2)): Promise<CliOptions> {
 		help,
 		host,
 		port,
+		version,
 	};
 }
 
@@ -179,6 +188,11 @@ function printHelp() {
 	console.log("  --public           Bind 0.0.0.0");
 	console.log("  --tailscale        Bind the Tailscale IPv4");
 	console.log("  -h, --help         Show this help");
+	console.log("  -v, --version      Show version");
+}
+
+function printVersion() {
+	console.log(packageJson.version);
 }
 
 async function getReachableHosts(host: string) {
@@ -478,10 +492,15 @@ export async function runServe(options: CliOptions) {
 
 if (import.meta.main) {
 	const options = await parseCliOptions();
-	const { command, help } = options;
+	const { command, help, version } = options;
 
 	if (help) {
 		printHelp();
+		process.exit(0);
+	}
+
+	if (version) {
+		printVersion();
 		process.exit(0);
 	}
 
