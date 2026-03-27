@@ -58,12 +58,10 @@ type DirectoryColumnProps = {
 	isActiveColumn: boolean;
 	isFocusedColumn: boolean;
 	isLoading: boolean;
-	expandedNextPath: string | null;
-	selectedNextPath: string | null;
+	nextPath: string | null;
 	onCollapse: () => void;
 	onColumnFocus: () => void;
-	onCommit: (entry: DirectoryEntry, isSelected: boolean) => void;
-	onExpand: (entry: DirectoryEntry) => void;
+	onSelect: (entry: DirectoryEntry) => void;
 	path: string;
 	listing: DirectoryListing | undefined;
 };
@@ -74,17 +72,16 @@ function DirectoryColumn({
 	isFocusedColumn,
 	isLoading,
 	listing,
-	expandedNextPath,
-	selectedNextPath,
+	nextPath,
 	onCollapse,
 	onColumnFocus,
-	onCommit,
-	onExpand,
+	onSelect,
 	path,
 }: DirectoryColumnProps) {
 	const [query, setQuery] = useState("");
 	const deferredQuery = useDeferredValue(query);
 	const [activeEntryPath, setActiveEntryPath] = useState<string | null>(null);
+	const [hoveredEntryPath, setHoveredEntryPath] = useState<string | null>(null);
 	const listId = useId();
 	const searchRef = useRef<HTMLInputElement>(null);
 	const entryRefs = useRef<Record<string, HTMLButtonElement | HTMLDivElement | null>>({});
@@ -102,23 +99,39 @@ function DirectoryColumn({
 			entry.name.toLocaleLowerCase().includes(normalizedQuery),
 		);
 	}, [listing, normalizedQuery]);
+	const preferredEntryPath = entries.find((entry) => entry.path === nextPath)?.path ?? null;
 	const activeEntryIndex =
 		activeEntryPath === null
 			? -1
 			: entries.findIndex((entry) => entry.path === activeEntryPath);
 
 	useEffect(() => {
-		const selectedEntry = entries.find(
-			(entry) => entry.path === expandedNextPath || entry.path === selectedNextPath,
-		);
-		const nextActiveEntry =
-			selectedEntry ??
-			(activeEntryPath === null ? null : entries.find((entry) => entry.path === activeEntryPath)) ??
-			entries[0] ??
-			null;
+		if (entries.length === 0) {
+			setActiveEntryPath(null);
+			return;
+		}
 
-		setActiveEntryPath(nextActiveEntry?.path ?? null);
-		}, [activeEntryPath, entries, expandedNextPath, selectedNextPath]);
+		if (activeEntryPath !== null && entries.some((entry) => entry.path === activeEntryPath)) {
+			return;
+		}
+
+		setActiveEntryPath(preferredEntryPath ?? entries[0]?.path ?? null);
+	}, [activeEntryPath, entries, preferredEntryPath]);
+
+	useEffect(() => {
+		if (!isFocusedColumn) {
+			return;
+		}
+
+		setHoveredEntryPath(null);
+		setActiveEntryPath((current) => {
+			if (preferredEntryPath !== null) {
+				return preferredEntryPath;
+			}
+
+			return current ?? entries[0]?.path ?? null;
+		});
+	}, [entries, isFocusedColumn, preferredEntryPath]);
 
 	useEffect(() => {
 		if (activeEntryPath === null) {
@@ -137,7 +150,7 @@ function DirectoryColumn({
 		setActiveEntryPath(nextEntry.path);
 	}
 
-	function activateEntry() {
+	function selectEntry() {
 		if (activeEntryIndex === -1) {
 			return;
 		}
@@ -147,20 +160,7 @@ function DirectoryColumn({
 			return;
 		}
 
-		onExpand(activeEntry);
-	}
-
-	function commitEntry() {
-		if (activeEntryIndex === -1) {
-			return;
-		}
-
-		const activeEntry = entries[activeEntryIndex];
-		if (!activeEntry || activeEntry.kind !== "directory") {
-			return;
-		}
-
-		onCommit(activeEntry, selectedNextPath === activeEntry.path);
+		onSelect(activeEntry);
 	}
 
 	function handleKeyCommand(key: string, source: "column" | "search") {
@@ -201,11 +201,9 @@ function DirectoryColumn({
 				setActiveEntryAt(entries.length - 1);
 				return true;
 			case "ArrowRight":
-				activateEntry();
-				return true;
 			case "Enter":
 			case " ":
-				commitEntry();
+				selectEntry();
 				return true;
 			case "ArrowLeft":
 				if (source === "search" && query.length > 0) {
@@ -309,9 +307,9 @@ function DirectoryColumn({
 					entries.length > 0 ? (
 						<div className="space-y-1">
 							{entries.map((entry) => {
-								const isExpanded = expandedNextPath === entry.path;
-								const isSelected = selectedNextPath === entry.path;
+								const isSelected = nextPath === entry.path;
 								const isActive = activeEntryPath === entry.path;
+								const isHovered = hoveredEntryPath === entry.path;
 								const isDirectory = entry.kind === "directory";
 
 								return isDirectory ? (
@@ -321,30 +319,27 @@ function DirectoryColumn({
 												entryRefs.current[entry.path] = node;
 											}}
 											type="button"
-											onClick={() => {
-												onExpand(entry);
-												onCommit(entry, isSelected);
-											}}
+											onClick={() => onSelect(entry)}
 											onFocus={() => {
 												onColumnFocus();
 												setActiveEntryPath(entry.path);
 											}}
+											onMouseEnter={() => setHoveredEntryPath(entry.path)}
+											onMouseLeave={() => setHoveredEntryPath((current) => (current === entry.path ? null : current))}
 											role="option"
 											aria-selected={isSelected}
 											className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[11px] transition ${
-												isSelected
-													? "bg-foreground text-background shadow-[0_10px_30px_oklch(1_0_0_/_0.08)]"
-													: isExpanded
-														? "bg-foreground/88 text-background"
-														: "text-foreground/76 hover:bg-foreground/8 hover:text-foreground"
-											} ${
 												isFocusedColumn && isActive
-													? isSelected
-														? "ring-1 ring-background/40"
-														: "ring-1 ring-foreground/24"
-													: isActive
-														? "bg-foreground/88 text-background"
-														: ""
+													? "bg-foreground/88 text-background ring-1 ring-background/20 shadow-[0_10px_30px_oklch(1_0_0_/_0.08)]"
+													: isSelected
+														? "bg-foreground/10 text-foreground ring-1 ring-foreground/20"
+														: isHovered
+															? "bg-foreground/8 text-foreground"
+															: "text-foreground/76 hover:bg-foreground/8 hover:text-foreground"
+											} ${
+												!isFocusedColumn && isActive
+													? "bg-foreground/14 text-foreground"
+													: ""
 											}`}
 										>
 										{isSelected ? (
@@ -363,12 +358,15 @@ function DirectoryColumn({
 										}}
 											role="option"
 											aria-selected={false}
-											onMouseEnter={() => setActiveEntryPath(entry.path)}
+											onMouseEnter={() => setHoveredEntryPath(entry.path)}
+											onMouseLeave={() => setHoveredEntryPath((current) => (current === entry.path ? null : current))}
 											className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-[11px] ${
 												isFocusedColumn && isActive
 													? "bg-foreground/88 text-background ring-1 ring-background/20"
+													: isHovered
+														? "bg-foreground/8 text-foreground/72"
 													: isActive
-														? "bg-foreground/88 text-background"
+														? "bg-foreground/14 text-foreground/72"
 														: "text-muted-foreground/62"
 											}`}
 										>
@@ -405,8 +403,7 @@ export function SessionLauncher({
 	token,
 }: SessionLauncherProps) {
 	const [title, setTitle] = useState("");
-	const [selectedPath, setSelectedPath] = useState(defaultPath);
-	const [expandedPath, setExpandedPath] = useState(defaultPath);
+	const [currentPath, setCurrentPath] = useState(defaultPath);
 	const [activeColumnPath, setActiveColumnPath] = useState(defaultPath);
 	const [directoryMap, setDirectoryMap] = useState<Record<string, DirectoryListing>>({});
 	const [loadingPaths, setLoadingPaths] = useState<Record<string, true>>({});
@@ -417,16 +414,14 @@ export function SessionLauncher({
 	const columnRefs = useRef<Record<string, HTMLElement | null>>({});
 	const [focusPath, setFocusPath] = useState<string | null>(null);
 
-	const expandedPathChain = useMemo(() => getPathChain(expandedPath), [expandedPath]);
-	const selectedPathChain = useMemo(() => getPathChain(selectedPath), [selectedPath]);
+	const pathChain = useMemo(() => getPathChain(currentPath), [currentPath]);
 	const visiblePathChain = useMemo(
-		() => expandedPathChain.slice(windowStartIndex, windowStartIndex + visibleColumnCount),
-		[expandedPathChain, visibleColumnCount, windowStartIndex],
+		() => pathChain.slice(windowStartIndex, windowStartIndex + visibleColumnCount),
+		[pathChain, visibleColumnCount, windowStartIndex],
 	);
 
 	useEffect(() => {
-		setSelectedPath(defaultPath);
-		setExpandedPath(defaultPath);
+		setCurrentPath(defaultPath);
 		setActiveColumnPath(defaultPath);
 	}, [defaultPath]);
 
@@ -445,23 +440,44 @@ export function SessionLauncher({
 	}, [focusPath, visiblePathChain]);
 
 	useEffect(() => {
+		const lastVisiblePath = visiblePathChain.at(-1);
+		if (!lastVisiblePath) {
+			return;
+		}
+
+		const activeColumn = document.activeElement;
+		const columnNode = columnRefs.current[lastVisiblePath];
+
+		if (!columnNode) {
+			return;
+		}
+
+		if (activeColumn instanceof HTMLElement && columnNode.contains(activeColumn)) {
+			return;
+		}
+
+		setActiveColumnPath(lastVisiblePath);
+		setFocusPath(lastVisiblePath);
+	}, [visiblePathChain]);
+
+	useEffect(() => {
 		setWindowStartIndex((current) => {
-			const maxStartIndex = Math.max(0, expandedPathChain.length - visibleColumnCount);
+			const maxStartIndex = Math.max(0, pathChain.length - visibleColumnCount);
 
 			if (current > maxStartIndex) {
 				return maxStartIndex;
 			}
 
-			if (current + visibleColumnCount < expandedPathChain.length) {
-				return expandedPathChain.length - visibleColumnCount;
+			if (current + visibleColumnCount < pathChain.length) {
+				return pathChain.length - visibleColumnCount;
 			}
 
 			return current;
 		});
-	}, [expandedPathChain, visibleColumnCount]);
+	}, [pathChain, visibleColumnCount]);
 
 	useEffect(() => {
-		const missingPaths = expandedPathChain.filter(
+		const missingPaths = pathChain.filter(
 			(path) => directoryMap[path] === undefined && loadingPaths[path] === undefined,
 		);
 
@@ -517,7 +533,7 @@ export function SessionLauncher({
 					setError(nextError.message);
 				});
 			});
-	}, [directoryMap, expandedPathChain, loadingPaths, token]);
+	}, [directoryMap, loadingPaths, pathChain, token]);
 
 	useEffect(() => {
 		const browser = browserRef.current;
@@ -579,11 +595,11 @@ export function SessionLauncher({
 							<FolderOpen className="size-3" />
 							Selected Directory
 						</div>
-						<p className="mt-1 truncate text-xs text-foreground/88">{selectedPath}</p>
+						<p className="mt-1 truncate text-xs text-foreground/88">{currentPath}</p>
 					</div>
 					<button
 						type="button"
-						onClick={() => void onCreate(selectedPath, title.trim())}
+						onClick={() => void onCreate(currentPath, title.trim())}
 						disabled={isCreating}
 						className="flex h-10 shrink-0 items-center gap-2 rounded-md bg-foreground px-4 text-xs font-medium text-background transition hover:bg-foreground/90 disabled:opacity-30"
 					>
@@ -603,13 +619,12 @@ export function SessionLauncher({
 					ref={browserRef}
 					className="mx-auto flex h-full w-full max-w-[110rem] gap-3 overflow-hidden pb-2"
 				>
-					{visiblePathChain.map((path, index) => {
-						const listing = directoryMap[path];
-						const absoluteIndex = windowStartIndex + index;
-						const expandedNextPath = expandedPathChain[absoluteIndex + 1] ?? null;
-						const selectedNextPath = selectedPathChain[absoluteIndex + 1] ?? null;
-						const isLoading = loadingPaths[path] === true;
-						const isActiveColumn = index === visiblePathChain.length - 1;
+						{visiblePathChain.map((path, index) => {
+							const absoluteIndex = windowStartIndex + index;
+							const listing = directoryMap[path];
+							const nextPath = pathChain[absoluteIndex + 1] ?? null;
+							const isLoading = loadingPaths[path] === true;
+							const isActiveColumn = index === visiblePathChain.length - 1;
 
 						return (
 							<DirectoryColumn
@@ -621,15 +636,14 @@ export function SessionLauncher({
 								isFocusedColumn={path === activeColumnPath}
 								isLoading={isLoading}
 								listing={listing}
-								expandedNextPath={expandedNextPath}
-								selectedNextPath={selectedNextPath}
+								nextPath={nextPath}
 								onCollapse={() => {
-									const parentPath = expandedPathChain[absoluteIndex - 1];
+									const parentPath = pathChain[absoluteIndex - 1];
 									if (!parentPath) {
 										return;
 									}
 
-									setExpandedPath(parentPath);
+									setCurrentPath(parentPath);
 									setActiveColumnPath(parentPath);
 									setFocusPath(parentPath);
 									setError(null);
@@ -637,17 +651,12 @@ export function SessionLauncher({
 								onColumnFocus={() => {
 									setActiveColumnPath(path);
 								}}
-								onCommit={(entry, isSelected) => {
-									setSelectedPath(isSelected ? path : entry.path);
-									setFocusPath(path);
-									setError(null);
-								}}
-								onExpand={(entry) => {
+								onSelect={(entry) => {
 									const nextPathChain = getPathChain(entry.path);
 									const isLastVisibleColumn =
 										absoluteIndex === windowStartIndex + visibleColumnCount - 1;
 
-									setExpandedPath(entry.path);
+									setCurrentPath(entry.path);
 									setActiveColumnPath(entry.path);
 									setFocusPath(entry.path);
 									setWindowStartIndex((current) => {
