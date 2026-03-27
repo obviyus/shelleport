@@ -5,6 +5,8 @@ import type {
 	HostSession,
 	ProviderCapabilities,
 	ProviderSummary,
+	SessionLimit,
+	SessionUsage,
 } from "~/shared/shelleport";
 import type {
 	ProviderAdapter,
@@ -40,6 +42,81 @@ type ClaudeRetryStatus = {
 	attempt: number | null;
 	nextRetryTime: number | null;
 };
+
+function parseTokenCount(value: unknown) {
+	return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function parseCost(value: unknown) {
+	return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function parseResetsAt(value: unknown) {
+	if (typeof value !== "number" || !Number.isFinite(value)) {
+		return null;
+	}
+
+	return value > 1_000_000_000_000 ? value : value * 1_000;
+}
+
+function parseClaudeUsage(rawEvent: Record<string, unknown>): SessionUsage | null {
+	const message =
+		rawEvent.message && typeof rawEvent.message === "object"
+			? (rawEvent.message as Record<string, unknown>)
+			: null;
+	const usageSource =
+		message?.usage && typeof message.usage === "object"
+			? (message.usage as Record<string, unknown>)
+			: rawEvent.usage && typeof rawEvent.usage === "object"
+				? (rawEvent.usage as Record<string, unknown>)
+				: null;
+
+	if (!usageSource) {
+		return null;
+	}
+
+	const modelUsage =
+		rawEvent.modelUsage && typeof rawEvent.modelUsage === "object"
+			? (rawEvent.modelUsage as Record<string, unknown>)
+			: null;
+	const firstModel = modelUsage ? Object.keys(modelUsage)[0] : null;
+
+	return {
+		inputTokens: parseTokenCount(usageSource.input_tokens),
+		outputTokens: parseTokenCount(usageSource.output_tokens),
+		cacheReadInputTokens: parseTokenCount(usageSource.cache_read_input_tokens),
+		cacheCreationInputTokens: parseTokenCount(usageSource.cache_creation_input_tokens),
+		costUsd: parseCost(rawEvent.total_cost_usd),
+		model:
+			typeof message?.model === "string"
+				? message.model
+				: typeof firstModel === "string"
+					? firstModel
+					: null,
+	};
+}
+
+function parseClaudeLimit(rawEvent: Record<string, unknown>): SessionLimit | null {
+	if (rawEvent.type !== "rate_limit_event") {
+		return null;
+	}
+
+	const info =
+		rawEvent.rate_limit_info && typeof rawEvent.rate_limit_info === "object"
+			? (rawEvent.rate_limit_info as Record<string, unknown>)
+			: null;
+
+	if (!info) {
+		return null;
+	}
+
+	return {
+		status: typeof info.status === "string" ? info.status : null,
+		resetsAt: parseResetsAt(info.resetsAt),
+		window: typeof info.rateLimitType === "string" ? info.rateLimitType : null,
+		isUsingOverage: typeof info.isUsingOverage === "boolean" ? info.isUsingOverage : null,
+	};
+}
 
 function classifyClaudeBlockReason(content: string) {
 	if (content.includes("This command requires approval")) {
@@ -129,6 +206,27 @@ function parseRetryDelay(text: string) {
 }
 
 function parseClaudeRetryStatus(rawEvent: Record<string, unknown>): ClaudeRetryStatus | null {
+	if (rawEvent.subtype === "api_retry") {
+		const attempt = typeof rawEvent.attempt === "number" ? rawEvent.attempt : null;
+		const delayMs =
+			typeof rawEvent.retry_delay_ms === "number" && Number.isFinite(rawEvent.retry_delay_ms)
+				? rawEvent.retry_delay_ms
+				: null;
+		const errorStatus =
+			typeof rawEvent.error_status === "number" ? String(rawEvent.error_status) : null;
+		const errorCode = typeof rawEvent.error === "string" ? rawEvent.error : null;
+		const parts = [errorStatus, errorCode].filter(Boolean);
+
+		return {
+			message:
+				parts.length === 0
+					? `Retrying request${attempt === null ? "" : ` (attempt ${attempt})`}`
+					: `${parts.join(" ")} retry${attempt === null ? "" : ` (attempt ${attempt})`}`,
+			attempt,
+			nextRetryTime: delayMs === null ? null : Date.now() + delayMs,
+		};
+	}
+
 	const candidates: string[] = [];
 	const message = getStringRecord(rawEvent.message);
 	const data = getStringRecord(rawEvent.data);
@@ -425,6 +523,8 @@ export function normalizeClaudeStreamEvent(
 
 export function normalizeClaudeEvent(rawEvent: Record<string, unknown>): ProviderAdapterEvent[] {
 	const type = typeof rawEvent.type === "string" ? rawEvent.type : "unknown";
+	const usage = parseClaudeUsage(rawEvent);
+	const limit = parseClaudeLimit(rawEvent);
 
 	if (type === "system" && rawEvent.subtype === "init") {
 		const providerSessionRef = typeof rawEvent.session_id === "string" ? rawEvent.session_id : null;
@@ -470,6 +570,17 @@ export function normalizeClaudeEvent(rawEvent: Record<string, unknown>): Provide
 			}
 		}
 
+		if (usage) {
+			const lastEvent = events.at(-1);
+
+			if (lastEvent?.type === "host-event") {
+				lastEvent.data = {
+					...lastEvent.data,
+					usage,
+				};
+			}
+		}
+
 		return events;
 	}
 
@@ -508,7 +619,30 @@ export function normalizeClaudeEvent(rawEvent: Record<string, unknown>): Provide
 	}
 
 	if (type === "result") {
-		return normalizeClaudeResult(rawEvent);
+		const events = normalizeClaudeResult(rawEvent);
+
+		if (usage && events[0]?.type === "host-event") {
+			events[0].data = {
+				...events[0].data,
+				usage,
+			};
+		}
+
+		return events;
+	}
+
+	if (type === "rate_limit_event" && limit) {
+		return [
+			{
+				type: "host-event",
+				kind: "system",
+				summary: "Rate limit update",
+				data: {
+					limit,
+				},
+				rawProviderEvent: rawEvent,
+			},
+		];
 	}
 
 	if (type === "progress" || type === "system") {

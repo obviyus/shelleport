@@ -27,18 +27,24 @@ import type {
 	HostEvent,
 	HostSession,
 	PendingRequest,
+	ProviderLimitState,
 	ProviderSummary,
 	RequestResponsePayload,
+	SessionLimit,
 } from "~/shared/shelleport";
 import { useCurrentRoute, useRouter } from "~/client/router";
 import {
 	type DraftImage,
 	DraftImagePreview,
 	formatStatus,
+	formatSessionLimitLabel,
+	formatSessionLimitReset,
+	getSessionUsageBadges,
 	getSidebarMeta,
 	getSidebarTitle,
 	getStatusMessage,
 	groupStream,
+	orderSessionLimits,
 	GroupedEntryRenderer,
 	normalizeDraftImage,
 	PendingRequestBanner,
@@ -58,6 +64,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const initialDetail = boot.route.kind === "session" ? boot.sessionDetail : null;
 
 	const [providers, setProviders] = useState<ProviderSummary[]>(boot.providers);
+	const [providerLimits, setProviderLimits] = useState<ProviderLimitState>(boot.providerLimits);
 	const [sessions, setSessions] = useState<HostSession[]>(boot.sessions);
 	const [session, setSession] = useState<HostSession | null>(initialDetail?.session ?? null);
 	const [stream, setStream] = useState<HostEvent[]>(initialDetail?.events ?? []);
@@ -90,6 +97,20 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		};
 	}, [sessions]);
 	const grouped = useMemo(() => groupStream(stream), [stream]);
+	const usageBadges = useMemo(() => getSessionUsageBadges(stream, now), [now, stream]);
+	const claudeLimits = useMemo(
+		() => orderSessionLimits(providerLimits.claude),
+		[providerLimits.claude],
+	);
+
+	function mergeClaudeLimit(previous: SessionLimit[], next: SessionLimit) {
+		if (!next.window) {
+			return previous;
+		}
+
+		const withoutWindow = previous.filter((candidate) => candidate.window !== next.window);
+		return [...withoutWindow, next];
+	}
 
 	const replaceSession = useCallback((nextSession: HostSession) => {
 		setSessions((previous) =>
@@ -160,6 +181,18 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 					}
 
 					if (message.type === "event") {
+						const limit =
+							message.payload.data.limit && typeof message.payload.data.limit === "object"
+								? (message.payload.data.limit as SessionLimit)
+								: null;
+
+						if (limit?.window) {
+							setProviderLimits((previous) => ({
+								...previous,
+								claude: mergeClaudeLimit(previous.claude, limit),
+							}));
+						}
+
 						setStream((previous) => [...previous, message.payload]);
 						return;
 					}
@@ -495,6 +528,28 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 				</div>
 
 				<div className="shrink-0 border-t border-border px-2 py-2">
+					{claudeLimits.length > 0 && (
+						<div className="mb-2 rounded-md border border-foreground/10 bg-background/40 px-2.5 py-2">
+							<div className="mb-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/68">
+								Claude limits
+							</div>
+							<div className="space-y-1">
+								{claudeLimits.map((limit) => (
+									<div
+										key={limit.window}
+										className="flex items-center justify-between gap-2 text-[10px]"
+									>
+										<span className="text-foreground/76">
+											{formatSessionLimitLabel(limit.window)}
+										</span>
+										<span className="truncate text-right text-muted-foreground/76">
+											{formatSessionLimitReset(limit, now)}
+										</span>
+									</div>
+								))}
+							</div>
+						</div>
+					)}
 					<button
 						type="button"
 						onClick={() => navigate("/archived")}
@@ -524,7 +579,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			<main className="flex flex-1 flex-col overflow-hidden">
 				{isArchivedView ? (
 					<div className="flex flex-1 flex-col overflow-hidden">
-						<header className="flex h-12 shrink-0 items-center justify-between border-b border-border px-5">
+						<header className="flex min-h-12 shrink-0 items-center justify-between border-b border-border px-5 py-2">
 							<div>
 								<h1 className="text-xs font-medium text-foreground">Archived sessions</h1>
 								<p className="text-[10px] text-muted-foreground/78">
@@ -587,6 +642,18 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 										{session.cwd}
 									</span>
 								</div>
+								{usageBadges.length > 0 && (
+									<div className="mt-1 flex flex-wrap gap-1.5">
+										{usageBadges.map((badge) => (
+											<span
+												key={badge}
+												className="rounded border border-foreground/10 bg-card/90 px-1.5 py-px text-[9px] uppercase tracking-[0.08em] text-muted-foreground/80"
+											>
+												{badge}
+											</span>
+										))}
+									</div>
+								)}
 							</div>
 							<div className="flex shrink-0 items-center gap-3">
 								<div className="flex items-center gap-1.5">
