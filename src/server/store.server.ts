@@ -30,6 +30,7 @@ database.exec(`
 		provider TEXT NOT NULL,
 		title TEXT NOT NULL,
 		cwd TEXT NOT NULL,
+		pinned INTEGER NOT NULL DEFAULT 0,
 		archived INTEGER NOT NULL DEFAULT 0,
 		status TEXT NOT NULL,
 		status_detail_json TEXT NOT NULL DEFAULT '{"message":null,"attempt":null,"nextRetryTime":null,"waitKind":null,"blockReason":null}',
@@ -100,6 +101,11 @@ function ensureColumn(tableName: string, columnName: string, sql: string) {
 
 ensureColumn(
 	"host_sessions",
+	"pinned",
+	"ALTER TABLE host_sessions ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0",
+);
+ensureColumn(
+	"host_sessions",
 	"archived",
 	"ALTER TABLE host_sessions ADD COLUMN archived INTEGER NOT NULL DEFAULT 0",
 );
@@ -129,6 +135,7 @@ type SqlSessionRow = {
 	provider: string;
 	title: string;
 	cwd: string;
+	pinned: number;
 	archived: number;
 	status: string;
 	status_detail_json: string;
@@ -215,6 +222,7 @@ function mapSession(row: SqlSessionRow): HostSession {
 		provider: row.provider as ProviderId,
 		title: row.title,
 		cwd: row.cwd,
+		pinned: row.pinned === 1,
 		archived: row.archived === 1,
 		status: row.status as SessionStatus,
 		statusDetail: parseStatusDetail(row.status_detail_json),
@@ -261,12 +269,12 @@ function mapRequest(row: SqlRequestRow): PendingRequest {
 
 const insertSessionStatement = database.query(
 	`INSERT INTO host_sessions (
-		id, provider, title, cwd, archived, status, status_detail_json, provider_session_ref, pid, imported, permission_mode, allowed_tools_json, last_event_sequence, create_time, update_time
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, provider, title, cwd, pinned, archived, status, status_detail_json, provider_session_ref, pid, imported, permission_mode, allowed_tools_json, last_event_sequence, create_time, update_time
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 );
 
 const listSessionsStatement = database.query<SqlSessionRow, []>(
-	"SELECT * FROM host_sessions ORDER BY update_time DESC",
+	"SELECT * FROM host_sessions ORDER BY pinned DESC, update_time DESC",
 );
 
 const getSessionStatement = database.query<SqlSessionRow, [string]>(
@@ -275,7 +283,7 @@ const getSessionStatement = database.query<SqlSessionRow, [string]>(
 
 const updateSessionStatement = database.query(
 	`UPDATE host_sessions
-		SET status = ?, status_detail_json = ?, provider_session_ref = ?, pid = ?, title = ?, archived = ?, permission_mode = ?, allowed_tools_json = ?, update_time = ?
+		SET status = ?, status_detail_json = ?, provider_session_ref = ?, pid = ?, title = ?, pinned = ?, archived = ?, permission_mode = ?, allowed_tools_json = ?, update_time = ?
 		WHERE id = ?`,
 );
 
@@ -361,6 +369,7 @@ export type CreateStoredSessionInput = {
 	providerSessionRef?: string | null;
 	permissionMode: PermissionMode;
 	allowedTools: string[];
+	pinned?: boolean;
 };
 
 type SessionUpdate = Partial<
@@ -371,6 +380,7 @@ type SessionUpdate = Partial<
 		| "providerSessionRef"
 		| "pid"
 		| "title"
+		| "pinned"
 		| "archived"
 		| "permissionMode"
 		| "allowedTools"
@@ -388,6 +398,7 @@ export const sessionStore = {
 			provider: input.provider,
 			title: input.title,
 			cwd: input.cwd,
+			pinned: input.pinned ?? false,
 			archived: false,
 			status: "idle",
 			statusDetail: emptyStatusDetail(),
@@ -406,6 +417,7 @@ export const sessionStore = {
 			session.provider,
 			session.title,
 			session.cwd,
+			session.pinned ? 1 : 0,
 			session.archived ? 1 : 0,
 			session.status,
 			JSON.stringify(session.statusDetail),
@@ -494,6 +506,7 @@ export const sessionStore = {
 					: update.providerSessionRef,
 			pid: update.pid === undefined ? current.pid : update.pid,
 			title: update.title ?? current.title,
+			pinned: update.pinned ?? current.pinned,
 			archived: update.archived ?? current.archived,
 			permissionMode: update.permissionMode ?? current.permissionMode,
 			allowedTools: update.allowedTools ?? current.allowedTools,
@@ -506,6 +519,7 @@ export const sessionStore = {
 			next.providerSessionRef,
 			next.pid,
 			next.title,
+			next.pinned ? 1 : 0,
 			next.archived ? 1 : 0,
 			next.permissionMode,
 			JSON.stringify(next.allowedTools),

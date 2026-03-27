@@ -8,6 +8,7 @@ import type {
 	SessionArchivePayload,
 	SessionControlPayload,
 	SessionInputPayload,
+	SessionMetaPayload,
 	SessionStreamMessage,
 } from "~/shared/shelleport";
 import {
@@ -207,6 +208,26 @@ function validateControlInput(payload: SessionControlPayload) {
 function validateArchiveInput(payload: SessionArchivePayload) {
 	if (typeof payload.archived !== "boolean") {
 		throw new ApiError(400, "invalid_archived", "archived must be a boolean");
+	}
+}
+
+function validateMetaInput(payload: SessionMetaPayload) {
+	let hasField = false;
+
+	if (payload.title !== undefined) {
+		hasField = true;
+		validateTitle(payload.title);
+	}
+
+	if (payload.pinned !== undefined) {
+		hasField = true;
+		if (typeof payload.pinned !== "boolean") {
+			throw new ApiError(400, "invalid_pinned", "pinned must be a boolean");
+		}
+	}
+
+	if (!hasField) {
+		throw new ApiError(400, "invalid_session_meta", "title or pinned is required");
 	}
 }
 
@@ -447,6 +468,13 @@ async function dispatchApiRequest(request: Request) {
 			const payload = await readJson<SessionArchivePayload>(request);
 			validateArchiveInput(payload);
 			const session = sessionBroker.setSessionArchived(sessionId, payload);
+			return Response.json({ session });
+		}
+
+		if (request.method === "POST" && segments[3] === "meta") {
+			const payload = await readJson<SessionMetaPayload>(request);
+			validateMetaInput(payload);
+			const session = sessionBroker.updateSessionMeta(sessionId, payload);
 			return Response.json({ session });
 		}
 	}

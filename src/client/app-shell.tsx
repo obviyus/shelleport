@@ -7,8 +7,11 @@ import {
 	ImagePlus,
 	Loader2,
 	LogOut,
+	Pencil,
+	Pin,
 	Plus,
 	Send,
+	X,
 } from "lucide-react";
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AppBootData } from "~/client/boot";
@@ -22,6 +25,7 @@ import {
 	respondToRequest,
 	sendInput,
 	setSessionArchived,
+	updateSessionMeta,
 } from "~/client/api";
 import type {
 	HostEvent,
@@ -51,6 +55,20 @@ import {
 	StatusDot,
 } from "~/client/session-stream";
 
+function orderSessions(nextSessions: HostSession[]) {
+	return [...nextSessions].sort((left, right) => {
+		if (left.archived !== right.archived) {
+			return left.archived ? 1 : -1;
+		}
+
+		if (left.pinned !== right.pinned) {
+			return left.pinned ? -1 : 1;
+		}
+
+		return right.updateTime - left.updateTime;
+	});
+}
+
 export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated: true }> }) {
 	const route = useCurrentRoute();
 	const { navigate } = useRouter();
@@ -78,6 +96,8 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const [now, setNow] = useState(() => Date.now());
 	const [streamState, setStreamState] = useState<"connected" | "reconnecting">("connected");
 	const [archiveConfirmId, setArchiveConfirmId] = useState<string | null>(null);
+	const [renameDraft, setRenameDraft] = useState("");
+	const [isRenaming, setIsRenaming] = useState(false);
 	const { activeSessions, archivedSessions } = useMemo(() => {
 		const active: HostSession[] = [];
 		const archived: HostSession[] = [];
@@ -114,7 +134,9 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 
 	const replaceSession = useCallback((nextSession: HostSession) => {
 		setSessions((previous) =>
-			previous.map((candidate) => (candidate.id === nextSession.id ? nextSession : candidate)),
+			orderSessions(
+				previous.map((candidate) => (candidate.id === nextSession.id ? nextSession : candidate)),
+			),
 		);
 	}, []);
 
@@ -131,11 +153,16 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	useEffect(() => {
 		fetchSessions()
 			.then(({ sessions: nextSessions }) => {
-				setSessions(nextSessions);
+				setSessions(orderSessions(nextSessions));
 				setInitialLoading(false);
 			})
 			.catch(() => setInitialLoading(false));
 	}, []);
+
+	useEffect(() => {
+		setRenameDraft(session?.title ?? "");
+		setIsRenaming(false);
+	}, [session?.id, session?.title]);
 
 	useEffect(() => {
 		if (!selectedId) {
@@ -258,7 +285,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 					cwd: cwd.trim(),
 					title: title || undefined,
 				});
-				setSessions((previous) => [result.session, ...previous]);
+				setSessions((previous) => orderSessions([result.session, ...previous]));
 				navigate(`/sessions/${result.session.id}`);
 				setTimeout(() => textareaRef.current?.focus(), 100);
 			} catch (error) {
@@ -351,6 +378,43 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			console.error("Failed to respond:", error);
 		}
 	}, []);
+
+	const handlePinned = useCallback(
+		async (sessionId: string, pinned: boolean) => {
+			try {
+				const result = await updateSessionMeta(sessionId, { pinned });
+				replaceSession(result.session);
+				setSession((previous) => (previous?.id === result.session.id ? result.session : previous));
+			} catch (error) {
+				console.error("Failed to update pinned state:", error);
+			}
+		},
+		[replaceSession],
+	);
+
+	const handleRename = useCallback(async () => {
+		if (!session) {
+			return;
+		}
+
+		const title = renameDraft.trim();
+
+		if (title.length === 0 || title === session.title) {
+			setRenameDraft(session.title);
+			setIsRenaming(false);
+			return;
+		}
+
+		try {
+			const result = await updateSessionMeta(session.id, { title });
+			replaceSession(result.session);
+			setSession(result.session);
+			setRenameDraft(result.session.title);
+			setIsRenaming(false);
+		} catch (error) {
+			console.error("Failed to rename session:", error);
+		}
+	}, [renameDraft, replaceSession, session]);
 
 	const addDraftImages = useCallback(async (files: File[]) => {
 		const normalizedImages = await Promise.all(files.map(normalizeDraftImage));
@@ -482,6 +546,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 									>
 										<div className="flex items-center gap-2">
 											<StatusDot status={candidate.status} />
+											{candidate.pinned && <Pin className="size-3 shrink-0 text-foreground/70" />}
 											<span className="line-clamp-1 min-w-0 flex-1 pr-1 text-xs">
 												{candidate.title}
 											</span>
@@ -492,6 +557,21 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 										<p className="mt-0.5 ml-3.5 truncate text-[10px] text-muted-foreground/82">
 											{getSidebarMeta(candidate, now)}
 										</p>
+									</button>
+									<button
+										type="button"
+										onClick={() => void handlePinned(candidate.id, !candidate.pinned)}
+										className={`mt-2 flex size-5 shrink-0 items-center justify-center rounded border transition ${
+											candidate.pinned
+												? "border-foreground/12 bg-accent text-foreground opacity-100"
+												: "border-transparent text-muted-foreground/0 opacity-0 group-hover:border-foreground/10 group-hover:text-muted-foreground/82 group-hover:opacity-100 hover:border-foreground/18 hover:text-foreground"
+										}`}
+										aria-label={
+											candidate.pinned ? `Unpin ${candidate.title}` : `Pin ${candidate.title}`
+										}
+										title={candidate.pinned ? "Unpin" : "Pin"}
+									>
+										<Pin className="size-3" />
 									</button>
 									<button
 										type="button"
@@ -637,7 +717,62 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 						<header className="flex h-12 shrink-0 items-center justify-between border-b border-border px-5">
 							<div className="min-w-0">
 								<div className="flex items-center gap-2">
-									<h1 className="truncate text-xs font-medium text-foreground">{session.title}</h1>
+									{session.pinned && <Pin className="size-3 shrink-0 text-foreground/72" />}
+									{isRenaming ? (
+										<div className="flex min-w-0 items-center gap-1.5">
+											<input
+												value={renameDraft}
+												onChange={(event) => setRenameDraft(event.target.value)}
+												onKeyDown={(event) => {
+													if (event.key === "Enter") {
+														event.preventDefault();
+														void handleRename();
+													}
+
+													if (event.key === "Escape") {
+														event.preventDefault();
+														setRenameDraft(session.title);
+														setIsRenaming(false);
+													}
+												}}
+												autoFocus
+												className="h-7 min-w-0 rounded border border-foreground/12 bg-card px-2 text-xs font-medium text-foreground outline-none"
+											/>
+											<button
+												type="button"
+												onClick={() => void handleRename()}
+												className="flex size-6 items-center justify-center rounded border border-foreground/10 text-muted-foreground/82 transition hover:border-foreground/18 hover:text-foreground"
+												title="Save title"
+											>
+												<Check className="size-3" />
+											</button>
+											<button
+												type="button"
+												onClick={() => {
+													setRenameDraft(session.title);
+													setIsRenaming(false);
+												}}
+												className="flex size-6 items-center justify-center rounded border border-foreground/10 text-muted-foreground/82 transition hover:border-foreground/18 hover:text-foreground"
+												title="Cancel rename"
+											>
+												<X className="size-3" />
+											</button>
+										</div>
+									) : (
+										<>
+											<h1 className="truncate text-xs font-medium text-foreground">
+												{session.title}
+											</h1>
+											<button
+												type="button"
+												onClick={() => setIsRenaming(true)}
+												className="flex size-6 items-center justify-center rounded text-muted-foreground/82 transition hover:bg-accent hover:text-foreground"
+												title="Rename chat"
+											>
+												<Pencil className="size-3" />
+											</button>
+										</>
+									)}
 									<span className="shrink-0 text-[10px] text-muted-foreground/78">
 										{session.cwd}
 									</span>
@@ -656,6 +791,18 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 								)}
 							</div>
 							<div className="flex shrink-0 items-center gap-3">
+								<button
+									type="button"
+									onClick={() => void handlePinned(session.id, !session.pinned)}
+									className={`flex items-center gap-1.5 rounded border px-2 py-1 text-[11px] transition ${
+										session.pinned
+											? "border-foreground/18 bg-accent text-foreground"
+											: "border-foreground/10 text-muted-foreground/82 hover:border-foreground/22 hover:text-foreground"
+									}`}
+								>
+									<Pin className="size-3" />
+									{session.pinned ? "Pinned" : "Pin"}
+								</button>
 								<div className="flex items-center gap-1.5">
 									<StatusDot status={session.status} />
 									<span className="text-[10px] text-muted-foreground/82">

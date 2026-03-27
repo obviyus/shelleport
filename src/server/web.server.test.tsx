@@ -21,6 +21,7 @@ const testSession: HostSession = {
 	lastEventSequence: 0,
 	permissionMode: "default",
 	pid: null,
+	pinned: false,
 	provider: "claude",
 	providerSessionRef: null,
 	status: "idle",

@@ -32,6 +32,7 @@ export type HostSession = {
 	provider: ProviderId;
 	title: string;
 	cwd: string;
+	pinned: boolean;
 	archived: boolean;
 	status: SessionStatus;
 	providerSessionRef: string | null;
@@ -162,6 +163,11 @@ export type SessionControlPayload = {
 
 export type SessionArchivePayload = {
 	archived: boolean;
+};
+
+export type SessionMetaPayload = {
+	title?: string;
+	pinned?: boolean;
 };
 
 export type DirectoryEntry = {
