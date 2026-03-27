@@ -11,14 +11,21 @@ import {
 	useState,
 } from "react";
 import { fetchDirectory } from "~/client/api";
-import type { DirectoryEntry, DirectoryListing } from "~/shared/shelleport";
+import {
+	getDefaultPermissionMode,
+	type DirectoryEntry,
+	type DirectoryListing,
+	type PermissionMode,
+	type ProviderId,
+} from "~/shared/shelleport";
 
 type SessionLauncherProps = {
 	createDisabledReason: string | null;
 	createLabel: string;
+	createProviderId: ProviderId | null;
 	defaultPath: string;
 	isCreating: boolean;
-	onCreate: (cwd: string, title: string) => void | Promise<void>;
+	onCreate: (cwd: string, title: string, permissionMode: PermissionMode) => void | Promise<void>;
 };
 
 const ROOT_PATH = "/";
@@ -401,6 +408,7 @@ function DirectoryColumn({
 export function SessionLauncher({
 	createDisabledReason,
 	createLabel,
+	createProviderId,
 	defaultPath,
 	isCreating,
 	onCreate,
@@ -417,6 +425,10 @@ export function SessionLauncher({
 	const browserRef = useRef<HTMLDivElement>(null);
 	const columnRefs = useRef<Record<string, HTMLElement | null>>({});
 	const [focusPath, setFocusPath] = useState<string | null>(null);
+	const [permissionMode, setPermissionMode] = useState<PermissionMode>(
+		createProviderId ? getDefaultPermissionMode(createProviderId) : "default",
+	);
+	const showsPermissionMode = createProviderId === "claude";
 
 	const pathChain = useMemo(() => getPathChain(currentPath), [currentPath]);
 	const visiblePathChain = useMemo(
@@ -428,6 +440,10 @@ export function SessionLauncher({
 		setCurrentPath(defaultPath);
 		setActiveColumnPath(defaultPath);
 	}, [defaultPath]);
+
+	useEffect(() => {
+		setPermissionMode(createProviderId ? getDefaultPermissionMode(createProviderId) : "default");
+	}, [createProviderId]);
 
 	useEffect(() => {
 		if (focusPath === null) {
@@ -609,6 +625,56 @@ export function SessionLauncher({
 						/>
 					</div>
 				</div>
+				{showsPermissionMode && (
+					<div className="mx-auto mt-4 flex w-full max-w-[110rem] items-start justify-between gap-6 border-t border-foreground/8 pt-4">
+						<div className="min-w-0">
+							<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/56">
+								Claude permissions
+							</p>
+							<p className="mt-1 max-w-2xl text-[11px] leading-[1.7] text-muted-foreground/80">
+								Bypass works best here. Claude approval prompts are unreliable in shelleport.
+							</p>
+						</div>
+						<div className="grid w-full max-w-xl grid-cols-2 gap-2">
+							<button
+								type="button"
+								onClick={() => setPermissionMode("dontAsk")}
+								className={`rounded-md border px-3 py-2.5 text-left transition ${
+									permissionMode === "dontAsk"
+										? "border-foreground/20 bg-foreground text-background"
+										: "border-foreground/10 bg-card/90 text-foreground/84 hover:border-foreground/18"
+								}`}
+							>
+								<p className="text-[11px] font-medium">Bypass permissions</p>
+								<p
+									className={`mt-1 text-[10px] leading-[1.5] ${
+										permissionMode === "dontAsk" ? "text-background/78" : "text-muted-foreground/76"
+									}`}
+								>
+									Recommended. Runs best in shelleport.
+								</p>
+							</button>
+							<button
+								type="button"
+								onClick={() => setPermissionMode("default")}
+								className={`rounded-md border px-3 py-2.5 text-left transition ${
+									permissionMode === "default"
+										? "border-foreground/20 bg-foreground text-background"
+										: "border-foreground/10 bg-card/90 text-foreground/84 hover:border-foreground/18"
+								}`}
+							>
+								<p className="text-[11px] font-medium">Ask for approvals</p>
+								<p
+									className={`mt-1 text-[10px] leading-[1.5] ${
+										permissionMode === "default" ? "text-background/78" : "text-muted-foreground/76"
+									}`}
+								>
+									Available, but prompts do not work especially well yet.
+								</p>
+							</button>
+						</div>
+					</div>
+				)}
 			</div>
 
 			<div className="border-b border-border px-6 py-3">
@@ -622,7 +688,7 @@ export function SessionLauncher({
 					</div>
 					<button
 						type="button"
-						onClick={() => void onCreate(currentPath, title.trim())}
+						onClick={() => void onCreate(currentPath, title.trim(), permissionMode)}
 						disabled={isCreating || createDisabledReason !== null}
 						className="flex h-10 shrink-0 items-center gap-2 rounded-md bg-foreground px-4 text-xs font-medium text-background transition hover:bg-foreground/90 focus-visible:ring-2 focus-visible:ring-foreground/20 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-30"
 					>

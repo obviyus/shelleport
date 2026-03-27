@@ -13,6 +13,7 @@ import type {
 	SessionInputPayload,
 	SessionStreamMessage,
 } from "~/shared/shelleport";
+import { getDefaultPermissionMode } from "~/shared/shelleport";
 import { ApiError } from "~/server/api-error.server";
 import { refreshClaudeProviderLimits } from "~/server/providers/claude-usage.server";
 import { getProvider } from "~/server/providers/registry.server";
@@ -318,7 +319,7 @@ export const sessionBroker = {
 			provider: input.provider,
 			cwd: input.cwd,
 			title: input.title?.trim() || `${provider.label} session`,
-			permissionMode: input.permissionMode ?? "default",
+			permissionMode: input.permissionMode ?? getDefaultPermissionMode(input.provider),
 			allowedTools: normalizeAllowedTools(input.allowedTools ?? []),
 		});
 
@@ -356,7 +357,7 @@ export const sessionBroker = {
 			title: historicalSession.title,
 			imported: true,
 			providerSessionRef: historicalSession.providerSessionRef,
-			permissionMode: input.permissionMode ?? "default",
+			permissionMode: input.permissionMode ?? getDefaultPermissionMode(input.provider),
 			allowedTools: normalizeAllowedTools(input.allowedTools ?? []),
 		});
 	},
