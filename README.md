@@ -4,33 +4,18 @@
 
 Start, monitor, and interact with AI coding sessions on any machine. All from your browser, all from a single binary.
 
----
-
-Shelleport gives you a clean, real-time interface to manage coding agent sessions running on remote (or local) machines. Point it at any directory, spin up a session, and get full streaming output with tool call visualization, permission approvals, image attachments, and more.
-
-Everything compiles down to a **single binary** powered by [Bun](https://bun.sh).
-
 ## Getting Started
 
 ### Prerequisites
 
-- [Bun](https://bun.sh) v1.2+
-- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated
+- A coding agent CLI installed and authenticated (e.g. [Claude Code](https://docs.anthropic.com/en/docs/claude-code))
 
 ### Install & Run
 
+Download the latest binary from [Releases](https://github.com/obviyus/shelleport/releases) and run:
+
 ```bash
-# Clone and install dependencies
-git clone https://github.com/obviyus/shelleport.git
-cd shelleport
-bun install
-
-# Start the dev server
-bun run dev
-
-# Or build the single binary
-bun run compile
-./dist/shelleport serve
+./shelleport serve
 ```
 
 ### Install as a Service
@@ -38,7 +23,7 @@ bun run compile
 Shelleport can install itself as a background service that starts automatically:
 
 ```bash
-bun run install-service
+./shelleport install-service
 ```
 
 This writes a service definition for your platform (launchd on macOS, systemd on Linux) and prints the command to activate it.
@@ -46,7 +31,7 @@ This writes a service definition for your platform (launchd on macOS, systemd on
 ### Health Check
 
 ```bash
-bun run doctor
+./shelleport doctor
 ```
 
 Verifies your data directory, CLI availability, host/port config, and token status.
