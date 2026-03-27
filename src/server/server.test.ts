@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createServerFetchHandler, parseCliOptions } from "../../server";
+import { createServerFetchHandler, getInstallServiceHost, parseCliOptions } from "../../server";
 
 describe("createServerFetchHandler", () => {
 	test("serves health", async () => {
@@ -55,5 +55,15 @@ describe("parseCliOptions", () => {
 			help: false,
 			version: true,
 		});
+	});
+});
+
+describe("getInstallServiceHost", () => {
+	test("defaults service installs to public bind", () => {
+		expect(getInstallServiceHost("127.0.0.1")).toBe("0.0.0.0");
+	});
+
+	test("preserves explicit tailscale binds", () => {
+		expect(getInstallServiceHost("100.96.195.107")).toBe("100.96.195.107");
 	});
 });

@@ -6,7 +6,7 @@ const xdgDataHome = Bun.env.XDG_DATA_HOME ?? join(homeDir, ".local", "share");
 export const config = {
 	appName: "shelleport",
 	get defaultPort() {
-		return Number(Bun.env.PORT ?? 3000);
+		return Number(Bun.env.PORT ?? 1206);
 	},
 	get defaultHost() {
 		return Bun.env.HOST ?? "127.0.0.1";
