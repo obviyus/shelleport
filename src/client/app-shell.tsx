@@ -7,6 +7,7 @@ import {
 	ImagePlus,
 	Loader2,
 	LogOut,
+	Menu,
 	Pencil,
 	Pin,
 	Plus,
@@ -26,6 +27,7 @@ import {
 } from "react";
 import type { AppBootData } from "~/client/boot";
 import { SessionLauncher } from "~/client/components/session-launcher";
+import { Sheet, SheetContent, SheetTitle } from "~/client/components/ui/sheet";
 import {
 	Dialog,
 	DialogContent,
@@ -166,6 +168,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const [archiveConfirmId, setArchiveConfirmId] = useState<string | null>(null);
 	const [renameDraft, setRenameDraft] = useState("");
 	const [isRenaming, setIsRenaming] = useState(false);
+	const [sidebarOpen, setSidebarOpen] = useState(false);
 	const [sessionQuery, setSessionQuery] = useState("");
 	const [showsClaudeBypassWarning, setShowsClaudeBypassWarning] = useState(false);
 	const [editingQueuedInputId, setEditingQueuedInputId] = useState<string | null>(null);
@@ -743,242 +746,272 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 					</DialogFooter>
 				</DialogContent>
 			</Dialog>
-			<aside className="flex w-60 shrink-0 flex-col border-r border-foreground/10 bg-card/55 backdrop-blur-md">
-				<div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-4">
-					<span className="text-[11px] font-semibold uppercase tracking-[0.15em] text-foreground/72">
-						shelleport
-					</span>
-					<button
-						type="button"
-						onClick={() => navigate("/")}
-						className="flex size-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
-						title="New session"
-					>
-						<Plus className="size-3.5" />
-					</button>
-				</div>
-
-				<div className="flex-1 overflow-y-auto px-3 py-3">
-					<div className="mb-3">
-						<div className="relative">
-							<Search className="pointer-events-none absolute top-1/2 left-2.5 size-3 -translate-y-1/2 text-muted-foreground/70" />
-							<input
-								value={sessionQuery}
-								onChange={(event) => setSessionQuery(event.target.value)}
-								placeholder="Search chats"
-								className="h-8 w-full rounded-md border border-foreground/10 bg-background/40 pr-2 pl-7 text-[11px] text-foreground outline-none transition placeholder:text-muted-foreground/60 focus:border-foreground/18"
-							/>
-						</div>
-					</div>
-					{initialLoading ? (
-						<div className="flex items-center justify-center py-8">
-							<Loader2 className="size-3.5 animate-spin text-muted-foreground" />
-						</div>
-					) : activeSessions.length === 0 ? (
-						<div className="py-8 text-center">
-							<p className="text-[11px] text-muted-foreground">No sessions</p>
+			{/* Sidebar content — shared between desktop aside and mobile Sheet */}
+			{(() => {
+				const sidebarContent = (
+					<>
+						<div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-4">
+							<span className="text-[11px] font-semibold uppercase tracking-[0.15em] text-foreground/82">
+								shelleport
+							</span>
 							<button
 								type="button"
-								onClick={() => navigate("/")}
-								className="mt-2 text-[11px] text-foreground/68 transition hover:text-foreground"
+								onClick={() => { navigate("/"); setSidebarOpen(false); }}
+								className="flex size-10 md:size-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
+								title="New session"
 							>
-								Create one
+								<Plus className="size-3.5" />
 							</button>
 						</div>
-					) : (
-						<div className="space-y-1">
-							{activeSessions.map((candidate) => (
-								<div
-									key={candidate.id}
-									onMouseLeave={() => {
-										if (archiveConfirmId === candidate.id) {
-											setArchiveConfirmId(null);
-										}
-									}}
-									className={`group flex items-start gap-1 rounded-md transition ${
-										candidate.status === "running" || candidate.status === "retrying"
-											? "sidebar-session-running"
-											: ""
-									} ${
-										selectedId === candidate.id
-											? "border border-foreground/10 bg-accent/90 text-foreground shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]"
-											: "text-foreground/72 hover:bg-accent/65 hover:text-foreground"
-									}`}
-								>
-									<button
-										type="button"
-										onClick={() => navigate(`/sessions/${candidate.id}`)}
-										title={getSidebarTitle(candidate)}
-										className="min-w-0 flex-1 px-2.5 py-2 text-left"
-									>
-										<div className="flex items-center gap-2">
-											<StatusDot status={candidate.status} />
-											{candidate.pinned && <Pin className="size-3 shrink-0 text-foreground/70" />}
-											<span className="line-clamp-1 min-w-0 flex-1 pr-1 text-xs">
-												{candidate.title}
-											</span>
-											{candidate.status === "failed" && (
-												<CircleX className="ml-auto size-3 shrink-0 text-destructive/70" />
-											)}
-										</div>
-										<p className="mt-0.5 ml-3.5 truncate text-[10px] text-muted-foreground/82">
-											{getSidebarMeta(candidate, now)}
-										</p>
-									</button>
-									<button
-										type="button"
-										onClick={() => void handlePinned(candidate.id, !candidate.pinned)}
-										className={`mt-2 flex size-5 shrink-0 items-center justify-center rounded border transition ${
-											candidate.pinned
-												? "border-foreground/12 bg-accent text-foreground opacity-100"
-												: "border-transparent text-muted-foreground/0 opacity-0 group-hover:border-foreground/10 group-hover:text-muted-foreground/82 group-hover:opacity-100 hover:border-foreground/18 hover:text-foreground"
-										}`}
-										aria-label={
-											candidate.pinned ? `Unpin ${candidate.title}` : `Pin ${candidate.title}`
-										}
-										title={candidate.pinned ? "Unpin" : "Pin"}
-									>
-										<Pin className="size-3" />
-									</button>
-									<button
-										type="button"
-										onClick={() => {
-											if (archiveConfirmId === candidate.id) {
-												void handleArchive(candidate.id, true);
-												return;
-											}
 
-											setArchiveConfirmId(candidate.id);
-										}}
-										className={`mt-2 mr-2 flex size-5 shrink-0 items-center justify-center rounded border transition ${
-											archiveConfirmId === candidate.id
-												? "border-foreground/18 bg-accent text-foreground opacity-100"
-												: "border-transparent text-muted-foreground/0 opacity-0 group-hover:border-foreground/10 group-hover:text-muted-foreground/82 group-hover:opacity-100 hover:border-foreground/18 hover:text-foreground"
-										}`}
-										aria-label={
-											archiveConfirmId === candidate.id
-												? `Confirm archive ${candidate.title}`
-												: `Archive ${candidate.title}`
-										}
-										title={archiveConfirmId === candidate.id ? "Confirm archive" : "Archive"}
+						<div className="flex-1 overflow-y-auto px-3 py-3">
+							<div className="mb-3">
+								<div className="relative">
+									<Search className="pointer-events-none absolute top-1/2 left-2.5 size-3 -translate-y-1/2 text-muted-foreground/70" />
+									<input
+										value={sessionQuery}
+										onChange={(event) => setSessionQuery(event.target.value)}
+										placeholder="Search chats"
+										className="h-10 md:h-8 w-full rounded-md border border-foreground/10 bg-background/40 pr-2 pl-7 text-[11px] text-foreground outline-none transition placeholder:text-muted-foreground/80 focus:border-foreground/18"
+									/>
+								</div>
+							</div>
+							{initialLoading ? (
+								<div className="flex items-center justify-center py-8">
+									<Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+								</div>
+							) : activeSessions.length === 0 ? (
+								<div className="py-8 text-center">
+									<p className="text-[11px] text-muted-foreground">No sessions</p>
+									<button
+										type="button"
+										onClick={() => { navigate("/"); setSidebarOpen(false); }}
+										className="mt-2 text-[11px] text-foreground/68 transition hover:text-foreground"
 									>
-										{archiveConfirmId === candidate.id ? (
-											<Check className="size-3" />
-										) : (
-											<Archive className="size-3" />
-										)}
+										Create one
 									</button>
 								</div>
-							))}
-						</div>
-					)}
-				</div>
+							) : (
+								<div className="space-y-1">
+									{activeSessions.map((candidate) => (
+										<div
+											key={candidate.id}
+											onMouseLeave={() => {
+												if (archiveConfirmId === candidate.id) {
+													setArchiveConfirmId(null);
+												}
+											}}
+											className={`group flex items-start gap-1 rounded-md transition ${
+												candidate.status === "running" || candidate.status === "retrying"
+													? "sidebar-session-running"
+													: ""
+											} ${
+												selectedId === candidate.id
+													? "border border-foreground/10 bg-accent/90 text-foreground shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]"
+													: "text-foreground/82 hover:bg-accent/65 hover:text-foreground"
+											}`}
+										>
+											<button
+												type="button"
+												onClick={() => { navigate(`/sessions/${candidate.id}`); setSidebarOpen(false); }}
+												title={getSidebarTitle(candidate)}
+												className="min-w-0 flex-1 px-2.5 py-2 text-left"
+											>
+												<div className="flex items-center gap-2">
+													<StatusDot status={candidate.status} />
+													{candidate.pinned && <Pin className="size-3 shrink-0 text-foreground/70" />}
+													<span className="line-clamp-1 min-w-0 flex-1 pr-1 text-xs">
+														{candidate.title}
+													</span>
+													{candidate.status === "failed" && (
+														<CircleX className="ml-auto size-3 shrink-0 text-destructive/70" />
+													)}
+												</div>
+												<p className="mt-0.5 ml-3.5 truncate text-[10px] text-muted-foreground/86">
+													{getSidebarMeta(candidate, now)}
+												</p>
+											</button>
+											<button
+												type="button"
+												onClick={() => void handlePinned(candidate.id, !candidate.pinned)}
+												className={`mt-2 flex size-8 md:size-5 shrink-0 items-center justify-center rounded border transition ${
+													candidate.pinned
+														? "border-foreground/12 bg-accent text-foreground opacity-100"
+														: "border-transparent text-muted-foreground/0 opacity-0 group-hover:border-foreground/10 group-hover:text-muted-foreground/86 group-hover:opacity-100 hover:border-foreground/18 hover:text-foreground"
+												}`}
+												aria-label={
+													candidate.pinned ? `Unpin ${candidate.title}` : `Pin ${candidate.title}`
+												}
+												title={candidate.pinned ? "Unpin" : "Pin"}
+											>
+												<Pin className="size-3" />
+											</button>
+											<button
+												type="button"
+												onClick={() => {
+													if (archiveConfirmId === candidate.id) {
+														void handleArchive(candidate.id, true);
+														return;
+													}
 
-				<div className="shrink-0 px-3 pt-3">
-					{claudeLimits.length > 0 && (
-						<div className="mb-3 rounded-md border border-foreground/10 bg-background/40 px-3 py-3">
-							<div className="mb-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/68">
-								Claude limits
-							</div>
-							<div className="space-y-2">
-								{claudeLimits.map((limit) => (
-									<div key={limit.window} className="text-[10px]">
-										<div className="flex items-center justify-between gap-2">
-											<span className="text-foreground/76">
-												{formatSessionLimitLabel(limit.window)}
-											</span>
-											<span className="text-muted-foreground/76">
-												{formatSessionLimitUsage(limit)}
-											</span>
+													setArchiveConfirmId(candidate.id);
+												}}
+												className={`mt-2 mr-2 flex size-8 md:size-5 shrink-0 items-center justify-center rounded border transition ${
+													archiveConfirmId === candidate.id
+														? "border-foreground/18 bg-accent text-foreground opacity-100"
+														: "border-transparent text-muted-foreground/0 opacity-0 group-hover:border-foreground/10 group-hover:text-muted-foreground/86 group-hover:opacity-100 hover:border-foreground/18 hover:text-foreground"
+												}`}
+												aria-label={
+													archiveConfirmId === candidate.id
+														? `Confirm archive ${candidate.title}`
+														: `Archive ${candidate.title}`
+												}
+												title={archiveConfirmId === candidate.id ? "Confirm archive" : "Archive"}
+											>
+												{archiveConfirmId === candidate.id ? (
+													<Check className="size-3" />
+												) : (
+													<Archive className="size-3" />
+												)}
+											</button>
 										</div>
-										{getSessionLimitProgress(limit) !== null && (
-											<div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/8 ring-1 ring-white/8">
-												<div
-													className={`h-full rounded-full transition-[width,background-color,box-shadow] duration-300 ${getSessionLimitTone(limit)}`}
-													style={{ width: `${getSessionLimitProgress(limit)}%` }}
-												/>
-											</div>
-										)}
-										<div className="text-[9px] text-muted-foreground/60">
-											{formatSessionLimitReset(limit, now)}
-										</div>
-									</div>
-								))}
-							</div>
+									))}
+								</div>
+							)}
 						</div>
-					)}
-				</div>
-				<div className="shrink-0 border-t border-border px-3 py-3">
-					<button
-						type="button"
-						onClick={() => navigate("/archived")}
-						className={`mb-1 flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-[11px] transition ${
-							isArchivedView
-								? "bg-accent text-foreground"
-								: "text-muted-foreground/85 hover:bg-accent hover:text-foreground"
-						}`}
-					>
-						<Archive className="size-3" />
-						Archived
-						<span className="ml-auto text-[10px] text-muted-foreground/72">
-							{archivedSessions.length}
-						</span>
-					</button>
-					<button
-						type="button"
-						onClick={handleLogout}
-						className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-[11px] text-muted-foreground/85 transition hover:bg-accent hover:text-foreground"
-					>
-						<LogOut className="size-3" />
-						Disconnect
-					</button>
-				</div>
-			</aside>
+
+						<div className="shrink-0 px-3 pt-3">
+							{claudeLimits.length > 0 && (
+								<div className="mb-3 rounded-md border border-foreground/10 bg-background/40 px-3 py-3">
+									<div className="mb-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/76">
+										Claude limits
+									</div>
+									<div className="space-y-2">
+										{claudeLimits.map((limit) => (
+											<div key={limit.window} className="text-[10px]">
+												<div className="flex items-center justify-between gap-2">
+													<span className="text-foreground/84">
+														{formatSessionLimitLabel(limit.window)}
+													</span>
+													<span className="text-muted-foreground/76">
+														{formatSessionLimitUsage(limit)}
+													</span>
+												</div>
+												{getSessionLimitProgress(limit) !== null && (
+													<div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/8 ring-1 ring-white/8">
+														<div
+															className={`h-full rounded-full transition-[width,background-color,box-shadow] duration-300 ${getSessionLimitTone(limit)}`}
+															style={{ width: `${getSessionLimitProgress(limit)}%` }}
+														/>
+													</div>
+												)}
+												<div className="text-[9px] text-muted-foreground/80">
+													{formatSessionLimitReset(limit, now)}
+												</div>
+											</div>
+										))}
+									</div>
+								</div>
+							)}
+						</div>
+						<div className="shrink-0 border-t border-border px-3 py-3">
+							<button
+								type="button"
+								onClick={() => { navigate("/archived"); setSidebarOpen(false); }}
+								className={`mb-1 flex w-full items-center gap-2 rounded-md px-2.5 py-3 md:py-2 text-[11px] transition ${
+									isArchivedView
+										? "bg-accent text-foreground"
+										: "text-muted-foreground/88 hover:bg-accent hover:text-foreground"
+								}`}
+							>
+								<Archive className="size-3" />
+								Archived
+								<span className="ml-auto text-[10px] text-muted-foreground/80">
+									{archivedSessions.length}
+								</span>
+							</button>
+							<button
+								type="button"
+								onClick={handleLogout}
+								className="flex w-full items-center gap-2 rounded-md px-2.5 py-3 md:py-2 text-[11px] text-muted-foreground/88 transition hover:bg-accent hover:text-foreground"
+							>
+								<LogOut className="size-3" />
+								Disconnect
+							</button>
+						</div>
+					</>
+				);
+
+				return (
+					<>
+						{/* Desktop sidebar */}
+						<aside className="hidden md:flex w-60 shrink-0 flex-col border-r border-foreground/10 bg-card/55 backdrop-blur-md">
+							{sidebarContent}
+						</aside>
+
+						{/* Mobile sidebar drawer */}
+						<Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+							<SheetContent side="left" showCloseButton={false} className="w-72 p-0 bg-card/95 backdrop-blur-md border-r border-foreground/10 flex flex-col">
+								<SheetTitle className="sr-only">Navigation</SheetTitle>
+								{sidebarContent}
+							</SheetContent>
+						</Sheet>
+					</>
+				);
+			})()}
 
 			<main className="flex flex-1 flex-col overflow-hidden">
 				{isArchivedView ? (
 					<div className="flex flex-1 flex-col overflow-hidden">
-						<header className="shrink-0 border-b border-border bg-background/72 px-5 py-2.5 backdrop-blur-sm">
-							<div className="mx-auto flex max-w-[70rem] items-center gap-3">
+						<header className="shrink-0 border-b border-border bg-background/72 px-3 md:px-5 py-2.5 backdrop-blur-sm">
+							<div className="mx-auto flex max-w-[70rem] items-center gap-2 md:gap-3">
+								<button
+									type="button"
+									onClick={() => setSidebarOpen(true)}
+									className="flex md:hidden size-10 items-center justify-center -ml-1 shrink-0 rounded-lg text-foreground/82 active:bg-accent"
+									aria-label="Open navigation"
+								>
+									<Menu className="size-5" />
+								</button>
 								<h1 className="text-xs font-medium text-foreground">Archived sessions</h1>
-								<span className="text-[10px] text-muted-foreground/50">
+								<span className="text-[10px] text-muted-foreground/65">
 									Restore a thread to move it back into the main list.
 								</span>
 							</div>
 						</header>
-						<div className="flex-1 overflow-y-auto px-6 py-6">
+						<div className="flex-1 overflow-y-auto px-3 md:px-6 py-4 md:py-6">
 							<div className="mx-auto max-w-[70rem]">
 								{archivedSessions.length === 0 ? (
 									<div className="flex h-full min-h-48 items-center justify-center">
-										<p className="text-xs text-muted-foreground/72">No archived sessions</p>
+										<p className="text-xs text-muted-foreground/80">No archived sessions</p>
 									</div>
 								) : (
 									<div className="space-y-2">
 										{archivedSessions.map((archivedSession) => (
 											<div
 												key={archivedSession.id}
-												className="flex items-center justify-between gap-4 rounded-md border border-foreground/10 bg-card/90 px-3 py-3"
+												className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 rounded-md border border-foreground/10 bg-card/90 px-3 py-3"
 											>
 												<div className="min-w-0">
 													<p className="truncate text-xs font-medium text-foreground">
 														{archivedSession.title}
 													</p>
-													<p className="mt-1 truncate text-[10px] text-muted-foreground/82">
+													<p className="mt-1 truncate text-[10px] text-muted-foreground/86">
 														{archivedSession.cwd}
 													</p>
 												</div>
-												<div className="flex shrink-0 items-center gap-2">
+												<div className="flex shrink-0 items-center gap-2 self-end sm:self-auto">
 													<button
 														type="button"
 														onClick={() => navigate(`/sessions/${archivedSession.id}`)}
-														className="rounded border border-foreground/10 px-3 py-1.5 text-[11px] text-muted-foreground/85 transition hover:border-foreground/18 hover:text-foreground"
+														className="rounded border border-foreground/10 px-3 py-2.5 md:py-1.5 text-[11px] text-muted-foreground/88 transition hover:border-foreground/18 hover:text-foreground"
 													>
 														Open
 													</button>
 													<button
 														type="button"
 														onClick={() => void handleArchive(archivedSession.id, false)}
-														className="flex items-center gap-1.5 rounded bg-foreground px-3 py-1.5 text-[11px] font-medium text-background transition hover:bg-foreground/90"
+														className="flex items-center gap-1.5 rounded bg-foreground px-3 py-2.5 md:py-1.5 text-[11px] font-medium text-background transition hover:bg-foreground/90"
 													>
 														<ArchiveRestore className="size-3" />
 														Unarchive
@@ -993,10 +1026,18 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 					</div>
 				) : selectedId && session ? (
 					<>
-						<header className="shrink-0 border-b border-border bg-background/72 px-5 py-2.5 backdrop-blur-sm">
-							<div className="mx-auto flex max-w-[70rem] items-center justify-between gap-4">
-								<div className="flex min-w-0 flex-1 items-center gap-3">
-									{session.pinned && <Pin className="size-3 shrink-0 text-foreground/72" />}
+						<header className="shrink-0 border-b border-border bg-background/72 px-3 md:px-5 py-2.5 backdrop-blur-sm">
+							<div className="mx-auto flex max-w-[70rem] items-center justify-between gap-2 md:gap-4">
+								<button
+									type="button"
+									onClick={() => setSidebarOpen(true)}
+									className="flex md:hidden size-10 items-center justify-center -ml-1 shrink-0 rounded-lg text-foreground/82 active:bg-accent"
+									aria-label="Open navigation"
+								>
+									<Menu className="size-5" />
+								</button>
+								<div className="flex min-w-0 flex-1 items-center gap-2 md:gap-3">
+									{session.pinned && <Pin className="size-3 shrink-0 text-foreground/82" />}
 									{isRenaming ? (
 										<div className="flex min-w-0 items-center gap-1.5">
 											<input
@@ -1020,7 +1061,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											<button
 												type="button"
 												onClick={() => void handleRename()}
-												className="flex size-6 items-center justify-center rounded border border-foreground/10 text-muted-foreground/82 transition hover:border-foreground/18 hover:text-foreground"
+												className="flex size-6 items-center justify-center rounded border border-foreground/10 text-muted-foreground/86 transition hover:border-foreground/18 hover:text-foreground"
 												title="Save title"
 											>
 												<Check className="size-3" />
@@ -1031,7 +1072,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 													setRenameDraft(session.title);
 													setIsRenaming(false);
 												}}
-												className="flex size-6 items-center justify-center rounded border border-foreground/10 text-muted-foreground/82 transition hover:border-foreground/18 hover:text-foreground"
+												className="flex size-6 items-center justify-center rounded border border-foreground/10 text-muted-foreground/86 transition hover:border-foreground/18 hover:text-foreground"
 												title="Cancel rename"
 											>
 												<X className="size-3" />
@@ -1045,38 +1086,38 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											<button
 												type="button"
 												onClick={() => setIsRenaming(true)}
-												className="flex size-5 items-center justify-center rounded text-muted-foreground/60 transition hover:bg-accent hover:text-foreground"
+												className="flex size-10 md:size-5 items-center justify-center rounded text-muted-foreground/80 transition hover:bg-accent hover:text-foreground"
 												title="Rename chat"
 											>
 												<Pencil className="size-2.5" />
 											</button>
 										</>
 									)}
-									<span className="hidden text-[10px] text-muted-foreground/50 lg:inline">
+									<span className="hidden text-[10px] text-muted-foreground/65 lg:inline">
 										{session.cwd}
 									</span>
 								</div>
 								<div className="flex shrink-0 items-center gap-1.5">
-									<div className="flex items-center gap-1.5 rounded border border-foreground/8 px-2 py-1">
+									<div className="flex items-center gap-1.5 rounded border border-foreground/12 px-2 py-1">
 										<StatusDot status={session.status} />
-										<span className="text-[10px] text-muted-foreground/72">
+										<span className="hidden sm:inline text-[10px] text-muted-foreground/80">
 											{formatStatus(session, now)}
 										</span>
 									</div>
 									{streamState === "reconnecting" && (
-										<span className="rounded border border-foreground/10 px-2 py-1 text-[9px] uppercase tracking-[0.08em] text-muted-foreground/72">
+										<span className="rounded border border-foreground/10 px-2 py-1 text-[9px] uppercase tracking-[0.08em] text-muted-foreground/80">
 											Reconnecting
 										</span>
 									)}
 									{permissionModeLabel && (
-										<span className="hidden rounded border border-foreground/8 px-2 py-1 text-[9px] uppercase tracking-[0.08em] text-muted-foreground/60 md:inline-flex">
+										<span className="hidden rounded border border-foreground/12 px-2 py-1 text-[9px] uppercase tracking-[0.08em] text-muted-foreground/80 md:inline-flex">
 											{permissionModeLabel}
 										</span>
 									)}
 									{usageBadges.map((badge) => (
 										<span
 											key={badge}
-											className="hidden rounded border border-foreground/8 px-2 py-1 text-[9px] uppercase tracking-[0.08em] text-muted-foreground/60 xl:inline-flex"
+											className="hidden rounded border border-foreground/12 px-2 py-1 text-[9px] uppercase tracking-[0.08em] text-muted-foreground/80 xl:inline-flex"
 										>
 											{badge}
 										</span>
@@ -1084,23 +1125,23 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 									<button
 										type="button"
 										onClick={() => void handlePinned(session.id, !session.pinned)}
-										className={`flex items-center gap-1 rounded border px-2 py-1 text-[10px] transition ${
+										className={`flex items-center justify-center gap-1 rounded border px-2 py-1 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-[10px] transition ${
 											session.pinned
 												? "border-foreground/15 bg-accent text-foreground"
-												: "border-foreground/8 text-muted-foreground/60 hover:border-foreground/18 hover:text-foreground"
+												: "border-foreground/12 text-muted-foreground/80 hover:border-foreground/18 hover:text-foreground"
 										}`}
 									>
-										<Pin className="size-2.5" />
-										{session.pinned ? "Pinned" : "Pin"}
+										<Pin className="size-3 md:size-2.5" />
+										<span className="hidden md:inline">{session.pinned ? "Pinned" : "Pin"}</span>
 									</button>
 									{(session.status === "running" || session.status === "retrying") && (
 										<button
 											type="button"
 											onClick={() => void handleInterrupt()}
-											className="flex items-center gap-1 rounded border border-foreground/8 px-2 py-1 text-[10px] text-muted-foreground/60 transition hover:border-foreground/18 hover:text-foreground"
+											className="flex items-center justify-center gap-1 rounded border border-foreground/12 px-2 py-1 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-[10px] text-muted-foreground/80 transition hover:border-foreground/18 hover:text-foreground"
 										>
-											<CircleStop className="size-2.5" />
-											Stop
+											<CircleStop className="size-3 md:size-2.5" />
+											<span className="hidden md:inline">Stop</span>
 										</button>
 									)}
 								</div>
@@ -1110,13 +1151,13 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 						<div
 							ref={scrollRef}
 							onScroll={handleScroll}
-							className="flex-1 overflow-y-auto px-6 py-6"
+							className="flex-1 overflow-y-auto px-3 md:px-6 py-4 md:py-6"
 						>
 							{grouped.length === 0 &&
 							session.status !== "running" &&
 							session.status !== "retrying" ? (
 								<div className="flex h-full items-center justify-center">
-									<p className="text-xs text-muted-foreground/72">Send a message to start</p>
+									<p className="text-xs text-muted-foreground/80">Send a message to start</p>
 								</div>
 							) : (
 								<div className="mx-auto max-w-[70rem]">
@@ -1152,7 +1193,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 							<PendingRequestBanner request={pendingRequests[0]} onRespond={handleRespond} />
 						)}
 
-						<div className="shrink-0 border-t border-border px-6 py-4">
+						<div className="shrink-0 border-t border-border px-3 md:px-6 py-3 md:py-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:pb-4">
 							<div className="mx-auto max-w-[70rem]">
 								<div className="relative rounded-md border border-foreground/10 bg-card/92 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)] transition-colors focus-within:border-foreground/22">
 									<input
@@ -1187,7 +1228,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 									)}
 									{queuedInputs.length > 0 && (
 										<div className="border-b border-border px-4 py-3">
-											<div className="mb-2 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/74">
+											<div className="mb-2 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/80">
 												Queued
 											</div>
 											<div className="space-y-2">
@@ -1202,18 +1243,18 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 															className="rounded-md border border-foreground/10 bg-background/42 px-3 py-2"
 														>
 															<div className="flex items-center justify-between gap-3">
-																<div className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground/72">
+																<div className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground/80">
 																	#{index + 1}
 																</div>
 																<div className="flex items-center gap-1">
 																	{attachmentLabel && (
-																		<div className="mr-1 text-[10px] text-muted-foreground/72">
+																		<div className="mr-1 text-[10px] text-muted-foreground/80">
 																			{attachmentLabel}
 																		</div>
 																	)}
 																	{isBusy ? (
 																		<div className="flex size-6 items-center justify-center">
-																			<Loader2 className="size-3 animate-spin text-muted-foreground/72" />
+																			<Loader2 className="size-3 animate-spin text-muted-foreground/80" />
 																		</div>
 																	) : isEditing ? (
 																		<>
@@ -1221,7 +1262,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 																				type="button"
 																				onClick={() => void handleSaveQueuedInput()}
 																				disabled={queuedInputDraft.trim().length === 0}
-																				className="flex size-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground disabled:opacity-30"
+																				className="flex size-9 md:size-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground disabled:opacity-30"
 																				title="Save queued message"
 																			>
 																				<Check className="size-3" />
@@ -1229,7 +1270,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 																			<button
 																				type="button"
 																				onClick={handleCancelQueuedInputEdit}
-																				className="flex size-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
+																				className="flex size-9 md:size-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
 																				title="Cancel edit"
 																			>
 																				<X className="size-3" />
@@ -1240,7 +1281,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 																			<button
 																				type="button"
 																				onClick={() => handleStartQueuedInputEdit(queuedInput)}
-																				className="flex size-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
+																				className="flex size-9 md:size-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
 																				title="Edit queued message"
 																			>
 																				<Pencil className="size-3" />
@@ -1248,7 +1289,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 																			<button
 																				type="button"
 																				onClick={() => void handleDeleteQueuedInput(queuedInput.id)}
-																				className="flex size-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
+																				className="flex size-9 md:size-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
 																				title="Delete queued message"
 																			>
 																				<Trash2 className="size-3" />
@@ -1292,10 +1333,10 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 													? "Message Claude... paste images or attach files"
 													: "Message Claude... (Enter to send)"
 										}
-										className="w-full resize-none bg-transparent px-4 py-3 pr-20 text-xs text-foreground outline-none placeholder:text-muted-foreground/60"
+										className="w-full resize-none bg-transparent px-4 py-3 pr-14 md:pr-20 text-xs text-foreground outline-none placeholder:text-muted-foreground/80"
 									/>
 									{queuedInputCount > 0 && (
-										<div className="pointer-events-none absolute bottom-2 left-4 text-[10px] text-muted-foreground/82">
+										<div className="pointer-events-none absolute bottom-2 left-4 text-[10px] text-muted-foreground/86">
 											{queuedInputCount} queued
 										</div>
 									)}
@@ -1303,7 +1344,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 										<button
 											type="button"
 											onClick={() => fileInputRef.current?.click()}
-											className="absolute right-10 bottom-2 flex size-7 items-center justify-center rounded border border-foreground/10 bg-background text-muted-foreground/82 transition hover:border-foreground/22 hover:text-foreground"
+											className="absolute right-14 md:right-10 bottom-2 flex size-10 md:size-7 items-center justify-center rounded border border-foreground/10 bg-background text-muted-foreground/86 transition hover:border-foreground/22 hover:text-foreground"
 											title="Attach images"
 										>
 											<ImagePlus className="size-3.5" />
@@ -1313,7 +1354,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 										type="button"
 										onClick={() => void handleSend()}
 										disabled={!canSend}
-										className="absolute right-2 bottom-2 flex size-7 items-center justify-center rounded bg-foreground text-background shadow-[0_0_18px_oklch(1_0_0_/_0.12)] transition hover:bg-foreground/85 disabled:opacity-20"
+										className="absolute right-2 bottom-2 flex size-10 md:size-7 items-center justify-center rounded bg-foreground text-background shadow-[0_0_18px_oklch(1_0_0_/_0.12)] transition hover:bg-foreground/85 disabled:opacity-20"
 									>
 										<Send className="size-3.5" />
 									</button>
@@ -1322,14 +1363,29 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 						</div>
 					</>
 				) : (
-					<SessionLauncher
-						createDisabledReason={createDisabledReason}
-						createLabel={createProvider?.label ?? "managed"}
-						createProviderId={createProvider?.id ?? null}
-						defaultPath={boot.defaultCwd}
-						isCreating={isCreating}
-						onCreate={handleCreateSession}
-					/>
+					<>
+						<div className="flex md:hidden h-12 shrink-0 items-center border-b border-border bg-background/72 backdrop-blur-sm px-4 gap-3">
+							<button
+								type="button"
+								onClick={() => setSidebarOpen(true)}
+								className="flex size-10 items-center justify-center -ml-2 rounded-lg text-foreground/82 active:bg-accent"
+								aria-label="Open navigation"
+							>
+								<Menu className="size-5" />
+							</button>
+							<span className="text-[11px] font-semibold uppercase tracking-[0.15em] text-foreground/82">
+								shelleport
+							</span>
+						</div>
+						<SessionLauncher
+							createDisabledReason={createDisabledReason}
+							createLabel={createProvider?.label ?? "managed"}
+							createProviderId={createProvider?.id ?? null}
+							defaultPath={boot.defaultCwd}
+							isCreating={isCreating}
+							onCreate={handleCreateSession}
+						/>
+					</>
 				)}
 			</main>
 		</div>
