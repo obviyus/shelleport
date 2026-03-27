@@ -1,150 +1,135 @@
-# shelleport
+# 🐚 shelleport
 
-Browser control plane for host-local coding CLI agents.
+**A web UI for your coding agents, anywhere.**
 
-Current v1:
-- generic core
-- Claude live adapter via real `claude` CLI
-- Codex historical-session import only
-- Bun-first daemon
-- API-first; UI deferred
-- single admin token auth
+Start, monitor, and interact with AI coding sessions on any machine. All from your browser, all from a single binary.
 
-## What it does
+---
 
-- starts managed Claude Code sessions in arbitrary directories on the host
-- streams structured session events over SSE
-- persists managed sessions in local SQLite
-- imports historical Claude and Codex sessions from local disk
-- exposes `serve`, `doctor`, and `install-service` commands
+Shelleport gives you a clean, real-time interface to manage coding agent sessions running on remote (or local) machines. Point it at any directory, spin up a session, and get full streaming output with tool call visualization, permission approvals, image attachments, and more.
 
-## What it does not do yet
+Everything compiles down to a **single binary** powered by [Bun](https://bun.sh).
 
-- no arbitrary live adoption of already-running external TUIs
-- no Codex live control yet
-- no multi-user auth or RBAC
-- no Windows-host support
+## Getting Started
 
-## Commands
+### Prerequisites
+
+- [Bun](https://bun.sh) v1.2+
+- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated
+
+### Install & Run
 
 ```bash
-bun run start
-bun run doctor
+# Clone and install dependencies
+git clone https://github.com/obviyus/shelleport.git
+cd shelleport
+bun install
+
+# Start the dev server
+bun run dev
+
+# Or build the single binary
+bun run compile
+./dist/shelleport serve
+```
+
+### Install as a Service
+
+Shelleport can install itself as a background service that starts automatically:
+
+```bash
 bun run install-service
-bun run test
-bun run test:claude
 ```
 
-## Local auth
+This writes a service definition for your platform (launchd on macOS, systemd on Linux) and prints the command to activate it.
 
-Set:
+### Health Check
 
 ```bash
-export SHELLEPORT_ADMIN_TOKEN='change-me'
-```
-
-If `SHELLEPORT_ADMIN_TOKEN` is unset, dev mode falls back to `dev-token`.
-
-API auth:
-- `Authorization: Bearer $SHELLEPORT_ADMIN_TOKEN`
-
-## Runtime data
-
-Default data dir:
-
-```bash
-$XDG_DATA_HOME/shelleport
-# or
-~/.local/share/shelleport
-```
-
-SQLite lives there as `shelleport.sqlite`.
-
-## Provider notes
-
-### Claude
-
-- execution path: real `claude` CLI
-- managed runs use `claude -p --verbose --output-format stream-json`
-- approvals are modeled as deny/resume:
-  - Claude returns `permission_denials`
-  - shelleport creates pending approval requests
-  - approved requests add `--allowedTools`
-  - shelleport resumes the same Claude session with `-r`
-- historical resume/import scans `~/.claude/projects`
-
-### Codex
-
-- local history import scans `~/.codex/sessions`
-- live adapter intentionally deferred; provider contract already exists
-
-## HTTP API
-
-`POST /api/sessions`
-
-```json
-{
-  "provider": "claude",
-  "cwd": "/abs/path",
-  "prompt": "Run git commit --allow-empty -m test and then say done"
-}
-```
-
-`GET /api/sessions/:id/events`
-
-- SSE stream
-- first message: `snapshot`
-- later messages: `session`, `event`, `request`
-
-`request` objects include:
-- `blockReason: "permission" | "sandbox" | null`
-
-Current Claude behavior:
-- `permission` => can be approved and resumed
-- `sandbox` => informative only; not overridable via `--allowedTools`
-
-`POST /api/requests/:id/respond`
-
-```json
-{
-  "decision": "allow"
-}
-```
-
-Optional explicit rule:
-
-```json
-{
-  "decision": "allow",
-  "toolRule": "Bash(git commit:*)"
-}
-```
-
-Other endpoints:
-- `GET /api/providers`
-- `GET /api/providers/:provider/sessions`
-- `GET /api/sessions`
-- `GET /api/sessions/:id`
-- `POST /api/sessions/:id/input`
-- `POST /api/sessions/:id/control`
-- `POST /api/sessions/import`
-
-## Service install
-
-`bun run install-service`
-
-Writes:
-- macOS: `~/Library/LaunchAgents/dev.shelleport.plist`
-- Linux: `~/.config/systemd/user/shelleport.service`
-
-It does not auto-load the service; the command prints the next system command to run.
-
-## Verification
-
-```bash
-bun run typecheck
-bun run lint
-bun run test
-bun run test:claude
 bun run doctor
+```
+
+Verifies your data directory, CLI availability, host/port config, and token status.
+
+## Features
+
+- [x] Real-time SSE streaming with automatic reconnection
+- [x] Syntax-highlighted tool call visualization with collapsible cards
+- [x] Inline permission approvals (Allow/Deny) for tool boundaries
+- [x] Finder-style directory browser to launch sessions in any directory
+- [x] Image attachments via paste or upload
+- [x] Session archive, restore, interrupt, and terminate
+- [x] Historical session import from `~/.claude/projects`
+- [x] Rate limit detection with live retry countdown
+- [x] Single binary compilation via `bun build --compile`
+- [x] Background service install (launchd / systemd)
+- [ ] Codex live sessions and historical import
+- [ ] Skills support
+- [ ] Automations support
+- [ ] Settings page
+
+## Supported Agents
+
+| Agent | Live Sessions | Historical Import |
+|:------|:-------------:|:-----------------:|
+| **Claude Code** | Yes | Yes |
+| **Codex** | Planned | Planned |
+
+The provider system is extensible — add new agents by implementing the `ProviderAdapter` interface.
+
+## Configuration
+
+### Environment Variables
+
+| Variable | Default | Description |
+|:---------|:--------|:------------|
+| `SHELLEPORT_ADMIN_TOKEN` | `dev-token` | Bearer token for API and UI authentication |
+| `HOST` | `127.0.0.1` | Bind address |
+| `PORT` | `3000` | Bind port |
+
+### Data Storage
+
+All data lives in `$XDG_DATA_HOME/shelleport` (defaults to `~/.local/share/shelleport`). The SQLite database stores sessions and events. Image attachments are saved in each session's working directory under `.shelleport/uploads/`.
+
+## API Reference
+
+Shelleport is API-first. Every action in the UI goes through the HTTP API.
+
+### Sessions
+
+```
+POST   /api/sessions                  # Create a new session
+GET    /api/sessions                  # List all sessions
+GET    /api/sessions/:id              # Get session details
+GET    /api/sessions/:id/events       # SSE event stream
+POST   /api/sessions/:id/input        # Send a follow-up prompt
+POST   /api/sessions/:id/control      # Interrupt or terminate
+POST   /api/sessions/import           # Import historical sessions
+```
+
+### Approvals
+
+```
+POST   /api/requests/:id/respond      # Allow or deny a permission request
+```
+
+### Other
+
+```
+GET    /api/providers                  # List available providers
+GET    /api/providers/:name/sessions   # List sessions for a provider
+GET    /api/directories                # Browse host directories
+```
+
+All endpoints require `Authorization: Bearer <token>`.
+
+## Development
+
+```bash
+bun run dev          # Start dev server with HMR
+bun run typecheck    # Type-check with tsgo
+bun run lint         # Lint with oxlint
+bun run format       # Check formatting with oxfmt
+bun run test         # Run tests
+bun run test:claude  # Run Claude integration tests
 ```
