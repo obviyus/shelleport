@@ -15,7 +15,9 @@ import {
 	X,
 } from "lucide-react";
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
 import { useLocation, useNavigate, useParams } from "react-router";
+import remarkGfm from "remark-gfm";
 import {
 	Dialog,
 	DialogContent,
@@ -55,6 +57,109 @@ type ImagePreview = {
 type DraftImage = ImagePreview & {
 	file: File;
 };
+
+function MarkdownMessage({ text }: { text: string }) {
+	return (
+		<ReactMarkdown
+			remarkPlugins={[remarkGfm]}
+			components={{
+				h1: ({ children }) => (
+					<h1 className="mt-4 mb-2 text-sm font-semibold text-foreground first:mt-0">{children}</h1>
+				),
+				h2: ({ children }) => (
+					<h2 className="mt-4 mb-2 text-xs font-semibold text-foreground first:mt-0">{children}</h2>
+				),
+				h3: ({ children }) => (
+					<h3 className="mt-3 mb-1.5 text-xs font-medium text-foreground/92 first:mt-0">
+						{children}
+					</h3>
+				),
+				h4: ({ children }) => (
+					<h4 className="mt-3 mb-1.5 text-[11px] font-medium text-foreground/88 first:mt-0">
+						{children}
+					</h4>
+				),
+				h5: ({ children }) => (
+					<h5 className="mt-3 mb-1 text-[11px] font-medium text-foreground/84 first:mt-0">
+						{children}
+					</h5>
+				),
+				h6: ({ children }) => (
+					<h6 className="mt-3 mb-1 text-[10px] font-medium uppercase tracking-[0.08em] text-foreground/76 first:mt-0">
+						{children}
+					</h6>
+				),
+				p: ({ children }) => (
+					<p className="my-0 whitespace-pre-wrap text-xs leading-[1.8] text-foreground/85">
+						{children}
+					</p>
+				),
+				a: ({ href, children }) => (
+					<a
+						href={href}
+						target="_blank"
+						rel="noreferrer"
+						className="text-foreground underline decoration-foreground/30 underline-offset-2 transition hover:decoration-foreground/70"
+					>
+						{children}
+					</a>
+				),
+				ul: ({ children }) => <ul className="my-2 list-disc space-y-1 pl-5 text-xs">{children}</ul>,
+				ol: ({ children }) => <ol className="my-2 list-decimal space-y-1 pl-5 text-xs">{children}</ol>,
+				li: ({ children }) => <li className="text-foreground/84 marker:text-muted-foreground">{children}</li>,
+				blockquote: ({ children }) => (
+					<blockquote className="my-3 border-l border-foreground/14 pl-3 text-foreground/72">
+						{children}
+					</blockquote>
+				),
+				hr: () => <hr className="my-4 border-0 border-t border-foreground/10" />,
+				code: ({ className, children }) => {
+					const isBlock = typeof className === "string" && className.length > 0;
+
+					if (isBlock) {
+						return <code className={className}>{children}</code>;
+					}
+
+					return (
+						<code className="rounded border border-foreground/10 bg-card px-1.5 py-0.5 text-[11px] text-foreground/88">
+							{children}
+						</code>
+					);
+				},
+				pre: ({ children }) => (
+					<pre className="my-3 overflow-x-auto rounded-md border border-foreground/10 bg-card/90 px-3 py-2.5 text-[11px] leading-[1.7] text-foreground/80">
+						{children}
+					</pre>
+				),
+				table: ({ children }) => (
+					<div className="my-3 overflow-x-auto rounded-md border border-foreground/10">
+						<table className="w-full min-w-[20rem] border-collapse text-left text-[11px]">
+							{children}
+						</table>
+					</div>
+				),
+				thead: ({ children }) => <thead className="bg-card/90 text-foreground/84">{children}</thead>,
+				tbody: ({ children }) => <tbody className="divide-y divide-foreground/8">{children}</tbody>,
+				tr: ({ children }) => <tr className="align-top">{children}</tr>,
+				th: ({ children }) => (
+					<th className="border-b border-foreground/10 px-3 py-2 font-medium">{children}</th>
+				),
+				td: ({ children }) => <td className="px-3 py-2 text-foreground/78">{children}</td>,
+				input: ({ checked }) => (
+					<input
+						type="checkbox"
+						checked={checked}
+						readOnly
+						disabled
+						className="mr-2 size-3 rounded border border-foreground/20 accent-white"
+					/>
+				),
+			}}
+		>
+			{text}
+		</ReactMarkdown>
+	);
+}
 
 // ---------------------------------------------------------------------------
 // Loader
@@ -404,9 +509,11 @@ function EventRenderer({ event }: { event: HostEvent }) {
 
 		return (
 			<div className="animate-event-enter py-2">
-				<p className="whitespace-pre-wrap text-xs leading-[1.8] text-foreground/85">
-					{typeof event.data.text === "string" ? event.data.text : event.summary}
-				</p>
+				<div className="space-y-2">
+					<MarkdownMessage
+						text={typeof event.data.text === "string" ? event.data.text : event.summary}
+					/>
+				</div>
 			</div>
 		);
 	}
