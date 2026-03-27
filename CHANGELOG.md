@@ -4,6 +4,12 @@ All notable changes to shelleport are documented here.
 
 ## Unreleased
 
+## 0.0.13 - 2026-03-27
+
+### Fixed
+
+- Smoke now injects a known executable for Claude readiness checks so release CI does not depend on `claude` being installed on the runner
+
 ## 0.0.12 - 2026-03-27
 
 ### Fixed
