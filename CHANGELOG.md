@@ -4,6 +4,12 @@ All notable changes to shelleport are documented here.
 
 ## Unreleased
 
+## 0.0.12 - 2026-03-27
+
+### Fixed
+
+- Release-gate formatting regressions so `bun run check`, `bun test`, and `bun run smoke` pass before tagging
+
 ## 0.0.11 - 2026-03-27
 
 ### Added
