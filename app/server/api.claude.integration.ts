@@ -193,7 +193,8 @@ describe("real Claude API integration", () => {
 				body: JSON.stringify({
 					provider: "claude",
 					cwd: repoDir,
-					prompt: "Run git commit --allow-empty -m shelleport-test and then reply with DONE and nothing else.",
+					prompt:
+						"Run git commit --allow-empty -m shelleport-test and then reply with DONE and nothing else.",
 				}),
 			}),
 		);

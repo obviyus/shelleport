@@ -473,7 +473,9 @@ describe("handleApiRequest", () => {
 			}),
 		);
 		expect(createResponse.status).toBe(201);
-		const createJson = await readJson<{ session: { id: string; archived: boolean } }>(createResponse);
+		const createJson = await readJson<{ session: { id: string; archived: boolean } }>(
+			createResponse,
+		);
 		const sessionId = createJson.session.id;
 		expect(createJson.session.archived).toBe(false);
 
@@ -488,9 +490,9 @@ describe("handleApiRequest", () => {
 			}),
 		);
 		expect(archiveResponse.status).toBe(200);
-		expect((await readJson<{ session: { archived: boolean } }>(archiveResponse)).session.archived).toBe(
-			true,
-		);
+		expect(
+			(await readJson<{ session: { archived: boolean } }>(archiveResponse)).session.archived,
+		).toBe(true);
 
 		const listResponse = await handleApiRequest(
 			new Request("http://localhost/api/sessions", {

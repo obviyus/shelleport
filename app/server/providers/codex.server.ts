@@ -60,7 +60,8 @@ export async function parseCodexHistoricalSession(path: string): Promise<Histori
 				: providerSessionRef,
 		cwd,
 		sourcePath: path,
-		createTime: typeof payload.timestamp === "string" ? Date.parse(payload.timestamp) : stats.mtimeMs,
+		createTime:
+			typeof payload.timestamp === "string" ? Date.parse(payload.timestamp) : stats.mtimeMs,
 		updateTime: stats.mtimeMs,
 		preview,
 	};
@@ -95,6 +96,8 @@ export class CodexProviderAdapter implements ProviderAdapter {
 		const rootPath = `${Bun.env.HOME ?? ""}/.codex/sessions`;
 		const fileList = await listJsonlFiles(rootPath);
 		const sessions = await Promise.all(fileList.map(parseCodexHistoricalSession));
-		return sessions.filter((session) => session !== null).sort((left, right) => right.updateTime - left.updateTime);
+		return sessions
+			.filter((session) => session !== null)
+			.sort((left, right) => right.updateTime - left.updateTime);
 	}
 }
