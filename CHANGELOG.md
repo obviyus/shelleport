@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.4 - 2026-03-27
+
+- fix GitHub Actions to use `bun run check` and `bun run test`, so tag builds honor the serialized test runner
+
 ## 0.0.3 - 2026-03-27
 
 - run tests with `--max-concurrency 1` so singleton/env-coupled server tests behave deterministically in CI
