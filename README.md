@@ -27,12 +27,24 @@ Or download the latest binary from [Releases](https://github.com/obviyus/shellep
 shelleport serve
 ```
 
+For remote access on a VPS:
+
+```bash
+shelleport serve --tailscale
+```
+
+Or expose all interfaces:
+
+```bash
+shelleport serve --public
+```
+
 ### Install as a Service
 
 Shelleport can install itself as a background service that starts automatically:
 
 ```bash
-shelleport install-service
+shelleport install-service --tailscale
 ```
 
 This writes a service definition for your platform (launchd on macOS, systemd on Linux) and prints the command to activate it.
@@ -93,19 +105,30 @@ shelleport token
 | `HOST`   | `127.0.0.1` | Bind address |
 | `PORT`   | `3000`      | Bind port    |
 
+CLI flags:
+
+- `--host <address>` bind to one address
+- `--public` bind to `0.0.0.0`
+- `--tailscale` bind to the machine's Tailscale IPv4
+- `--port <port>` override the port
+
 ### Data Storage
 
 All data lives in `$XDG_DATA_HOME/shelleport` (defaults to `~/.local/share/shelleport`). The SQLite database stores sessions and events. Image attachments are saved in each session's working directory under `.shelleport/uploads/`.
 
 ## Remote Access with Tailscale
 
-Shelleport binds to `127.0.0.1` by default. To securely access it from your other devices, use [Tailscale Serve](https://tailscale.com/kb/1242/tailscale-serve) to proxy it over your tailnet:
+Shelleport binds to `127.0.0.1` by default. For direct access over your tailnet, bind to the Tailscale IP:
+
+```bash
+shelleport serve --tailscale
+```
+
+If you prefer Tailscale HTTPS proxying instead, keep Shelleport on loopback and use [Tailscale Serve](https://tailscale.com/kb/1242/tailscale-serve):
 
 ```bash
 tailscale serve --bg 3000
 ```
-
-Then visit `https://<your-machine>.<tailnet>.ts.net` from any device on your tailnet. Traffic stays within your private network and is encrypted end-to-end by Tailscale.
 
 ## API Reference
 
