@@ -938,12 +938,12 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			<main className="flex flex-1 flex-col overflow-hidden">
 				{isArchivedView ? (
 					<div className="flex flex-1 flex-col overflow-hidden">
-						<header className="shrink-0 border-b border-border bg-background/72 px-6 py-4 backdrop-blur-sm">
-							<div className="mx-auto max-w-[70rem]">
+						<header className="shrink-0 border-b border-border bg-background/72 px-5 py-2.5 backdrop-blur-sm">
+							<div className="mx-auto flex max-w-[70rem] items-center gap-3">
 								<h1 className="text-xs font-medium text-foreground">Archived sessions</h1>
-								<p className="text-[10px] text-muted-foreground/78">
+								<span className="text-[10px] text-muted-foreground/50">
 									Restore a thread to move it back into the main list.
-								</p>
+								</span>
 							</div>
 						</header>
 						<div className="flex-1 overflow-y-auto px-6 py-6">
@@ -993,123 +993,113 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 					</div>
 				) : selectedId && session ? (
 					<>
-						<header className="shrink-0 border-b border-border bg-background/72 px-6 py-5 backdrop-blur-sm">
-							<div className="mx-auto flex max-w-[70rem] flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-								<div className="min-w-0 flex-1">
-									<div className="flex flex-wrap items-center gap-x-2 gap-y-2">
-										{session.pinned && <Pin className="size-3 shrink-0 text-foreground/72" />}
-										{isRenaming ? (
-											<div className="flex min-w-0 items-center gap-1.5">
-												<input
-													value={renameDraft}
-													onChange={(event) => setRenameDraft(event.target.value)}
-													onKeyDown={(event) => {
-														if (event.key === "Enter") {
-															event.preventDefault();
-															void handleRename();
-														}
+						<header className="shrink-0 border-b border-border bg-background/72 px-5 py-2.5 backdrop-blur-sm">
+							<div className="mx-auto flex max-w-[70rem] items-center justify-between gap-4">
+								<div className="flex min-w-0 flex-1 items-center gap-3">
+									{session.pinned && <Pin className="size-3 shrink-0 text-foreground/72" />}
+									{isRenaming ? (
+										<div className="flex min-w-0 items-center gap-1.5">
+											<input
+												value={renameDraft}
+												onChange={(event) => setRenameDraft(event.target.value)}
+												onKeyDown={(event) => {
+													if (event.key === "Enter") {
+														event.preventDefault();
+														void handleRename();
+													}
 
-														if (event.key === "Escape") {
-															event.preventDefault();
-															setRenameDraft(session.title);
-															setIsRenaming(false);
-														}
-													}}
-													autoFocus
-													className="h-8 min-w-0 rounded border border-foreground/12 bg-card px-2.5 text-sm font-medium text-foreground outline-none"
-												/>
-												<button
-													type="button"
-													onClick={() => void handleRename()}
-													className="flex size-7 items-center justify-center rounded border border-foreground/10 text-muted-foreground/82 transition hover:border-foreground/18 hover:text-foreground"
-													title="Save title"
-												>
-													<Check className="size-3" />
-												</button>
-												<button
-													type="button"
-													onClick={() => {
+													if (event.key === "Escape") {
+														event.preventDefault();
 														setRenameDraft(session.title);
 														setIsRenaming(false);
-													}}
-													className="flex size-7 items-center justify-center rounded border border-foreground/10 text-muted-foreground/82 transition hover:border-foreground/18 hover:text-foreground"
-													title="Cancel rename"
-												>
-													<X className="size-3" />
-												</button>
-											</div>
-										) : (
-											<>
-												<h1 className="truncate text-sm font-medium text-foreground">
-													{session.title}
-												</h1>
-												<button
-													type="button"
-													onClick={() => setIsRenaming(true)}
-													className="flex size-7 items-center justify-center rounded text-muted-foreground/82 transition hover:bg-accent hover:text-foreground"
-													title="Rename chat"
-												>
-													<Pencil className="size-3" />
-												</button>
-											</>
-										)}
-									</div>
-									<div className="mt-2 flex flex-wrap items-center gap-2">
-										<span className="rounded-full border border-foreground/10 bg-card/90 px-2.5 py-1 text-[10px] text-muted-foreground/82">
-											{session.cwd}
-										</span>
-										{permissionModeLabel && (
-											<span className="rounded-full border border-foreground/10 bg-card/90 px-2.5 py-1 text-[9px] uppercase tracking-[0.1em] text-muted-foreground/80">
-												{permissionModeLabel}
-											</span>
-										)}
-									</div>
-									{usageBadges.length > 0 && (
-										<div className="mt-4 border-t border-foreground/8 pt-3">
-											<div className="flex flex-wrap gap-2">
-												{usageBadges.map((badge) => (
-													<span
-														key={badge}
-														className="rounded-full border border-foreground/10 bg-card/90 px-2.5 py-1 text-[9px] uppercase tracking-[0.12em] text-muted-foreground/80"
-													>
-														{badge}
-													</span>
-												))}
-											</div>
+													}
+												}}
+												autoFocus
+												className="h-6 min-w-0 rounded border border-foreground/12 bg-card px-2 text-xs font-medium text-foreground outline-none"
+											/>
+											<button
+												type="button"
+												onClick={() => void handleRename()}
+												className="flex size-6 items-center justify-center rounded border border-foreground/10 text-muted-foreground/82 transition hover:border-foreground/18 hover:text-foreground"
+												title="Save title"
+											>
+												<Check className="size-3" />
+											</button>
+											<button
+												type="button"
+												onClick={() => {
+													setRenameDraft(session.title);
+													setIsRenaming(false);
+												}}
+												className="flex size-6 items-center justify-center rounded border border-foreground/10 text-muted-foreground/82 transition hover:border-foreground/18 hover:text-foreground"
+												title="Cancel rename"
+											>
+												<X className="size-3" />
+											</button>
 										</div>
+									) : (
+										<>
+											<h1 className="truncate text-xs font-medium text-foreground">
+												{session.title}
+											</h1>
+											<button
+												type="button"
+												onClick={() => setIsRenaming(true)}
+												className="flex size-5 items-center justify-center rounded text-muted-foreground/60 transition hover:bg-accent hover:text-foreground"
+												title="Rename chat"
+											>
+												<Pencil className="size-2.5" />
+											</button>
+										</>
 									)}
+									<span className="hidden text-[10px] text-muted-foreground/50 lg:inline">
+										{session.cwd}
+									</span>
 								</div>
-								<div className="flex shrink-0 flex-wrap items-center gap-2.5 xl:max-w-sm xl:justify-end">
-									<div className="flex items-center gap-2 rounded-full border border-foreground/10 bg-card/90 px-2.5 py-1.5">
+								<div className="flex shrink-0 items-center gap-1.5">
+									<div className="flex items-center gap-1.5 rounded border border-foreground/8 px-2 py-1">
 										<StatusDot status={session.status} />
-										<span className="text-[10px] text-muted-foreground/82">
+										<span className="text-[10px] text-muted-foreground/72">
 											{formatStatus(session, now)}
 										</span>
 									</div>
 									{streamState === "reconnecting" && (
-										<span className="rounded-full border border-foreground/12 bg-card/90 px-2.5 py-1 text-[9px] uppercase tracking-[0.12em] text-muted-foreground/82">
+										<span className="rounded border border-foreground/10 px-2 py-1 text-[9px] uppercase tracking-[0.08em] text-muted-foreground/72">
 											Reconnecting
 										</span>
 									)}
+									{permissionModeLabel && (
+										<span className="hidden rounded border border-foreground/8 px-2 py-1 text-[9px] uppercase tracking-[0.08em] text-muted-foreground/60 md:inline-flex">
+											{permissionModeLabel}
+										</span>
+									)}
+									{usageBadges.map((badge) => (
+										<span
+											key={badge}
+											className="hidden rounded border border-foreground/8 px-2 py-1 text-[9px] uppercase tracking-[0.08em] text-muted-foreground/60 xl:inline-flex"
+										>
+											{badge}
+										</span>
+									))}
 									<button
 										type="button"
 										onClick={() => void handlePinned(session.id, !session.pinned)}
-										className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] transition ${
+										className={`flex items-center gap-1 rounded border px-2 py-1 text-[10px] transition ${
 											session.pinned
-												? "border-foreground/18 bg-accent text-foreground"
-												: "border-foreground/10 text-muted-foreground/82 hover:border-foreground/22 hover:text-foreground"
+												? "border-foreground/15 bg-accent text-foreground"
+												: "border-foreground/8 text-muted-foreground/60 hover:border-foreground/18 hover:text-foreground"
 										}`}
 									>
-										<Pin className="size-3" />
+										<Pin className="size-2.5" />
 										{session.pinned ? "Pinned" : "Pin"}
 									</button>
 									{(session.status === "running" || session.status === "retrying") && (
 										<button
 											type="button"
 											onClick={() => void handleInterrupt()}
-											className="flex items-center gap-1.5 rounded-full border border-foreground/10 px-3 py-1.5 text-[11px] text-muted-foreground/82 transition hover:border-foreground/22 hover:text-foreground"
+											className="flex items-center gap-1 rounded border border-foreground/8 px-2 py-1 text-[10px] text-muted-foreground/60 transition hover:border-foreground/18 hover:text-foreground"
 										>
-											<CircleStop className="size-3" />
+											<CircleStop className="size-2.5" />
 											Stop
 										</button>
 									)}
