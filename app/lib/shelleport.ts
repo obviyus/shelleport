@@ -144,6 +144,18 @@ export type SessionArchivePayload = {
 	archived: boolean;
 };
 
+export type DirectoryEntry = {
+	name: string;
+	path: string;
+	kind: "directory" | "file";
+};
+
+export type DirectoryListing = {
+	path: string;
+	parentPath: string | null;
+	entries: DirectoryEntry[];
+};
+
 export type ImportSessionPayload = {
 	provider: ProviderId;
 	providerSessionRef: string;

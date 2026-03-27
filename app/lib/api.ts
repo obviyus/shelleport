@@ -1,5 +1,6 @@
 import type {
 	CreateSessionInput,
+	DirectoryListing,
 	HostSession,
 	PendingRequest,
 	ProviderSummary,
@@ -56,6 +57,11 @@ export function validateToken(token: string) {
 
 export function fetchSessions(token: string) {
 	return request<{ sessions: HostSession[] }>("/api/sessions", token);
+}
+
+export function fetchDirectory(token: string, path: string) {
+	const params = new URLSearchParams({ path });
+	return request<DirectoryListing>(`/api/directories?${params.toString()}`, token);
 }
 
 export function fetchSessionDetail(token: string, sessionId: string) {

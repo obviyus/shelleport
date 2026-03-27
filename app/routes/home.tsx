@@ -28,14 +28,7 @@ import { getFiletypeFromFileName } from "@pierre/diffs";
 import ReactMarkdown from "react-markdown";
 import { useLocation, useNavigate, useParams } from "react-router";
 import remarkGfm from "remark-gfm";
-import {
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-} from "~/components/ui/dialog";
+import { SessionLauncher } from "~/components/session-launcher";
 import {
 	clearToken,
 	connectSSE,
@@ -795,36 +788,6 @@ function PendingRequestBanner({
 	);
 }
 
-// ---------------------------------------------------------------------------
-// Empty state
-// ---------------------------------------------------------------------------
-
-function EmptyState({ onNew }: { onNew: () => void }) {
-	return (
-		<div className="flex flex-1 items-center justify-center">
-			<div className="text-center">
-				<div className="mx-auto mb-6 flex size-14 items-center justify-center rounded-lg border border-foreground/10 bg-card shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]">
-					<Terminal className="size-6 text-muted-foreground/70" />
-				</div>
-				<p className="text-xs font-medium text-foreground/72">No session selected</p>
-				<p className="mt-1.5 text-[11px] text-muted-foreground/85">Create a session to start</p>
-				<button
-					type="button"
-					onClick={onNew}
-					className="mt-6 inline-flex items-center gap-1.5 rounded-md bg-foreground px-4 py-2 text-xs font-medium text-background transition hover:bg-foreground/90"
-				>
-					<Plus className="size-3.5" />
-					New session
-				</button>
-			</div>
-		</div>
-	);
-}
-
-// ---------------------------------------------------------------------------
-// Main component
-// ---------------------------------------------------------------------------
-
 export default function Home({ loaderData }: Route.ComponentProps) {
 	const navigate = useNavigate();
 	const location = useLocation();
@@ -843,9 +806,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 	const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
 	const [prompt, setPrompt] = useState("");
 	const [draftImages, setDraftImages] = useState<DraftImage[]>([]);
-	const [showNewSession, setShowNewSession] = useState(false);
-	const [newCwd, setNewCwd] = useState(loaderData.defaultCwd);
-	const [newTitle, setNewTitle] = useState("");
 	const [isCreating, setIsCreating] = useState(false);
 	const [initialLoading, setInitialLoading] = useState(true);
 	const [now, setNow] = useState(() => Date.now());
@@ -977,26 +937,24 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 	}
 
 	// Actions
-	const handleCreateSession = useCallback(async () => {
-		if (!token || !newCwd.trim()) return;
+	const handleCreateSession = useCallback(async (cwd: string, title: string) => {
+		if (!token || !cwd.trim()) return;
 		setIsCreating(true);
 		try {
 			const result = await createSession(token, {
 				provider: "claude",
-				cwd: newCwd.trim(),
-				title: newTitle.trim() || undefined,
+				cwd: cwd.trim(),
+				title: title || undefined,
 			});
 			setSessions((prev) => [result.session, ...prev]);
 			navigate(`/sessions/${result.session.id}`);
-			setShowNewSession(false);
-			setNewTitle("");
 			setTimeout(() => textareaRef.current?.focus(), 100);
 		} catch (err) {
 			console.error("Failed to create session:", err);
 		} finally {
 			setIsCreating(false);
 		}
-	}, [token, newCwd, newTitle, navigate]);
+	}, [token, navigate]);
 
 	const handleSend = useCallback(async () => {
 		if (!token || !selectedId || session?.status === "running" || session?.status === "retrying") {
@@ -1157,7 +1115,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 					</span>
 					<button
 						type="button"
-						onClick={() => setShowNewSession(true)}
+						onClick={() => navigate("/")}
 						className="flex size-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
 						title="New session"
 					>
@@ -1176,7 +1134,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 							<p className="text-[11px] text-muted-foreground">No sessions</p>
 							<button
 								type="button"
-								onClick={() => setShowNewSession(true)}
+								onClick={() => navigate("/")}
 								className="mt-2 text-[11px] text-foreground/68 transition hover:text-foreground"
 							>
 								Create one
@@ -1506,68 +1464,14 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 						</div>
 					</>
 				) : (
-					<EmptyState onNew={() => setShowNewSession(true)} />
+					<SessionLauncher
+						defaultPath={loaderData.defaultCwd}
+						isCreating={isCreating}
+						onCreate={handleCreateSession}
+						token={token}
+					/>
 				)}
 			</main>
-
-			{/* ============================================================= */}
-			{/* New session dialog                                             */}
-			{/* ============================================================= */}
-			<Dialog open={showNewSession} onOpenChange={setShowNewSession}>
-				<DialogContent className="sm:max-w-md">
-					<DialogHeader>
-						<DialogTitle className="text-sm">New Session</DialogTitle>
-						<DialogDescription className="text-xs">
-							Start a Claude Code session on the remote machine.
-						</DialogDescription>
-					</DialogHeader>
-					<div className="space-y-4 py-1">
-						<div>
-							<label className="mb-1.5 block text-[11px] text-muted-foreground/88">Directory</label>
-							<div className="relative">
-								<FolderOpen className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/82" />
-								<input
-									type="text"
-									value={newCwd}
-									onChange={(e) => setNewCwd(e.target.value)}
-									placeholder="/path/to/project"
-									className="h-9 w-full rounded-md border border-foreground/10 bg-background pl-8 pr-3 text-xs text-foreground outline-none transition placeholder:text-muted-foreground/58 focus:border-foreground/22 focus:ring-1 focus:ring-foreground/16"
-								/>
-							</div>
-						</div>
-						<div>
-							<label className="mb-1.5 block text-[11px] text-muted-foreground/88">
-								Title <span className="text-muted-foreground/58">(optional)</span>
-							</label>
-							<input
-								type="text"
-								value={newTitle}
-								onChange={(e) => setNewTitle(e.target.value)}
-								placeholder="My project"
-								className="h-9 w-full rounded-md border border-foreground/10 bg-background px-3 text-xs text-foreground outline-none transition placeholder:text-muted-foreground/58 focus:border-foreground/22 focus:ring-1 focus:ring-foreground/16"
-							/>
-						</div>
-					</div>
-					<DialogFooter>
-						<button
-							type="button"
-							onClick={() => setShowNewSession(false)}
-							className="rounded-md border border-foreground/10 px-3 py-1.5 text-xs text-muted-foreground/85 transition hover:bg-accent hover:text-foreground"
-						>
-							Cancel
-						</button>
-						<button
-							type="button"
-							onClick={handleCreateSession}
-							disabled={isCreating || !newCwd.trim()}
-							className="flex items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-background transition hover:bg-foreground/90 disabled:opacity-30"
-						>
-							{isCreating && <Loader2 className="size-3 animate-spin" />}
-							Create
-						</button>
-					</DialogFooter>
-				</DialogContent>
-			</Dialog>
 		</div>
 	);
 }
