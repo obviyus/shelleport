@@ -6,6 +6,10 @@ export type HostEventKind = "text" | "tool-call" | "tool-result" | "state" | "er
 
 export type PermissionMode = "default" | "dontAsk";
 
+export function getDefaultPermissionMode(providerId: ProviderId): PermissionMode {
+	return providerId === "claude" ? "dontAsk" : "default";
+}
+
 export type ProviderCapabilities = {
 	canCreate: boolean;
 	canResumeHistorical: boolean;

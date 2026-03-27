@@ -26,6 +26,14 @@ import {
 import type { AppBootData } from "~/client/boot";
 import { SessionLauncher } from "~/client/components/session-launcher";
 import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "~/client/components/ui/dialog";
+import {
 	connectSSE,
 	controlSession,
 	createSession,
@@ -40,6 +48,7 @@ import type {
 	HostEvent,
 	HostSession,
 	PendingRequest,
+	PermissionMode,
 	ProviderLimitState,
 	ProviderSummary,
 	RequestResponsePayload,
@@ -79,6 +88,16 @@ function orderSessions(nextSessions: HostSession[]) {
 	});
 }
 
+const CLAUDE_BYPASS_WARNING_KEY = "shelleport.claude-bypass-warning-dismissed";
+
+function formatPermissionModeLabel(session: HostSession) {
+	if (session.provider !== "claude") {
+		return null;
+	}
+
+	return session.permissionMode === "dontAsk" ? "Bypass permissions" : "Approval prompts";
+}
+
 export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated: true }> }) {
 	const route = useCurrentRoute();
 	const { navigate } = useRouter();
@@ -109,6 +128,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const [renameDraft, setRenameDraft] = useState("");
 	const [isRenaming, setIsRenaming] = useState(false);
 	const [sessionQuery, setSessionQuery] = useState("");
+	const [showsClaudeBypassWarning, setShowsClaudeBypassWarning] = useState(false);
 	const deferredSessionQuery = useDeferredValue(sessionQuery);
 	const { activeSessions, archivedSessions } = useMemo(() => {
 		const active: HostSession[] = [];
@@ -147,6 +167,11 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			? null
 			: (providers.find((provider) => provider.capabilities.canCreate)?.statusDetail ??
 				"No managed provider is available.");
+	const showsClaudeLauncherWarning =
+		createProvider?.id === "claude" &&
+		sessions.length === 0 &&
+		route.kind === "home" &&
+		typeof window !== "undefined";
 
 	function mergeClaudeLimit(previous: SessionLimit[], next: SessionLimit) {
 		if (!next.window) {
@@ -322,8 +347,22 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		};
 	}, []);
 
+	useEffect(() => {
+		if (!showsClaudeLauncherWarning) {
+			setShowsClaudeBypassWarning(false);
+			return;
+		}
+
+		if (window.localStorage.getItem(CLAUDE_BYPASS_WARNING_KEY) === "1") {
+			setShowsClaudeBypassWarning(false);
+			return;
+		}
+
+		setShowsClaudeBypassWarning(true);
+	}, [showsClaudeLauncherWarning]);
+
 	const handleCreateSession = useCallback(
-		async (cwd: string, title: string) => {
+		async (cwd: string, title: string, permissionMode: PermissionMode) => {
 			if (!cwd.trim() || !createProvider) {
 				return;
 			}
@@ -334,6 +373,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 				const result = await createSession({
 					provider: createProvider.id,
 					cwd: cwd.trim(),
+					permissionMode,
 					title: title || undefined,
 				});
 				await refreshSessions(sessionQuery);
@@ -347,6 +387,14 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		},
 		[createProvider, navigate, refreshSessions, sessionQuery],
 	);
+
+	function dismissClaudeBypassWarning() {
+		if (typeof window !== "undefined") {
+			window.localStorage.setItem(CLAUDE_BYPASS_WARNING_KEY, "1");
+		}
+
+		setShowsClaudeBypassWarning(false);
+	}
 
 	const handleSend = useCallback(async () => {
 		if (!selectedId || session?.status === "running" || session?.status === "retrying") {
@@ -506,6 +554,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const isSessionBusy = session?.status === "running" || session?.status === "retrying";
 	const canSend =
 		!!selectedId && (prompt.trim().length > 0 || draftImages.length > 0) && !isSessionBusy;
+	const permissionModeLabel = session ? formatPermissionModeLabel(session) : null;
 
 	function handleScroll() {
 		const element = scrollRef.current;
@@ -535,6 +584,41 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 
 	return (
 		<div className="flex h-screen overflow-hidden bg-background">
+			<Dialog
+				open={showsClaudeBypassWarning}
+				onOpenChange={(open) => {
+					if (open) {
+						setShowsClaudeBypassWarning(true);
+						return;
+					}
+
+					dismissClaudeBypassWarning();
+				}}
+			>
+				<DialogContent showCloseButton={false} className="max-w-xl border-foreground/14 bg-card">
+					<DialogHeader className="text-left">
+						<div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-foreground/56">
+							Claude setup
+						</div>
+						<DialogTitle className="text-xl font-medium tracking-[-0.04em] text-foreground">
+							Bypass permissions should stay on.
+						</DialogTitle>
+						<DialogDescription className="text-[12px] leading-[1.7] text-muted-foreground/84">
+							Shelleport works best when Claude runs in bypass permissions mode. You can turn it off
+							per session, but approval prompts are still rough and may not behave cleanly.
+						</DialogDescription>
+					</DialogHeader>
+					<DialogFooter>
+						<button
+							type="button"
+							onClick={dismissClaudeBypassWarning}
+							className="inline-flex h-9 items-center justify-center rounded-md bg-foreground px-4 text-sm font-medium text-background transition hover:bg-foreground/90"
+						>
+							Continue
+						</button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
 			<aside className="flex w-56 shrink-0 flex-col border-r border-foreground/10 bg-card/55 backdrop-blur-sm">
 				<div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-4">
 					<span className="text-[11px] font-semibold uppercase tracking-[0.15em] text-foreground/72">
@@ -837,6 +921,11 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 									<span className="shrink-0 text-[10px] text-muted-foreground/78">
 										{session.cwd}
 									</span>
+									{permissionModeLabel && (
+										<span className="shrink-0 rounded border border-foreground/10 bg-card/90 px-1.5 py-px text-[9px] uppercase tracking-[0.08em] text-muted-foreground/80">
+											{permissionModeLabel}
+										</span>
+									)}
 								</div>
 								{usageBadges.length > 0 && (
 									<div className="mt-1 flex flex-wrap gap-1.5">
@@ -1013,6 +1102,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 					<SessionLauncher
 						createDisabledReason={createDisabledReason}
 						createLabel={createProvider?.label ?? "managed"}
+						createProviderId={createProvider?.id ?? null}
 						defaultPath={boot.defaultCwd}
 						isCreating={isCreating}
 						onCreate={handleCreateSession}
