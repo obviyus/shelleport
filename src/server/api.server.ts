@@ -409,7 +409,7 @@ async function dispatchApiRequest(request: Request) {
 	}
 
 	if (request.method === "GET" && url.pathname === "/api/sessions") {
-		return Response.json({ sessions: sessionBroker.listSessions() });
+		return Response.json({ sessions: sessionBroker.listSessions(url.searchParams.get("q") ?? "") });
 	}
 
 	if (request.method === "POST" && url.pathname === "/api/sessions") {

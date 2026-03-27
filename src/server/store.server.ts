@@ -84,6 +84,16 @@ database.exec(`
 	);
 `);
 
+database.exec(`
+	CREATE VIRTUAL TABLE IF NOT EXISTS host_session_fts USING fts5(
+		session_id UNINDEXED,
+		title,
+		cwd,
+		provider,
+		tokenize = 'unicode61 remove_diacritics 2'
+	);
+`);
+
 type SqlColumnRow = {
 	name: string;
 };
@@ -190,6 +200,13 @@ type SqlProviderLimitRow = {
 	update_time: number;
 };
 
+type SqlSessionSearchRow = {
+	id: string;
+	title: string;
+	cwd: string;
+	provider: string;
+};
+
 function parseJsonRecord(value: string) {
 	return JSON.parse(value) as Record<string, unknown>;
 }
@@ -281,6 +298,14 @@ const getSessionStatement = database.query<SqlSessionRow, [string]>(
 	"SELECT * FROM host_sessions WHERE id = ? LIMIT 1",
 );
 
+const searchSessionsStatement = database.query<SqlSessionRow, [string]>(
+	`SELECT host_sessions.*
+		FROM host_session_fts
+		JOIN host_sessions ON host_sessions.id = host_session_fts.session_id
+		WHERE host_session_fts MATCH ?
+		ORDER BY host_sessions.pinned DESC, bm25(host_session_fts), host_sessions.update_time DESC`,
+);
+
 const updateSessionStatement = database.query(
 	`UPDATE host_sessions
 		SET status = ?, status_detail_json = ?, provider_session_ref = ?, pid = ?, title = ?, pinned = ?, archived = ?, permission_mode = ?, allowed_tools_json = ?, update_time = ?
@@ -352,6 +377,20 @@ const upsertProviderLimitStatement = database.query(
 		update_time = excluded.update_time`,
 );
 
+const listSessionsForSearchSyncStatement = database.query<SqlSessionSearchRow, []>(
+	"SELECT id, title, cwd, provider FROM host_sessions",
+);
+
+const clearSessionSearchStatement = database.query("DELETE FROM host_session_fts");
+
+const insertSessionSearchStatement = database.query(
+	"INSERT INTO host_session_fts (session_id, title, cwd, provider) VALUES (?, ?, ?, ?)",
+);
+
+const deleteSessionSearchStatement = database.query(
+	"DELETE FROM host_session_fts WHERE session_id = ?",
+);
+
 function mapProviderLimit(row: SqlProviderLimitRow): SessionLimit {
 	return {
 		status: row.status,
@@ -360,6 +399,30 @@ function mapProviderLimit(row: SqlProviderLimitRow): SessionLimit {
 		isUsingOverage: row.is_using_overage === null ? null : row.is_using_overage === 1,
 	};
 }
+
+function syncSessionSearchIndex(session: Pick<HostSession, "id" | "title" | "cwd" | "provider">) {
+	deleteSessionSearchStatement.run(session.id);
+	insertSessionSearchStatement.run(session.id, session.title, session.cwd, session.provider);
+}
+
+function rebuildSessionSearchIndex() {
+	clearSessionSearchStatement.run();
+
+	for (const session of listSessionsForSearchSyncStatement.all()) {
+		insertSessionSearchStatement.run(session.id, session.title, session.cwd, session.provider);
+	}
+}
+
+function buildSessionSearchQuery(query: string) {
+	return query
+		.trim()
+		.split(/\s+/)
+		.filter((token) => token.length > 0)
+		.map((token) => `"${token.replaceAll('"', '""')}"*`)
+		.join(" AND ");
+}
+
+rebuildSessionSearchIndex();
 
 export type CreateStoredSessionInput = {
 	provider: ProviderId;
@@ -430,11 +493,18 @@ export const sessionStore = {
 			session.createTime,
 			session.updateTime,
 		);
+		syncSessionSearchIndex(session);
 
 		return session;
 	},
 	listSessions() {
 		return listSessionsStatement.all().map(mapSession);
+	},
+	searchSessions(query: string) {
+		const match = buildSessionSearchQuery(query);
+		return match.length === 0
+			? this.listSessions()
+			: searchSessionsStatement.all(match).map(mapSession);
 	},
 	getSession(sessionId: string) {
 		const row = getSessionStatement.get(sessionId);
@@ -526,6 +596,7 @@ export const sessionStore = {
 			next.updateTime,
 			sessionId,
 		);
+		syncSessionSearchIndex(next);
 
 		return next;
 	},

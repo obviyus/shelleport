@@ -733,6 +733,61 @@ describe("handleApiRequest", () => {
 		});
 	});
 
+	test("searches sessions with fts prefixes", async () => {
+		await Bun.$`mkdir -p ${join(testRoot, "alpha-workspace")} ${join(testRoot, "bravo-workspace")}`.quiet();
+
+		const alphaResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "claude",
+					cwd: join(testRoot, "alpha-workspace"),
+					title: "Refactor search index",
+				}),
+			}),
+		);
+		expect(alphaResponse.status).toBe(201);
+		const alphaSession = await readJson<{ session: { id: string } }>(alphaResponse);
+
+		const bravoResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "claude",
+					cwd: join(testRoot, "bravo-workspace"),
+					title: "Pin threads",
+				}),
+			}),
+		);
+		expect(bravoResponse.status).toBe(201);
+
+		const searchResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions?q=refac%20alpha", {
+				headers: authHeader,
+			}),
+		);
+		expect(searchResponse.status).toBe(200);
+		const searchJson = await readJson<{
+			sessions: Array<{
+				id: string;
+				title: string;
+			}>;
+		}>(searchResponse);
+		expect(searchJson.sessions).toHaveLength(1);
+		expect(searchJson.sessions[0]).toMatchObject({
+			id: alphaSession.session.id,
+			title: "Refactor search index",
+		});
+	});
+
 	test("starts a session, streams SSE, and resumes after approval", async () => {
 		const createResponse = await handleApiRequest(
 			new Request("http://localhost/api/sessions", {

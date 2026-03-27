@@ -260,8 +260,10 @@ async function consumeProviderRun(
 }
 
 export const sessionBroker = {
-	listSessions() {
-		return sessionStore.listSessions();
+	listSessions(query?: string) {
+		return query && query.trim().length > 0
+			? sessionStore.searchSessions(query)
+			: sessionStore.listSessions();
 	},
 	getSessionDetail(sessionId: string) {
 		return sessionStore.getSessionDetail(sessionId);

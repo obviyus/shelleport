@@ -10,10 +10,19 @@ import {
 	Pencil,
 	Pin,
 	Plus,
+	Search,
 	Send,
 	X,
 } from "lucide-react";
-import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+	startTransition,
+	useCallback,
+	useDeferredValue,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import type { AppBootData } from "~/client/boot";
 import { SessionLauncher } from "~/client/components/session-launcher";
 import {
@@ -98,6 +107,8 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const [archiveConfirmId, setArchiveConfirmId] = useState<string | null>(null);
 	const [renameDraft, setRenameDraft] = useState("");
 	const [isRenaming, setIsRenaming] = useState(false);
+	const [sessionQuery, setSessionQuery] = useState("");
+	const deferredSessionQuery = useDeferredValue(sessionQuery);
 	const { activeSessions, archivedSessions } = useMemo(() => {
 		const active: HostSession[] = [];
 		const archived: HostSession[] = [];
@@ -140,6 +151,11 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		);
 	}, []);
 
+	const refreshSessions = useCallback(async (query: string) => {
+		const { sessions: nextSessions } = await fetchSessions(query);
+		setSessions(orderSessions(nextSessions));
+	}, []);
+
 	useEffect(() => {
 		draftImagesRef.current = draftImages;
 	}, [draftImages]);
@@ -151,13 +167,24 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	}, []);
 
 	useEffect(() => {
-		fetchSessions()
-			.then(({ sessions: nextSessions }) => {
-				setSessions(orderSessions(nextSessions));
-				setInitialLoading(false);
+		let cancelled = false;
+
+		refreshSessions(deferredSessionQuery)
+			.then(() => {
+				if (!cancelled) {
+					setInitialLoading(false);
+				}
 			})
-			.catch(() => setInitialLoading(false));
-	}, []);
+			.catch(() => {
+				if (!cancelled) {
+					setInitialLoading(false);
+				}
+			});
+
+		return () => {
+			cancelled = true;
+		};
+	}, [deferredSessionQuery, refreshSessions]);
 
 	useEffect(() => {
 		setRenameDraft(session?.title ?? "");
@@ -285,7 +312,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 					cwd: cwd.trim(),
 					title: title || undefined,
 				});
-				setSessions((previous) => orderSessions([result.session, ...previous]));
+				await refreshSessions(sessionQuery);
 				navigate(`/sessions/${result.session.id}`);
 				setTimeout(() => textareaRef.current?.focus(), 100);
 			} catch (error) {
@@ -346,11 +373,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		async (sessionId: string, archived: boolean) => {
 			try {
 				const result = await setSessionArchived(sessionId, archived);
-				setSessions((previous) =>
-					previous.map((candidate) =>
-						candidate.id === result.session.id ? result.session : candidate,
-					),
-				);
+				await refreshSessions(sessionQuery);
 				setSession((previous) => (previous?.id === result.session.id ? result.session : previous));
 				setArchiveConfirmId((current) => (current === sessionId ? null : current));
 
@@ -368,7 +391,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 				console.error("Failed to update archive state:", error);
 			}
 		},
-		[isArchivedView, navigate, selectedId],
+		[isArchivedView, navigate, refreshSessions, selectedId, sessionQuery],
 	);
 
 	const handleRespond = useCallback(async (requestId: string, payload: RequestResponsePayload) => {
@@ -383,13 +406,13 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		async (sessionId: string, pinned: boolean) => {
 			try {
 				const result = await updateSessionMeta(sessionId, { pinned });
-				replaceSession(result.session);
+				await refreshSessions(sessionQuery);
 				setSession((previous) => (previous?.id === result.session.id ? result.session : previous));
 			} catch (error) {
 				console.error("Failed to update pinned state:", error);
 			}
 		},
-		[replaceSession],
+		[refreshSessions, sessionQuery],
 	);
 
 	const handleRename = useCallback(async () => {
@@ -407,14 +430,14 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 
 		try {
 			const result = await updateSessionMeta(session.id, { title });
-			replaceSession(result.session);
+			await refreshSessions(sessionQuery);
 			setSession(result.session);
 			setRenameDraft(result.session.title);
 			setIsRenaming(false);
 		} catch (error) {
 			console.error("Failed to rename session:", error);
 		}
-	}, [renameDraft, replaceSession, session]);
+	}, [refreshSessions, renameDraft, session, sessionQuery]);
 
 	const addDraftImages = useCallback(async (files: File[]) => {
 		const normalizedImages = await Promise.all(files.map(normalizeDraftImage));
@@ -503,6 +526,17 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 				</div>
 
 				<div className="flex-1 overflow-y-auto px-2 py-2">
+					<div className="mb-2 px-1">
+						<div className="relative">
+							<Search className="pointer-events-none absolute top-1/2 left-2.5 size-3 -translate-y-1/2 text-muted-foreground/70" />
+							<input
+								value={sessionQuery}
+								onChange={(event) => setSessionQuery(event.target.value)}
+								placeholder="Search chats"
+								className="h-8 w-full rounded-md border border-foreground/10 bg-background/40 pr-2 pl-7 text-[11px] text-foreground outline-none transition placeholder:text-muted-foreground/60 focus:border-foreground/18"
+							/>
+						</div>
+					</div>
 					{initialLoading ? (
 						<div className="flex items-center justify-center py-8">
 							<Loader2 className="size-3.5 animate-spin text-muted-foreground" />
