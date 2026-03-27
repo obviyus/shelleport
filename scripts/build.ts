@@ -1,6 +1,6 @@
 import { readdir } from "node:fs/promises";
 
-const browserOutdir = "./src/client/.generated";
+export const browserOutdir = "./src/client/.generated";
 const serverOutdir = "./build/server";
 
 async function rewriteBrowserShell(fileName: string) {
@@ -13,11 +13,7 @@ async function rewriteBrowserShell(fileName: string) {
 }
 
 async function writeBrowserManifest() {
-	const entries = await readdir(browserOutdir, { withFileTypes: true });
-	const files = entries
-		.filter((entry) => entry.isFile())
-		.map((entry) => entry.name)
-		.sort((left, right) => left.localeCompare(right));
+	const { files, shellFileName } = await readBrowserBuild();
 	const imports: string[] = [];
 	const assetEntries: string[] = [];
 	let shellImportName = "";
@@ -27,9 +23,8 @@ async function writeBrowserManifest() {
 		imports.push(
 			`import ${importName} from "../client/.generated/${fileName}" with { type: "file" };`,
 		);
-		if (fileName.endsWith(".html")) {
+		if (fileName === shellFileName) {
 			shellImportName = importName;
-			await rewriteBrowserShell(fileName);
 			continue;
 		}
 
@@ -50,6 +45,26 @@ export const clientShellPath = ${shellImportName};
 `;
 
 	await Bun.write("./src/server/client-assets.generated.js", manifestSource);
+}
+
+export async function readBrowserBuild() {
+	const entries = await readdir(browserOutdir, { withFileTypes: true });
+	const files = entries
+		.filter((entry) => entry.isFile())
+		.map((entry) => entry.name)
+		.sort((left, right) => left.localeCompare(right));
+	const shellFileName = files.find((fileName) => fileName.endsWith(".html"));
+
+	if (!shellFileName) {
+		throw new Error("Browser build did not emit an HTML shell");
+	}
+
+	await rewriteBrowserShell(shellFileName);
+
+	return {
+		files,
+		shellFileName,
+	};
 }
 
 export async function buildBrowser() {

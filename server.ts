@@ -8,7 +8,7 @@ import {
 	getAuthStatus,
 	rotateAdminToken,
 } from "~/server/auth.server";
-import { buildBrowser } from "./scripts/build";
+import { browserOutdir, buildBrowser, readBrowserBuild } from "./scripts/build";
 
 const serverFilePath = fileURLToPath(import.meta.url);
 const usingBunRuntime =
@@ -21,9 +21,21 @@ function getCliCommand() {
 
 async function getProductionShellPath() {
 	if (isDevelopment) {
-		await Bun.$`rm -rf ./src/client/.generated`.quiet();
-		await Bun.$`mkdir -p ./src/client/.generated`.quiet();
+		await Bun.$`rm -rf ${browserOutdir}`.quiet();
+		await Bun.$`mkdir -p ${browserOutdir}`.quiet();
 		await buildBrowser();
+
+		const { files, shellFileName } = await readBrowserBuild();
+		const clientAssetPaths = Object.fromEntries(
+			files
+				.filter((fileName) => fileName !== shellFileName)
+				.map((fileName) => [`/${fileName}`, `${browserOutdir}/${fileName}`]),
+		);
+
+		return {
+			clientAssetPaths,
+			clientShellPath: `${browserOutdir}/${shellFileName}`,
+		};
 	}
 
 	return import("./src/server/client-assets.generated.js");
