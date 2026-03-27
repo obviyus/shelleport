@@ -68,6 +68,26 @@ export type SessionStatusDetail = {
 	blockReason: BlockReason | null;
 };
 
+export type SessionUsage = {
+	inputTokens: number;
+	outputTokens: number;
+	cacheReadInputTokens: number;
+	cacheCreationInputTokens: number;
+	costUsd: number | null;
+	model: string | null;
+};
+
+export type SessionLimit = {
+	status: string | null;
+	resetsAt: number | null;
+	window: string | null;
+	isUsingOverage: boolean | null;
+};
+
+export type ProviderLimitState = {
+	claude: SessionLimit[];
+};
+
 export type PendingRequest = {
 	id: string;
 	sessionId: string;

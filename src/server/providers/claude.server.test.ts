@@ -139,6 +139,99 @@ describe("normalizeClaudeEvent", () => {
 		expect(events[0].detail.nextRetryTime).toBeGreaterThan(Date.now());
 	});
 
+	test("maps assistant usage into session detail", () => {
+		const events = normalizeClaudeEvent({
+			type: "assistant",
+			message: {
+				model: "claude-opus-4-6",
+				content: [
+					{
+						type: "text",
+						text: "done",
+					},
+				],
+				usage: {
+					input_tokens: 3,
+					output_tokens: 1,
+					cache_read_input_tokens: 11338,
+					cache_creation_input_tokens: 6400,
+				},
+			},
+		});
+
+		expect(events[0]).toMatchObject({
+			type: "host-event",
+			kind: "text",
+			data: {
+				usage: {
+					inputTokens: 3,
+					outputTokens: 1,
+					cacheReadInputTokens: 11338,
+					cacheCreationInputTokens: 6400,
+					model: "claude-opus-4-6",
+				},
+			},
+		});
+	});
+
+	test("maps rate limit event into session detail", () => {
+		const events = normalizeClaudeEvent({
+			type: "rate_limit_event",
+			rate_limit_info: {
+				status: "allowed",
+				resetsAt: 1774623600,
+				rateLimitType: "five_hour",
+				isUsingOverage: false,
+			},
+		});
+
+		expect(events).toHaveLength(1);
+		expect(events[0]).toMatchObject({
+			type: "host-event",
+			kind: "system",
+			data: {
+				limit: {
+					status: "allowed",
+					window: "five_hour",
+					isUsingOverage: false,
+				},
+			},
+		});
+		expect(events[0].type).toBe("host-event");
+		if (events[0].type !== "host-event") {
+			throw new Error("Expected host-event");
+		}
+		expect(events[0].data.limit).toMatchObject({
+			resetsAt: 1774623600 * 1000,
+		});
+	});
+
+	test("maps structured api retries into retry status", () => {
+		const events = normalizeClaudeEvent({
+			type: "system",
+			subtype: "api_retry",
+			attempt: 2,
+			retry_delay_ms: 1200,
+			error_status: 529,
+			error: "rate_limit",
+		});
+
+		expect(events).toHaveLength(1);
+		expect(events[0]).toMatchObject({
+			type: "session-status",
+			status: "retrying",
+			detail: {
+				attempt: 2,
+				message: "529 rate_limit retry (attempt 2)",
+			},
+		});
+		expect(events[0].type).toBe("session-status");
+		if (events[0].type !== "session-status") {
+			throw new Error("Expected session-status event");
+		}
+		expect(events[0].detail.nextRetryTime).toBeGreaterThan(Date.now());
+	});
+
 	test("maps partial assistant text deltas", () => {
 		const events = normalizeClaudeStreamEvent({
 			type: "stream_event",

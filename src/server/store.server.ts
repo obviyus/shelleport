@@ -8,8 +8,10 @@ import type {
 	PendingRequestKind,
 	PendingRequestStatus,
 	PermissionMode,
+	ProviderLimitState,
 	ProviderId,
 	SessionDetail,
+	SessionLimit,
 	SessionStatus,
 	SessionStatusDetail,
 } from "~/shared/shelleport";
@@ -69,6 +71,15 @@ database.exec(`
 		session_secret TEXT NOT NULL,
 		create_time INTEGER NOT NULL,
 		update_time INTEGER NOT NULL
+	);
+	CREATE TABLE IF NOT EXISTS app_provider_limits (
+		provider TEXT NOT NULL,
+		window TEXT NOT NULL,
+		status TEXT,
+		resets_at INTEGER,
+		is_using_overage INTEGER,
+		update_time INTEGER NOT NULL,
+		PRIMARY KEY (provider, window)
 	);
 `);
 
@@ -160,6 +171,15 @@ type SqlAuthRow = {
 	admin_token_hash: string | null;
 	session_secret: string;
 	create_time: number;
+	update_time: number;
+};
+
+type SqlProviderLimitRow = {
+	provider: string;
+	window: string;
+	status: string | null;
+	resets_at: number | null;
+	is_using_overage: number | null;
 	update_time: number;
 };
 
@@ -309,6 +329,30 @@ const updateAuthStateStatement = database.query(
 	"UPDATE app_auth SET admin_token_hash = ?, session_secret = ?, update_time = ? WHERE id = 1",
 );
 
+const listProviderLimitsStatement = database.query<SqlProviderLimitRow, [string]>(
+	"SELECT * FROM app_provider_limits WHERE provider = ? ORDER BY update_time DESC",
+);
+
+const upsertProviderLimitStatement = database.query(
+	`INSERT INTO app_provider_limits (
+		provider, window, status, resets_at, is_using_overage, update_time
+	) VALUES (?, ?, ?, ?, ?, ?)
+	ON CONFLICT(provider, window) DO UPDATE SET
+		status = excluded.status,
+		resets_at = excluded.resets_at,
+		is_using_overage = excluded.is_using_overage,
+		update_time = excluded.update_time`,
+);
+
+function mapProviderLimit(row: SqlProviderLimitRow): SessionLimit {
+	return {
+		status: row.status,
+		resetsAt: row.resets_at,
+		window: row.window,
+		isUsingOverage: row.is_using_overage === null ? null : row.is_using_overage === 1,
+	};
+}
+
 export type CreateStoredSessionInput = {
 	provider: ProviderId;
 	title: string;
@@ -399,6 +443,25 @@ export const sessionStore = {
 	},
 	getAuthState() {
 		return getAuthStateStatement.get() ?? null;
+	},
+	getProviderLimits(): ProviderLimitState {
+		return {
+			claude: listProviderLimitsStatement.all("claude").map(mapProviderLimit),
+		};
+	},
+	saveProviderLimit(provider: ProviderId, limit: SessionLimit) {
+		if (!limit.window) {
+			return;
+		}
+
+		upsertProviderLimitStatement.run(
+			provider,
+			limit.window,
+			limit.status,
+			limit.resetsAt,
+			limit.isUsingOverage === null ? null : limit.isUsingOverage ? 1 : 0,
+			createTimestamp(),
+		);
 	},
 	saveAuthState(input: { adminTokenHash: string | null; sessionSecret: string }) {
 		const current = this.getAuthState();

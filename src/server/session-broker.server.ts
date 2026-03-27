@@ -6,6 +6,7 @@ import type {
 	PendingRequest,
 	SessionArchivePayload,
 	RequestResponsePayload,
+	SessionLimit,
 	SessionStatusDetail,
 	SessionControlPayload,
 	SessionInputPayload,
@@ -70,6 +71,21 @@ function emptyStatusDetail(): SessionStatusDetail {
 		nextRetryTime: null,
 		waitKind: null,
 		blockReason: null,
+	};
+}
+
+function readSessionLimit(value: unknown): SessionLimit | null {
+	if (!value || typeof value !== "object") {
+		return null;
+	}
+
+	const limit = value as Record<string, unknown>;
+
+	return {
+		status: typeof limit.status === "string" ? limit.status : null,
+		resetsAt: typeof limit.resetsAt === "number" ? limit.resetsAt : null,
+		window: typeof limit.window === "string" ? limit.window : null,
+		isUsingOverage: typeof limit.isUsingOverage === "boolean" ? limit.isUsingOverage : null,
 	};
 }
 
@@ -187,6 +203,13 @@ async function consumeProviderRun(
 			}
 
 			const storedEvent = sessionStore.appendEvent(sessionId, event);
+
+			const limit = readSessionLimit(event.data.limit);
+
+			if (session.provider === "claude" && limit?.window) {
+				sessionStore.saveProviderLimit("claude", limit);
+			}
+
 			publishEvent(storedEvent);
 
 			if (event.kind === "error") {

@@ -57,6 +57,13 @@ type SessionStreamMessage =
 			};
 	  };
 
+type SessionUsageDetailResponse = {
+	events: Array<{
+		data: Record<string, unknown>;
+		kind: string;
+	}>;
+};
+
 const testRoot = join(Bun.env.TMPDIR ?? "/tmp", `shelleport-api-${Bun.randomUUIDv7()}`);
 const fakeClaudePath = join(testRoot, "fake-claude.js");
 const dataDir = join(testRoot, "data");
@@ -272,6 +279,59 @@ if (prompt.includes("trigger retry")) {
   process.exit(0);
 }
 
+if (prompt.includes("track usage")) {
+  emit({
+    type: "assistant",
+    message: {
+      model: "claude-opus-4-6",
+      content: [
+        {
+          type: "text",
+          text: "Tracked.",
+        },
+      ],
+      usage: {
+        input_tokens: 12,
+        output_tokens: 3,
+        cache_read_input_tokens: 1200,
+        cache_creation_input_tokens: 600,
+      },
+    },
+  });
+  emit({
+    type: "rate_limit_event",
+    rate_limit_info: {
+      status: "allowed",
+      resetsAt: 1774623600,
+      rateLimitType: "five_hour",
+      isUsingOverage: false,
+    },
+  });
+  emit({
+    type: "result",
+    subtype: "success",
+    is_error: false,
+    result: "Tracked.",
+    stop_reason: "end_turn",
+    session_id: sessionId,
+    total_cost_usd: 0.045784,
+    usage: {
+      input_tokens: 12,
+      output_tokens: 4,
+      cache_read_input_tokens: 1200,
+      cache_creation_input_tokens: 600,
+    },
+    modelUsage: {
+      "claude-opus-4-6[1m]": {
+        inputTokens: 12,
+        outputTokens: 4,
+      },
+    },
+    permission_denials: [],
+  });
+  process.exit(0);
+}
+
 emit({
   type: "assistant",
   message: {
@@ -457,6 +517,71 @@ describe("handleApiRequest", () => {
 				.filter((event) => event.kind === "text" && event.data.role === "user")
 				.map((event) => event.data.text),
 		).toEqual(expect.arrayContaining(["Second prompt"]));
+	});
+
+	test("tracks Claude usage and rate limit details on the session", async () => {
+		const createResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "claude",
+					cwd: testRoot,
+					prompt: "track usage",
+				}),
+			}),
+		);
+		expect(createResponse.status).toBe(201);
+		const createJson = await readJson<{ session: { id: string } }>(createResponse);
+
+		let detail: SessionUsageDetailResponse | null = null;
+
+		for (let attempt = 0; attempt < 100; attempt += 1) {
+			const detailResponse = await handleApiRequest(
+				new Request(`http://localhost/api/sessions/${createJson.session.id}`, {
+					headers: authHeader,
+				}),
+			);
+			expect(detailResponse.status).toBe(200);
+			const nextDetail = await readJson<SessionUsageDetailResponse>(detailResponse);
+			detail = nextDetail;
+
+			const hasUsage = nextDetail.events.some((event) => typeof event.data.usage === "object");
+			const hasLimit = nextDetail.events.some((event) => typeof event.data.limit === "object");
+
+			if (hasUsage && hasLimit) {
+				break;
+			}
+
+			await Bun.sleep(20);
+		}
+
+		expect(detail).not.toBeNull();
+		if (!detail) {
+			throw new Error("Expected session detail");
+		}
+
+		const events = detail.events;
+		const usageEvent = [...events].reverse().find((event) => typeof event.data.usage === "object");
+		const limitEvent = [...events].reverse().find((event) => typeof event.data.limit === "object");
+
+		expect(usageEvent?.data.usage).toMatchObject({
+			inputTokens: 12,
+			outputTokens: 4,
+			cacheReadInputTokens: 1200,
+			cacheCreationInputTokens: 600,
+			costUsd: 0.045784,
+			model: "claude-opus-4-6[1m]",
+		});
+		expect(limitEvent?.data.limit).toMatchObject({
+			status: "allowed",
+			window: "five_hour",
+			resetsAt: 1774623600 * 1000,
+			isUsingOverage: false,
+		});
 	});
 
 	test("archives and unarchives sessions", async () => {

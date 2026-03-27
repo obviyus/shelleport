@@ -7,7 +7,9 @@ import type {
 	HostSession,
 	PendingRequest,
 	RequestResponsePayload,
+	SessionLimit,
 	SessionStatus,
+	SessionUsage,
 } from "~/shared/shelleport";
 
 type ImagePreview = {
@@ -28,6 +30,15 @@ type CodeFileProps = {
 
 export type DraftImage = ImagePreview & {
 	file: File;
+};
+
+type UsageSnapshot = {
+	limit: SessionLimit | null;
+	usage: SessionUsage | null;
+};
+
+type LimitSnapshot = SessionLimit & {
+	window: string;
 };
 
 function MarkdownMessage({ text }: { text: string }) {
@@ -177,6 +188,191 @@ function truncate(text: string, max: number): string {
 
 function readString(value: unknown) {
 	return typeof value === "string" ? value : "";
+}
+
+function readUsage(value: unknown): SessionUsage | null {
+	if (!value || typeof value !== "object") {
+		return null;
+	}
+
+	const usage = value as Record<string, unknown>;
+
+	if (
+		typeof usage.inputTokens !== "number" ||
+		typeof usage.outputTokens !== "number" ||
+		typeof usage.cacheReadInputTokens !== "number" ||
+		typeof usage.cacheCreationInputTokens !== "number"
+	) {
+		return null;
+	}
+
+	return {
+		inputTokens: usage.inputTokens,
+		outputTokens: usage.outputTokens,
+		cacheReadInputTokens: usage.cacheReadInputTokens,
+		cacheCreationInputTokens: usage.cacheCreationInputTokens,
+		costUsd: typeof usage.costUsd === "number" ? usage.costUsd : null,
+		model: typeof usage.model === "string" ? usage.model : null,
+	};
+}
+
+function readLimit(value: unknown): SessionLimit | null {
+	if (!value || typeof value !== "object") {
+		return null;
+	}
+
+	const limit = value as Record<string, unknown>;
+
+	return {
+		status: typeof limit.status === "string" ? limit.status : null,
+		resetsAt: typeof limit.resetsAt === "number" ? limit.resetsAt : null,
+		window: typeof limit.window === "string" ? limit.window : null,
+		isUsingOverage: typeof limit.isUsingOverage === "boolean" ? limit.isUsingOverage : null,
+	};
+}
+
+function getSessionLimitMap(entries: HostEvent[]) {
+	const limits = new Map<string, LimitSnapshot>();
+
+	for (const entry of entries) {
+		const limit = readLimit(entry.data.limit);
+
+		if (!limit?.window) {
+			continue;
+		}
+
+		limits.set(limit.window, {
+			...limit,
+			window: limit.window,
+		});
+	}
+
+	return limits;
+}
+
+function getUsageSnapshot(entries: HostEvent[]): UsageSnapshot {
+	let usage: SessionUsage | null = null;
+	const limits = getSessionLimitMap(entries);
+	let limit: SessionLimit | null = null;
+
+	for (let index = entries.length - 1; index >= 0; index -= 1) {
+		const entry = entries[index];
+
+		if (!usage) {
+			usage = readUsage(entry.data.usage);
+		}
+
+		if (usage) {
+			break;
+		}
+	}
+
+	for (const candidate of limits.values()) {
+		limit = candidate;
+	}
+
+	return { limit, usage };
+}
+
+function formatMetricCount(value: number) {
+	if (value >= 100_000) {
+		return `${Math.round(value / 1_000)}k`;
+	}
+
+	if (value >= 10_000) {
+		return `${(value / 1_000).toFixed(1)}k`;
+	}
+
+	return value.toLocaleString();
+}
+
+function formatCostUsd(value: number) {
+	if (value >= 1) {
+		return `$${value.toFixed(2)}`;
+	}
+
+	if (value >= 0.01) {
+		return `$${value.toFixed(3)}`;
+	}
+
+	return `$${value.toFixed(4)}`;
+}
+
+function formatResetCountdown(now: number, resetTime: number) {
+	const remainingMs = resetTime - now;
+
+	if (remainingMs <= 0) {
+		return "now";
+	}
+
+	const totalMinutes = Math.ceil(remainingMs / 60_000);
+
+	if (totalMinutes < 60) {
+		return `${totalMinutes}m`;
+	}
+
+	const hours = Math.floor(totalMinutes / 60);
+	const minutes = totalMinutes % 60;
+
+	if (hours < 24) {
+		return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`;
+	}
+
+	const days = Math.floor(hours / 24);
+	const remainingHours = hours % 24;
+	return remainingHours === 0 ? `${days}d` : `${days}d ${remainingHours}h`;
+}
+
+function formatLimitWindow(value: string) {
+	return value.replace(/_/g, " ");
+}
+
+export function getSessionLimits(entries: HostEvent[]) {
+	const limits = getSessionLimitMap(entries);
+	return orderSessionLimits([...limits.values()]);
+}
+
+export function orderSessionLimits(limits: SessionLimit[]) {
+	const orderedWindows = ["five_hour", "weekly"];
+	const ordered: LimitSnapshot[] = [];
+
+	for (const window of orderedWindows) {
+		const limit = limits.find((candidate) => candidate.window === window);
+
+		if (limit) {
+			ordered.push(limit as LimitSnapshot);
+		}
+	}
+
+	for (const limit of limits) {
+		if (!limit.window || orderedWindows.includes(limit.window)) {
+			continue;
+		}
+
+		ordered.push(limit as LimitSnapshot);
+	}
+
+	return ordered;
+}
+
+export function formatSessionLimitLabel(window: string) {
+	if (window === "five_hour") {
+		return "5 hour";
+	}
+
+	if (window === "weekly") {
+		return "Weekly";
+	}
+
+	return formatLimitWindow(window);
+}
+
+export function formatSessionLimitReset(limit: SessionLimit, now: number) {
+	if (limit.resetsAt === null) {
+		return limit.status ?? "active";
+	}
+
+	return `resets in ${formatResetCountdown(now, limit.resetsAt)}`;
 }
 
 function getHighlightedFileName(call: HostEvent) {
@@ -518,6 +714,37 @@ export function getSidebarMeta(session: HostSession, now: number) {
 	}
 
 	return session.cwd;
+}
+
+export function getSessionUsageBadges(entries: HostEvent[], now: number) {
+	const badges: string[] = [];
+	const { usage, limit } = getUsageSnapshot(entries);
+
+	if (usage) {
+		badges.push(`in ${formatMetricCount(usage.inputTokens)}`);
+		badges.push(`out ${formatMetricCount(usage.outputTokens)}`);
+
+		if (usage.cacheReadInputTokens > 0) {
+			badges.push(`cache read ${formatMetricCount(usage.cacheReadInputTokens)}`);
+		}
+
+		if (usage.cacheCreationInputTokens > 0) {
+			badges.push(`cache write ${formatMetricCount(usage.cacheCreationInputTokens)}`);
+		}
+
+		if (usage.costUsd !== null) {
+			badges.push(formatCostUsd(usage.costUsd));
+		}
+	}
+
+	if (limit?.window && limit.resetsAt !== null) {
+		const prefix = limit.status && limit.status !== "allowed" ? `${limit.status} ` : "";
+		badges.push(
+			`${prefix}${formatLimitWindow(limit.window)} resets in ${formatResetCountdown(now, limit.resetsAt)}`,
+		);
+	}
+
+	return badges;
 }
 
 export function getSidebarTitle(session: HostSession) {

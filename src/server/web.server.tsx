@@ -3,6 +3,7 @@ import { isAppShellRoute, matchAppRoute } from "~/client/routes";
 import { isAuthenticated } from "~/server/auth.server";
 import { listProviders } from "~/server/providers/registry.server";
 import { sessionBroker } from "~/server/session-broker.server";
+import { sessionStore } from "~/server/store.server";
 
 type BootOptions = {
 	defaultCwd: string;
@@ -44,6 +45,7 @@ export function buildAppBootData(request: Request, options: BootOptions): AppBoo
 				authenticated: true,
 				defaultCwd: options.defaultCwd,
 				providers: listProviders(),
+				providerLimits: sessionStore.getProviderLimits(),
 				route,
 				sessionDetail: route.kind === "session" ? sessionDetail : null,
 				sessions: sessionBroker.listSessions(),
