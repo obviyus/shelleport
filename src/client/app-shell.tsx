@@ -395,6 +395,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	);
 
 	const handleRespond = useCallback(async (requestId: string, payload: RequestResponsePayload) => {
+		setPendingRequests((previous) => previous.filter((request) => request.id !== requestId));
 		try {
 			await respondToRequest(requestId, payload);
 		} catch (error) {
