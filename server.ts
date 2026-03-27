@@ -19,6 +19,17 @@ type CliOptions = {
 	version: boolean;
 };
 
+export function getServiceEnvironment() {
+	const path = process.env.PATH ?? "";
+	const claudeBin =
+		process.env.SHELLEPORT_CLAUDE_BIN ?? (Bun.which(getClaudeBin()) ? getClaudeBin() : null);
+
+	return {
+		claudeBin,
+		path,
+	};
+}
+
 function getCliCommand() {
 	return usingBunRuntime ? ["bun", "run", serverFilePath] : [process.execPath];
 }
@@ -324,6 +335,7 @@ async function runInstallService(options: CliOptions) {
 	await ensureDataDir();
 	const command = [...getCliCommand(), "serve"];
 	const host = getInstallServiceHost(options.host);
+	const serviceEnvironment = getServiceEnvironment();
 	const workingDirectory = usingBunRuntime
 		? dirname(fileURLToPath(import.meta.url))
 		: dirname(process.execPath);
@@ -354,6 +366,8 @@ ${command.map((part) => `		<string>${part}</string>`).join("\n")}
 		<string>${String(options.port)}</string>
 		<key>HOST</key>
 		<string>${host}</string>
+		${serviceEnvironment.path ? `<key>PATH</key>\n\t\t<string>${serviceEnvironment.path}</string>` : ""}
+		${serviceEnvironment.claudeBin ? `<key>SHELLEPORT_CLAUDE_BIN</key>\n\t\t<string>${serviceEnvironment.claudeBin}</string>` : ""}
 	</dict>
 </dict>
 </plist>
@@ -379,6 +393,7 @@ ExecStart=${command.join(" ")}
 Restart=always
 Environment=HOST=${host}
 Environment=PORT=${options.port}
+${serviceEnvironment.path ? `Environment=PATH=${serviceEnvironment.path}\n` : ""}${serviceEnvironment.claudeBin ? `Environment=SHELLEPORT_CLAUDE_BIN=${serviceEnvironment.claudeBin}\n` : ""}
 
 [Install]
 WantedBy=default.target

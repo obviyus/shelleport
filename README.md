@@ -50,6 +50,16 @@ shelleport install-service --tailscale
 This writes a service definition for your platform and starts it immediately.
 By default, service installs bind `0.0.0.0`. Pass `--tailscale` to bind the machine's Tailscale IPv4 instead.
 
+### Upgrade
+
+If you installed shelleport from npm, upgrade the downloaded runtime binary in place with:
+
+```bash
+shelleport upgrade
+```
+
+On Linux, this also restarts `shelleport.service` automatically when the user systemd service is installed.
+
 ### Health Check
 
 ```bash

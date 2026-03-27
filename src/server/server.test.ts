@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { createServerFetchHandler, getInstallServiceHost, parseCliOptions } from "../../server";
+import {
+	createServerFetchHandler,
+	getInstallServiceHost,
+	getServiceEnvironment,
+	parseCliOptions,
+} from "../../server";
 
 describe("createServerFetchHandler", () => {
 	test("serves health", async () => {
@@ -65,5 +70,18 @@ describe("getInstallServiceHost", () => {
 
 	test("preserves explicit tailscale binds", () => {
 		expect(getInstallServiceHost("100.96.195.107")).toBe("100.96.195.107");
+	});
+});
+
+describe("getServiceEnvironment", () => {
+	test("captures current PATH", () => {
+		const originalPath = process.env.PATH;
+		process.env.PATH = "/tmp/bin:/usr/bin";
+
+		try {
+			expect(getServiceEnvironment().path).toBe("/tmp/bin:/usr/bin");
+		} finally {
+			process.env.PATH = originalPath;
+		}
 	});
 });
