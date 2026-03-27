@@ -4,6 +4,21 @@ All notable changes to shelleport are documented here.
 
 ## Unreleased
 
+## 0.0.11 - 2026-03-27
+
+### Added
+
+- `--host`, `--port`, `--public`, and `--tailscale` CLI flags for explicit server binding
+
+### Changed
+
+- `install-service` now writes the selected bind address into launchd and systemd service definitions
+- Server startup now prints reachable local and Tailscale URLs when available
+
+### Fixed
+
+- `--help` now exits cleanly without booting the server or touching SQLite
+
 ## 0.0.10 - 2026-03-27
 
 ### Fixed
