@@ -416,6 +416,71 @@ describe("handleApiRequest", () => {
 		).toEqual(expect.arrayContaining(["Second prompt"]));
 	});
 
+	test("archives and unarchives sessions", async () => {
+		const createResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "claude",
+					cwd: testRoot,
+					title: "Archive me",
+				}),
+			}),
+		);
+		expect(createResponse.status).toBe(201);
+		const createJson = await readJson<{ session: { id: string; archived: boolean } }>(createResponse);
+		const sessionId = createJson.session.id;
+		expect(createJson.session.archived).toBe(false);
+
+		const archiveResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}/archive`, {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({ archived: true }),
+			}),
+		);
+		expect(archiveResponse.status).toBe(200);
+		expect((await readJson<{ session: { archived: boolean } }>(archiveResponse)).session.archived).toBe(
+			true,
+		);
+
+		const listResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				headers: authHeader,
+			}),
+		);
+		expect(listResponse.status).toBe(200);
+		const listJson = await readJson<{
+			sessions: Array<{
+				id: string;
+				archived: boolean;
+			}>;
+		}>(listResponse);
+		expect(listJson.sessions.find((session) => session.id === sessionId)?.archived).toBe(true);
+
+		const unarchiveResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}/archive`, {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({ archived: false }),
+			}),
+		);
+		expect(unarchiveResponse.status).toBe(200);
+		expect(
+			(await readJson<{ session: { archived: boolean } }>(unarchiveResponse)).session.archived,
+		).toBe(false);
+	});
+
 	test("starts a session, streams SSE, and resumes after approval", async () => {
 		const createResponse = await handleApiRequest(
 			new Request("http://localhost/api/sessions", {

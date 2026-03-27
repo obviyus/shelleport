@@ -3,6 +3,7 @@ import type {
 	CreateSessionInput,
 	ImportSessionPayload,
 	RequestResponsePayload,
+	SessionArchivePayload,
 	SessionControlPayload,
 	SessionInputPayload,
 	SessionStreamMessage,
@@ -185,6 +186,12 @@ function validateControlInput(payload: SessionControlPayload) {
 	}
 }
 
+function validateArchiveInput(payload: SessionArchivePayload) {
+	if (typeof payload.archived !== "boolean") {
+		throw new ApiError(400, "invalid_archived", "archived must be a boolean");
+	}
+}
+
 function validateRequestResponseInput(payload: RequestResponsePayload) {
 	if (payload.decision !== "allow" && payload.decision !== "deny") {
 		throw new ApiError(400, "invalid_decision", 'decision must be "allow" or "deny"');
@@ -331,6 +338,13 @@ async function dispatchApiRequest(request: Request) {
 			validateControlInput(payload);
 			sessionBroker.controlSession(sessionId, payload);
 			return Response.json({ ok: true });
+		}
+
+		if (request.method === "POST" && segments[3] === "archive") {
+			const payload = await readJson<SessionArchivePayload>(request);
+			validateArchiveInput(payload);
+			const session = sessionBroker.setSessionArchived(sessionId, payload);
+			return Response.json({ session });
 		}
 	}
 

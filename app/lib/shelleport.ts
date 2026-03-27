@@ -32,6 +32,7 @@ export type HostSession = {
 	provider: ProviderId;
 	title: string;
 	cwd: string;
+	archived: boolean;
 	status: SessionStatus;
 	providerSessionRef: string | null;
 	pid: number | null;
@@ -137,6 +138,10 @@ export type SessionInputPayload = {
 
 export type SessionControlPayload = {
 	action: "interrupt" | "terminate";
+};
+
+export type SessionArchivePayload = {
+	archived: boolean;
 };
 
 export type ImportSessionPayload = {
