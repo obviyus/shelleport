@@ -160,19 +160,23 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		initialDetail?.queuedInputs ?? [],
 	);
 	const [prompt, setPrompt] = useState("");
-	const [draftImages, setDraftImages] = useState<DraftImage[]>([]);
+	const [draftImages, setDraftImagesState] = useState<DraftImage[]>([]);
 	const [isCreating, setIsCreating] = useState(false);
 	const [initialLoading, setInitialLoading] = useState(false);
 	const [now, setNow] = useState(() => Date.now());
 	const [streamState, setStreamState] = useState<"connected" | "reconnecting">("connected");
 	const [archiveConfirmId, setArchiveConfirmId] = useState<string | null>(null);
-	const [renameDraft, setRenameDraft] = useState("");
-	const [isRenaming, setIsRenaming] = useState(false);
+	const [renameState, setRenameState] = useState<{ sessionId: string; title: string } | null>(null);
 	const [sidebarOpen, setSidebarOpen] = useState(false);
 	const [sessionQuery, setSessionQuery] = useState("");
-	const [showsClaudeBypassWarning, setShowsClaudeBypassWarning] = useState(false);
-	const [editingQueuedInputId, setEditingQueuedInputId] = useState<string | null>(null);
-	const [queuedInputDraft, setQueuedInputDraft] = useState("");
+	const [hasDismissedClaudeBypassWarning, setHasDismissedClaudeBypassWarning] = useState(
+		() =>
+			typeof window !== "undefined" &&
+			window.localStorage.getItem(CLAUDE_BYPASS_WARNING_KEY) === "1",
+	);
+	const [queuedInputEdit, setQueuedInputEdit] = useState<{ id: string; prompt: string } | null>(
+		null,
+	);
 	const [busyQueuedInputId, setBusyQueuedInputId] = useState<string | null>(null);
 	const deferredSessionQuery = useDeferredValue(sessionQuery);
 	const { activeSessions, archivedSessions } = useMemo(() => {
@@ -220,6 +224,19 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		sessions.length === 0 &&
 		route.kind === "home" &&
 		typeof window !== "undefined";
+	const showsClaudeBypassWarning = showsClaudeLauncherWarning && !hasDismissedClaudeBypassWarning;
+	const isRenaming = renameState !== null && renameState.sessionId === session?.id;
+	const renameDraft = isRenaming ? renameState.title : (session?.title ?? "");
+	const editingQueuedInputId = queuedInputEdit?.id ?? null;
+	const queuedInputDraft = queuedInputEdit?.prompt ?? "";
+
+	function setDraftImages(updater: DraftImage[] | ((previous: DraftImage[]) => DraftImage[])) {
+		setDraftImagesState((previous) => {
+			const nextDraftImages = typeof updater === "function" ? updater(previous) : updater;
+			draftImagesRef.current = nextDraftImages;
+			return nextDraftImages;
+		});
+	}
 
 	function mergeClaudeLimit(previous: SessionLimit[], next: SessionLimit) {
 		if (!next.window) {
@@ -254,10 +271,6 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	}, []);
 
 	useEffect(() => {
-		draftImagesRef.current = draftImages;
-	}, [draftImages]);
-
-	useEffect(() => {
 		fetchProviders()
 			.then(({ providers: nextProviders }) => setProviders(nextProviders))
 			.catch(() => {});
@@ -284,24 +297,6 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	}, [deferredSessionQuery, refreshSessions]);
 
 	useEffect(() => {
-		setRenameDraft(session?.title ?? "");
-		setIsRenaming(false);
-	}, [session?.id, session?.title]);
-
-	useEffect(() => {
-		if (!editingQueuedInputId) {
-			return;
-		}
-
-		const queuedInput = queuedInputs.find((candidate) => candidate.id === editingQueuedInputId) ?? null;
-
-		if (!queuedInput) {
-			setEditingQueuedInputId(null);
-			setQueuedInputDraft("");
-		}
-	}, [editingQueuedInputId, queuedInputs]);
-
-	useEffect(() => {
 		if (!selectedId) {
 			return;
 		}
@@ -310,8 +305,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			setStream([]);
 			setPendingRequests([]);
 			setQueuedInputs([]);
-			setEditingQueuedInputId(null);
-			setQueuedInputDraft("");
+			setQueuedInputEdit(null);
 			setBusyQueuedInputId(null);
 			setSession(null);
 			setStreamState("connected");
@@ -389,19 +383,18 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	}, [replaceSession, selectedId, session?.id]);
 
 	useEffect(() => {
-	if (selectedId) {
-		return;
-	}
+		if (selectedId) {
+			return;
+		}
 
-	setSession(null);
-	setStream([]);
-	setPendingRequests([]);
-	setQueuedInputs([]);
-	setEditingQueuedInputId(null);
-	setQueuedInputDraft("");
-	setBusyQueuedInputId(null);
-	setStreamState("connected");
-}, [selectedId]);
+		setSession(null);
+		setStream([]);
+		setPendingRequests([]);
+		setQueuedInputs([]);
+		setQueuedInputEdit(null);
+		setBusyQueuedInputId(null);
+		setStreamState("connected");
+	}, [selectedId]);
 
 	useEffect(() => {
 		if (isAtBottom.current && scrollRef.current) {
@@ -421,20 +414,6 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			}
 		};
 	}, []);
-
-	useEffect(() => {
-		if (!showsClaudeLauncherWarning) {
-			setShowsClaudeBypassWarning(false);
-			return;
-		}
-
-		if (window.localStorage.getItem(CLAUDE_BYPASS_WARNING_KEY) === "1") {
-			setShowsClaudeBypassWarning(false);
-			return;
-		}
-
-		setShowsClaudeBypassWarning(true);
-	}, [showsClaudeLauncherWarning]);
 
 	const handleCreateSession = useCallback(
 		async (cwd: string, title: string, permissionMode: PermissionMode) => {
@@ -468,7 +447,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			window.localStorage.setItem(CLAUDE_BYPASS_WARNING_KEY, "1");
 		}
 
-		setShowsClaudeBypassWarning(false);
+		setHasDismissedClaudeBypassWarning(true);
 	}
 
 	const handleSend = useCallback(async () => {
@@ -548,34 +527,31 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	}, []);
 
 	const handleStartQueuedInputEdit = useCallback((queuedInput: QueuedSessionInput) => {
-		setEditingQueuedInputId(queuedInput.id);
-		setQueuedInputDraft(queuedInput.prompt);
+		setQueuedInputEdit({ id: queuedInput.id, prompt: queuedInput.prompt });
 	}, []);
 
 	const handleCancelQueuedInputEdit = useCallback(() => {
-		setEditingQueuedInputId(null);
-		setQueuedInputDraft("");
+		setQueuedInputEdit(null);
 	}, []);
 
 	const handleSaveQueuedInput = useCallback(async () => {
-		if (!selectedId || !editingQueuedInputId || queuedInputDraft.trim().length === 0) {
+		if (!selectedId || !queuedInputEdit || queuedInputEdit.prompt.trim().length === 0) {
 			return;
 		}
 
-		setBusyQueuedInputId(editingQueuedInputId);
+		setBusyQueuedInputId(queuedInputEdit.id);
 
 		try {
-			await updateQueuedInput(selectedId, editingQueuedInputId, {
-				prompt: queuedInputDraft.trim(),
+			await updateQueuedInput(selectedId, queuedInputEdit.id, {
+				prompt: queuedInputEdit.prompt.trim(),
 			});
-			setEditingQueuedInputId(null);
-			setQueuedInputDraft("");
+			setQueuedInputEdit(null);
 		} catch (error) {
 			console.error("Failed to update queued input:", error);
 		} finally {
-			setBusyQueuedInputId((current) => (current === editingQueuedInputId ? null : current));
+			setBusyQueuedInputId((current) => (current === queuedInputEdit.id ? null : current));
 		}
-	}, [editingQueuedInputId, queuedInputDraft, selectedId]);
+	}, [queuedInputEdit, selectedId]);
 
 	const handleDeleteQueuedInput = useCallback(
 		async (queuedInputId: string) => {
@@ -589,8 +565,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 				await deleteQueuedInput(selectedId, queuedInputId);
 
 				if (editingQueuedInputId === queuedInputId) {
-					setEditingQueuedInputId(null);
-					setQueuedInputDraft("");
+					setQueuedInputEdit(null);
 				}
 			} catch (error) {
 				console.error("Failed to delete queued input:", error);
@@ -615,15 +590,14 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	);
 
 	const handleRename = useCallback(async () => {
-		if (!session) {
+		if (!session || !isRenaming) {
 			return;
 		}
 
 		const title = renameDraft.trim();
 
 		if (title.length === 0 || title === session.title) {
-			setRenameDraft(session.title);
-			setIsRenaming(false);
+			setRenameState(null);
 			return;
 		}
 
@@ -631,12 +605,11 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			const result = await updateSessionMeta(session.id, { title });
 			await refreshSessions(sessionQuery);
 			setSession(result.session);
-			setRenameDraft(result.session.title);
-			setIsRenaming(false);
+			setRenameState(null);
 		} catch (error) {
 			console.error("Failed to rename session:", error);
 		}
-	}, [refreshSessions, renameDraft, session, sessionQuery]);
+	}, [isRenaming, refreshSessions, renameDraft, session, sessionQuery]);
 
 	const addDraftImages = useCallback(async (files: File[]) => {
 		const normalizedImages = await Promise.all(files.map(normalizeDraftImage));
@@ -678,7 +651,9 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		: null;
 	const canAttachImages = sessionProvider?.capabilities.supportsImages === true;
 	const isSessionBusy =
-		session?.status === "running" || session?.status === "retrying" || session?.status === "waiting";
+		session?.status === "running" ||
+		session?.status === "retrying" ||
+		session?.status === "waiting";
 	const queuedInputCount = queuedInputs.length;
 	const canSend = !!selectedId && (prompt.trim().length > 0 || draftImages.length > 0);
 	const permissionModeLabel = session ? formatPermissionModeLabel(session) : null;
@@ -715,7 +690,6 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 				open={showsClaudeBypassWarning}
 				onOpenChange={(open) => {
 					if (open) {
-						setShowsClaudeBypassWarning(true);
 						return;
 					}
 
@@ -756,7 +730,10 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 							</span>
 							<button
 								type="button"
-								onClick={() => { navigate("/"); setSidebarOpen(false); }}
+								onClick={() => {
+									navigate("/");
+									setSidebarOpen(false);
+								}}
 								className="flex size-10 md:size-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
 								title="New session"
 							>
@@ -785,7 +762,10 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 									<p className="text-[11px] text-muted-foreground">No sessions</p>
 									<button
 										type="button"
-										onClick={() => { navigate("/"); setSidebarOpen(false); }}
+										onClick={() => {
+											navigate("/");
+											setSidebarOpen(false);
+										}}
 										className="mt-2 text-[11px] text-foreground/68 transition hover:text-foreground"
 									>
 										Create one
@@ -813,13 +793,18 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 										>
 											<button
 												type="button"
-												onClick={() => { navigate(`/sessions/${candidate.id}`); setSidebarOpen(false); }}
+												onClick={() => {
+													navigate(`/sessions/${candidate.id}`);
+													setSidebarOpen(false);
+												}}
 												title={getSidebarTitle(candidate)}
 												className="min-w-0 flex-1 px-2.5 py-2 text-left"
 											>
 												<div className="flex items-center gap-2">
 													<StatusDot status={candidate.status} />
-													{candidate.pinned && <Pin className="size-3 shrink-0 text-foreground/70" />}
+													{candidate.pinned && (
+														<Pin className="size-3 shrink-0 text-foreground/70" />
+													)}
 													<span className="line-clamp-1 min-w-0 flex-1 pr-1 text-xs">
 														{candidate.title}
 													</span>
@@ -917,7 +902,10 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 						<div className="shrink-0 border-t border-border px-3 py-3">
 							<button
 								type="button"
-								onClick={() => { navigate("/archived"); setSidebarOpen(false); }}
+								onClick={() => {
+									navigate("/archived");
+									setSidebarOpen(false);
+								}}
 								className={`mb-1 flex w-full items-center gap-2 rounded-md px-2.5 py-3 md:py-2 text-[11px] transition ${
 									isArchivedView
 										? "bg-accent text-foreground"
@@ -951,7 +939,11 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 
 						{/* Mobile sidebar drawer */}
 						<Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-							<SheetContent side="left" showCloseButton={false} className="w-72 p-0 bg-card/95 backdrop-blur-md border-r border-foreground/10 flex flex-col">
+							<SheetContent
+								side="left"
+								showCloseButton={false}
+								className="w-72 p-0 bg-card/95 backdrop-blur-md border-r border-foreground/10 flex flex-col"
+							>
 								<SheetTitle className="sr-only">Navigation</SheetTitle>
 								{sidebarContent}
 							</SheetContent>
@@ -1042,7 +1034,12 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 										<div className="flex min-w-0 items-center gap-1.5">
 											<input
 												value={renameDraft}
-												onChange={(event) => setRenameDraft(event.target.value)}
+												onChange={(event) =>
+													setRenameState({
+														sessionId: session.id,
+														title: event.target.value,
+													})
+												}
 												onKeyDown={(event) => {
 													if (event.key === "Enter") {
 														event.preventDefault();
@@ -1051,8 +1048,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 
 													if (event.key === "Escape") {
 														event.preventDefault();
-														setRenameDraft(session.title);
-														setIsRenaming(false);
+														setRenameState(null);
 													}
 												}}
 												autoFocus
@@ -1069,8 +1065,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											<button
 												type="button"
 												onClick={() => {
-													setRenameDraft(session.title);
-													setIsRenaming(false);
+													setRenameState(null);
 												}}
 												className="flex size-6 items-center justify-center rounded border border-foreground/10 text-muted-foreground/86 transition hover:border-foreground/18 hover:text-foreground"
 												title="Cancel rename"
@@ -1085,7 +1080,9 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											</h1>
 											<button
 												type="button"
-												onClick={() => setIsRenaming(true)}
+												onClick={() =>
+													setRenameState({ sessionId: session.id, title: session.title })
+												}
 												className="flex size-10 md:size-5 items-center justify-center rounded text-muted-foreground/80 transition hover:bg-accent hover:text-foreground"
 												title="Rename chat"
 											>
@@ -1302,7 +1299,13 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 																<textarea
 																	rows={3}
 																	value={queuedInputDraft}
-																	onChange={(event) => setQueuedInputDraft(event.target.value)}
+																	onChange={(event) =>
+																		setQueuedInputEdit((current) =>
+																			current === null
+																				? null
+																				: { ...current, prompt: event.target.value },
+																		)
+																	}
 																	className="mt-2 w-full resize-none rounded border border-foreground/10 bg-background px-2.5 py-2 text-xs leading-[1.7] text-foreground outline-none"
 																/>
 															) : (
@@ -1378,6 +1381,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 							</span>
 						</div>
 						<SessionLauncher
+							key={`${boot.defaultCwd}:${createProvider?.id ?? "none"}`}
 							createDisabledReason={createDisabledReason}
 							createLabel={createProvider?.label ?? "managed"}
 							createProviderId={createProvider?.id ?? null}

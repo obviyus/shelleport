@@ -1,5 +1,14 @@
 import { motion } from "motion/react";
-import { ChevronLeft, ChevronRight, FileText, Folder, FolderOpen, Loader2, Plus, Search } from "lucide-react";
+import {
+	ChevronLeft,
+	ChevronRight,
+	FileText,
+	Folder,
+	FolderOpen,
+	Loader2,
+	Plus,
+	Search,
+} from "lucide-react";
 import {
 	type KeyboardEvent,
 	startTransition,
@@ -101,44 +110,22 @@ function DirectoryColumn({
 		);
 	}, [listing, normalizedQuery]);
 	const preferredEntryPath = entries.find((entry) => entry.path === nextPath)?.path ?? null;
+	const effectiveActiveEntryPath =
+		activeEntryPath !== null && entries.some((entry) => entry.path === activeEntryPath)
+			? activeEntryPath
+			: (preferredEntryPath ?? entries[0]?.path ?? null);
 	const activeEntryIndex =
-		activeEntryPath === null ? -1 : entries.findIndex((entry) => entry.path === activeEntryPath);
+		effectiveActiveEntryPath === null
+			? -1
+			: entries.findIndex((entry) => entry.path === effectiveActiveEntryPath);
 
 	useEffect(() => {
-		if (entries.length === 0) {
-			setActiveEntryPath(null);
+		if (effectiveActiveEntryPath === null) {
 			return;
 		}
 
-		if (activeEntryPath !== null && entries.some((entry) => entry.path === activeEntryPath)) {
-			return;
-		}
-
-		setActiveEntryPath(preferredEntryPath ?? entries[0]?.path ?? null);
-	}, [activeEntryPath, entries, preferredEntryPath]);
-
-	useEffect(() => {
-		if (!isFocusedColumn) {
-			return;
-		}
-
-		setHoveredEntryPath(null);
-		setActiveEntryPath((current) => {
-			if (preferredEntryPath !== null) {
-				return preferredEntryPath;
-			}
-
-			return current ?? entries[0]?.path ?? null;
-		});
-	}, [entries, isFocusedColumn, preferredEntryPath]);
-
-	useEffect(() => {
-		if (activeEntryPath === null) {
-			return;
-		}
-
-		entryRefs.current[activeEntryPath]?.scrollIntoView({ block: "nearest" });
-	}, [activeEntryPath]);
+		entryRefs.current[effectiveActiveEntryPath]?.scrollIntoView({ block: "nearest" });
+	}, [effectiveActiveEntryPath]);
 
 	function setActiveEntryAt(index: number) {
 		const nextEntry = entries[index];
@@ -315,7 +302,7 @@ function DirectoryColumn({
 						<div className="space-y-1">
 							{entries.map((entry) => {
 								const isSelected = nextPath === entry.path;
-								const isActive = activeEntryPath === entry.path;
+								const isActive = effectiveActiveEntryPath === entry.path;
 								const isHovered = hoveredEntryPath === entry.path;
 								const isDirectory = entry.kind === "directory";
 
@@ -329,6 +316,7 @@ function DirectoryColumn({
 										onClick={() => onSelect(entry)}
 										onFocus={() => {
 											onColumnFocus();
+											setHoveredEntryPath(null);
 											setActiveEntryPath(entry.path);
 										}}
 										onMouseEnter={() => setHoveredEntryPath(entry.path)}
@@ -444,15 +432,6 @@ export function SessionLauncher({
 		() => pathChain.slice(windowStartIndex, windowStartIndex + visibleColumnCount),
 		[pathChain, visibleColumnCount, windowStartIndex],
 	);
-
-	useEffect(() => {
-		setCurrentPath(defaultPath);
-		setActiveColumnPath(defaultPath);
-	}, [defaultPath]);
-
-	useEffect(() => {
-		setPermissionMode(createProviderId ? getDefaultPermissionMode(createProviderId) : "default");
-	}, [createProviderId]);
 
 	useEffect(() => {
 		if (focusPath === null) {
