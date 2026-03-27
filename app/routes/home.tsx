@@ -14,7 +14,17 @@ import {
 	Terminal,
 	X,
 } from "lucide-react";
-import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+	Suspense,
+	lazy,
+	startTransition,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
+import { getFiletypeFromFileName } from "@pierre/diffs";
 import ReactMarkdown from "react-markdown";
 import { useLocation, useNavigate, useParams } from "react-router";
 import remarkGfm from "remark-gfm";
@@ -57,6 +67,11 @@ type ImagePreview = {
 type DraftImage = ImagePreview & {
 	file: File;
 };
+
+const LazyCodeFile = lazy(async () => {
+	const module = await import("@pierre/diffs/react");
+	return { default: module.File };
+});
 
 function MarkdownMessage({ text }: { text: string }) {
 	return (
@@ -198,6 +213,169 @@ function getToolPreview(event: HostEvent): string {
 function truncate(text: string, max: number): string {
 	if (text.length <= max) return text;
 	return `${text.slice(0, max)}\n… (${text.length - max} more chars)`;
+}
+
+function getHighlightedFileName(call: HostEvent) {
+	const toolName = call.data.toolName as string;
+	const input = call.data.input as Record<string, unknown> | undefined;
+
+	if (!input) {
+		return `${toolName.toLowerCase()}-output.txt`;
+	}
+
+	if (toolName === "Read" || toolName === "Write" || toolName === "Edit") {
+		const filePath = input.file_path;
+		if (typeof filePath === "string" && filePath.length > 0) {
+			return filePath.split("/").at(-1) ?? "file.txt";
+		}
+	}
+
+	if (toolName === "Bash") {
+		const command = typeof input.command === "string" ? input.command : "";
+		if (/\bgit\s+diff\b/.test(command)) {
+			return "bash-output.diff";
+		}
+		return "bash-output.sh";
+	}
+
+	if (toolName === "Grep") {
+		const path = input.path;
+		if (typeof path === "string" && path.length > 0) {
+			return path.split("/").at(-1) ?? "grep-output.txt";
+		}
+	}
+
+	return `${toolName.toLowerCase()}-output.txt`;
+}
+
+function stripReadLineNumbers(text: string) {
+	const lines = text.split("\n");
+	let matched = 0;
+	let firstLineNumber = 1;
+
+	const strippedLines = lines.map((line, index) => {
+		const match = line.match(/^(\s*)(\d+)→(.*)$/);
+		if (!match) {
+			return line;
+		}
+
+		matched += 1;
+		if (matched === 1) {
+			firstLineNumber = Number(match[2]);
+		}
+
+		const [, indent, , content] = match;
+		return `${indent}${content}`;
+	});
+
+	return matched > 0 && matched === lines.length
+		? { content: strippedLines.join("\n"), firstLineNumber }
+		: null;
+}
+
+function isDiffStatLine(line: string) {
+	return /^ .+\|\s+\d+\s+[+\-]+$/.test(line);
+}
+
+function isDiffSummaryLine(line: string) {
+	return /^\s*\d+\s+files?\s+changed,/.test(line);
+}
+
+function isDiffStatText(text: string) {
+	const lines = text.split("\n").filter((line) => line.trim().length > 0);
+	return lines.length > 0 && lines.every((line) => isDiffStatLine(line) || isDiffSummaryLine(line));
+}
+
+function DiffStatBlock({ text }: { text: string }) {
+	const lines = text.split("\n");
+
+	return (
+		<pre className="max-h-72 overflow-auto rounded-md border border-foreground/10 bg-card/90 px-3 py-2.5 text-[11px] leading-[1.75] text-foreground/78">
+			{lines.map((line, index) => {
+				if (isDiffStatLine(line)) {
+					const match = line.match(/^(.*?\|)(\s+\d+\s+)([+\-]+)$/);
+
+					if (match) {
+						const [, filePart, countPart, diffPart] = match;
+						const additions = diffPart.match(/\+/g)?.length ?? 0;
+						const deletions = diffPart.match(/-/g)?.length ?? 0;
+
+						return (
+							<div key={`${index}-${line}`}>
+								<span className="text-foreground/88">{filePart}</span>
+								<span className="text-foreground/62">{countPart}</span>
+								{additions > 0 && (
+									<span className="text-emerald-400">{"+".repeat(additions)}</span>
+								)}
+								{deletions > 0 && <span className="text-red-400">{"-".repeat(deletions)}</span>}
+							</div>
+						);
+					}
+				}
+
+				if (isDiffSummaryLine(line)) {
+					return (
+						<div key={`${index}-${line}`}>
+							{line.split(/(\d+\s+insertions?\(\+\)|\d+\s+deletions?\(-\))/g).map((part, partIndex) => {
+								if (/\d+\s+insertions?\(\+\)/.test(part)) {
+									return (
+										<span key={partIndex} className="text-emerald-400">
+											{part}
+										</span>
+									);
+								}
+
+								if (/\d+\s+deletions?\(-\)/.test(part)) {
+									return (
+										<span key={partIndex} className="text-red-400">
+											{part}
+										</span>
+									);
+								}
+
+								return <span key={partIndex}>{part}</span>;
+							})}
+						</div>
+					);
+				}
+
+				return <div key={`${index}-${line}`}>{line}</div>;
+			})}
+		</pre>
+	);
+}
+
+function looksLikeDiff(text: string) {
+	return (
+		text.includes("diff --git ") ||
+		(text.includes("\n--- ") && text.includes("\n+++ ")) ||
+		text.includes("\n@@ ")
+	);
+}
+
+function getHighlightedContent(call: HostEvent, content: string) {
+	const toolName = call.data.toolName as string;
+	if (toolName !== "Read") {
+		return { content, firstLineNumber: 1 };
+	}
+
+	return stripReadLineNumbers(content) ?? { content, firstLineNumber: 1 };
+}
+
+function getHighlightedLanguage(call: HostEvent, fileName: string, content: string) {
+	const toolName = call.data.toolName as string;
+	const input = call.data.input as Record<string, unknown> | undefined;
+
+	if (toolName === "Bash") {
+		const command = typeof input?.command === "string" ? input.command : "";
+		return /\bgit\s+diff\b/.test(command) ? "diff" : "zsh";
+	}
+
+	if (looksLikeDiff(content)) {
+		return "diff";
+	}
+
+	return getFiletypeFromFileName(fileName);
 }
 
 function replaceImageExtension(name: string) {
@@ -444,6 +622,11 @@ function ToolCard({ call, result }: { call: HostEvent; result: HostEvent | null 
 	const content = result ? ((result.data.content as string) ?? "") : null;
 	const isError = result?.data.isError === true;
 	const pending = !result;
+	const fileName = getHighlightedFileName(call);
+	const isDiffStat = content ? isDiffStatText(content) : false;
+	const highlighted = content ? getHighlightedContent(call, content) : null;
+	const highlightedContent = highlighted?.content ?? "";
+	const language = getHighlightedLanguage(call, fileName, highlightedContent);
 
 	return (
 		<div className="animate-event-enter my-1.5 overflow-hidden rounded-md border border-foreground/10 bg-card/90 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]">
@@ -483,9 +666,40 @@ function ToolCard({ call, result }: { call: HostEvent; result: HostEvent | null 
 			{/* Expanded result */}
 			{open && content && (
 				<div className="border-t border-border">
-					<pre className="max-h-72 overflow-auto px-3 py-2.5 text-[10px] leading-[1.7] text-foreground/68">
-						{truncate(content, 8000)}
-					</pre>
+					{toolName === "Bash" && isDiffStat ? (
+						<div className="px-3 py-2.5">
+							<DiffStatBlock text={truncate(content, 8000)} />
+						</div>
+					) : (
+						<div className="px-3 py-2.5">
+							<div className="overflow-hidden rounded-md border border-foreground/10">
+								<Suspense
+									fallback={
+										<div className="flex items-center gap-2 px-3 py-2 text-[11px] text-muted-foreground/78">
+											<Loader2 className="size-3 animate-spin" />
+											Loading syntax highlighter
+										</div>
+									}
+								>
+									<LazyCodeFile
+										className="tool-code-view"
+										file={{
+											name: fileName,
+											contents: truncate(highlightedContent, 8000),
+											lang: language,
+										}}
+										options={{
+											theme: "github-dark",
+											themeType: "dark",
+											disableFileHeader: true,
+											disableLineNumbers: true,
+											overflow: "scroll",
+										}}
+									/>
+								</Suspense>
+							</div>
+						</div>
+					)}
 				</div>
 			)}
 		</div>

@@ -140,6 +140,15 @@ body {
 	background: oklch(1 0 0 / 22%);
 }
 
+.tool-code-view {
+	--diffs-font-family: var(--font-mono);
+	--diffs-header-font-family: var(--font-mono);
+	--diffs-font-size: 11px;
+	--diffs-line-height: 18px;
+	--diffs-gap-block: 6px;
+	--diffs-gap-inline: 8px;
+}
+
 /* Event entry */
 @keyframes event-enter {
 	from {
