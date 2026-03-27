@@ -1,5 +1,7 @@
 # 🐚 shelleport
 
+![preview](public/assets/preview.jpg)
+
 **A web UI for your coding agents, anywhere.**
 
 Start, monitor, and interact with AI coding sessions on any machine. All from your browser.
@@ -45,20 +47,23 @@ Verifies your data directory, CLI availability, host/port config, and token stat
 
 ## Features
 
-- [x] Real-time SSE streaming with automatic reconnection
-- [x] Syntax-highlighted tool call visualization with collapsible cards
-- [x] Inline permission approvals (Allow/Deny) for tool boundaries
-- [x] Finder-style directory browser to launch sessions in any directory
-- [x] Image attachments via paste or upload
-- [x] Session archive, restore, interrupt, and terminate
-- [x] Historical session import from `~/.claude/projects`
-- [x] Rate limit detection with live retry countdown
-- [x] Native single-file per-platform binaries built with `bun build --compile`
-- [x] Background service install (launchd / systemd)
-- [ ] Codex App Server support
-- [ ] Skills support
-- [ ] Automations support
-- [ ] Settings page
+- Real-time SSE streaming with automatic reconnection
+- Syntax-highlighted tool call visualization with collapsible cards
+- Inline permission approvals (Allow/Deny) for tool boundaries
+- Finder-style directory browser to launch sessions in any directory
+- Image attachments via paste or upload
+- Session archive, restore, interrupt, and terminate
+- Historical session import from `~/.claude/projects`
+- Rate limit detection with live retry countdown
+- Native single-file per-platform binaries built with `bun build --compile`
+- Background service install (launchd / systemd)
+
+### Planned
+
+- Codex App Server support
+- Skills
+- Automations
+- Settings
 
 ## Supported Agents
 
