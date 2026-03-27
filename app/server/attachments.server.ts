@@ -1,4 +1,4 @@
-import { basename, extname, join } from "node:path";
+import { basename, join } from "node:path";
 import type { SessionAttachment } from "~/lib/shelleport";
 import { ApiError } from "~/server/api-error.server";
 import { createId } from "~/server/id.server";
