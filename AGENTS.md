@@ -109,6 +109,7 @@ Providers yield events; the broker consumes them. To add a new provider, impleme
   1. update `CHANGELOG.md` from the last tag (or from repo start if no tags yet)
   2. bump `package.json` version
   3. ALWAYS run `bun run check`, `bun test`, and `bun run smoke`
+     After any release fix, rerun `bun run check`, `bun test`, and `bun run smoke` before retagging.
   4. ensure worktree clean except intended release files
   5. commit with conventional message
   6. create annotated tag `vX.Y.Z`
