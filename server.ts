@@ -405,6 +405,9 @@ export async function createServerFetchHandler(
 	clientAssets: Record<string, string> | null = null,
 	shellPath: string | null = null,
 ) {
+	const { sessionBroker } = await import("~/server/session-broker.server");
+	sessionBroker.recoverInterruptedRuns();
+
 	return async function fetch(request: Request) {
 		const url = new URL(request.url);
 

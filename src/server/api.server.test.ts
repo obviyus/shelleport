@@ -70,6 +70,8 @@ const dataDir = join(testRoot, "data");
 const authHeader = { authorization: "Bearer test-token" };
 
 let handleApiRequest: typeof import("~/server/api.server").handleApiRequest;
+let sessionBroker: typeof import("~/server/session-broker.server").sessionBroker;
+let sessionStore: typeof import("~/server/store.server").sessionStore;
 
 async function readJson<T>(response: Response) {
 	return (await response.json()) as T;
@@ -362,6 +364,8 @@ emit({
 	const auth = await import("~/server/auth.server");
 	auth.setAdminToken("test-token");
 	handleApiRequest = (await import("~/server/api.server")).handleApiRequest;
+	sessionBroker = (await import("~/server/session-broker.server")).sessionBroker;
+	sessionStore = (await import("~/server/store.server")).sessionStore;
 });
 
 afterAll(async () => {
@@ -512,6 +516,177 @@ describe("handleApiRequest", () => {
 				.filter((event) => event.kind === "text" && event.data.role === "user")
 				.map((event) => event.data.text),
 		).toEqual(expect.arrayContaining(["First prompt"]));
+	});
+
+	test("defaults Claude sessions to bypass permissions", async () => {
+		const createResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "claude",
+					cwd: testRoot,
+					title: "Bypass default",
+				}),
+			}),
+		);
+		expect(createResponse.status).toBe(201);
+		expect(await readJson<{ session: { permissionMode: string } }>(createResponse)).toMatchObject({
+			session: {
+				permissionMode: "dontAsk",
+			},
+		});
+	});
+
+	test("allows opting Claude sessions back into approval prompts", async () => {
+		const createResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "claude",
+					cwd: testRoot,
+					permissionMode: "default",
+					title: "Approval mode",
+				}),
+			}),
+		);
+		expect(createResponse.status).toBe(201);
+		expect(await readJson<{ session: { permissionMode: string } }>(createResponse)).toMatchObject({
+			session: {
+				permissionMode: "default",
+			},
+		});
+	});
+
+	test("recovers stale running sessions after restart", async () => {
+		const createResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "claude",
+					cwd: testRoot,
+					title: "Recover stale run",
+				}),
+			}),
+		);
+		expect(createResponse.status).toBe(201);
+		const createJson = await readJson<{ session: { id: string } }>(createResponse);
+		const sessionId = createJson.session.id;
+
+		sessionStore.updateSession(sessionId, {
+			status: "running",
+			statusDetail: {
+				attempt: null,
+				blockReason: null,
+				message: null,
+				nextRetryTime: null,
+				waitKind: null,
+			},
+			pid: 4242,
+		});
+
+		sessionBroker.recoverInterruptedRuns();
+
+		const detailResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}`, {
+				headers: authHeader,
+			}),
+		);
+		expect(detailResponse.status).toBe(200);
+		expect(
+			await readJson<{
+				session: {
+					status: string;
+					pid: number | null;
+					statusDetail: {
+						message: string | null;
+					};
+				};
+			}>(detailResponse),
+		).toMatchObject({
+			session: {
+				status: "interrupted",
+				pid: null,
+				statusDetail: {
+					message: "Shelleport restarted while this run was active.",
+				},
+			},
+		});
+	});
+
+	test("recovers stale waiting sessions without a pending request after restart", async () => {
+		const createResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "claude",
+					cwd: testRoot,
+					title: "Recover stale wait",
+				}),
+			}),
+		);
+		expect(createResponse.status).toBe(201);
+		const createJson = await readJson<{ session: { id: string } }>(createResponse);
+		const sessionId = createJson.session.id;
+
+		sessionStore.updateSession(sessionId, {
+			status: "waiting",
+			statusDetail: {
+				attempt: null,
+				blockReason: "permission",
+				message: null,
+				nextRetryTime: null,
+				waitKind: "approval",
+			},
+			pid: 4242,
+		});
+
+		sessionBroker.recoverInterruptedRuns();
+
+		const detailResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}`, {
+				headers: authHeader,
+			}),
+		);
+		expect(detailResponse.status).toBe(200);
+		expect(
+			await readJson<{
+				session: {
+					status: string;
+					pid: number | null;
+					statusDetail: {
+						message: string | null;
+						waitKind: string | null;
+						blockReason: string | null;
+					};
+				};
+			}>(detailResponse),
+		).toMatchObject({
+			session: {
+				status: "interrupted",
+				pid: null,
+				statusDetail: {
+					message: "Shelleport restarted while this session was waiting for input.",
+					waitKind: null,
+					blockReason: null,
+				},
+			},
+		});
 	});
 
 	test("persists sent prompts in session history", async () => {

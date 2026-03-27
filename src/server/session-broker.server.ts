@@ -268,6 +268,44 @@ async function consumeProviderRun(
 }
 
 export const sessionBroker = {
+	recoverInterruptedRuns() {
+		const sessions = sessionStore.listSessions();
+
+		for (const session of sessions) {
+			if (session.status === "waiting") {
+				const detail = sessionStore.getSessionDetail(session.id);
+				const hasPendingRequest =
+					detail !== null && detail.pendingRequests.some((request) => request.status === "pending");
+
+				if (hasPendingRequest) {
+					continue;
+				}
+
+				sessionStore.updateSession(session.id, {
+					status: "interrupted",
+					statusDetail: {
+						...emptyStatusDetail(),
+						message: "Shelleport restarted while this session was waiting for input.",
+					},
+					pid: null,
+				});
+				continue;
+			}
+
+			if (session.status !== "running" && session.status !== "retrying") {
+				continue;
+			}
+
+			sessionStore.updateSession(session.id, {
+				status: "interrupted",
+				statusDetail: {
+					...emptyStatusDetail(),
+					message: "Shelleport restarted while this run was active.",
+				},
+				pid: null,
+			});
+		}
+	},
 	listSessions(query?: string) {
 		return query && query.trim().length > 0
 			? sessionStore.searchSessions(query)
