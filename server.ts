@@ -1,6 +1,5 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import devAppShell from "~/client/index.html";
 import { config, ensureDataDir, getClaudeBin } from "~/server/config.server";
 import { handleApiRequest } from "~/server/api.server";
 import {
@@ -9,6 +8,7 @@ import {
 	getAuthStatus,
 	rotateAdminToken,
 } from "~/server/auth.server";
+import { buildBrowser } from "./scripts/build";
 
 const serverFilePath = fileURLToPath(import.meta.url);
 const usingBunRuntime =
@@ -21,7 +21,9 @@ function getCliCommand() {
 
 async function getProductionShellPath() {
 	if (isDevelopment) {
-		return null;
+		await Bun.$`rm -rf ./src/client/.generated`.quiet();
+		await Bun.$`mkdir -p ./src/client/.generated`.quiet();
+		await buildBrowser();
 	}
 
 	return import("./src/server/client-assets.generated.js");
@@ -269,14 +271,6 @@ export async function runServe() {
 		fetch,
 		hostname: config.defaultHost,
 		port: config.defaultPort,
-		routes: isDevelopment
-			? {
-					"/": devAppShell,
-					"/archived": devAppShell,
-					"/login": devAppShell,
-					"/sessions/:sessionId": devAppShell,
-				}
-			: undefined,
 		error(error) {
 			console.error("Server error:", error);
 			return new Response("Server Error", { status: 500 });
