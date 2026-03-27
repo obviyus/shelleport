@@ -308,6 +308,47 @@ afterAll(async () => {
 });
 
 describe("handleApiRequest", () => {
+	test("lists directory entries for the launcher browser", async () => {
+		const browserRoot = join(testRoot, "browser-root");
+		await Bun.$`mkdir -p ${join(browserRoot, "alpha")} ${join(browserRoot, "Zoo")}`.quiet();
+		await Bun.write(join(browserRoot, "notes.md"), "# notes");
+
+		const response = await handleApiRequest(
+			new Request(`http://localhost/api/directories?path=${encodeURIComponent(browserRoot)}`, {
+				headers: authHeader,
+			}),
+		);
+		expect(response.status).toBe(200);
+		const body = await readJson<{
+			path: string;
+			parentPath: string | null;
+			entries: Array<{
+				name: string;
+				path: string;
+				kind: string;
+			}>;
+		}>(response);
+		expect(body.path).toBe(browserRoot);
+		expect(body.parentPath).toBe(testRoot);
+		expect(body.entries.slice(0, 3)).toEqual([
+			{
+				name: "alpha",
+				path: join(browserRoot, "alpha"),
+				kind: "directory",
+			},
+			{
+				name: "Zoo",
+				path: join(browserRoot, "Zoo"),
+				kind: "directory",
+			},
+			{
+				name: "notes.md",
+				path: join(browserRoot, "notes.md"),
+				kind: "file",
+			},
+		]);
+	});
+
 	test("reports Claude image support in provider capabilities", async () => {
 		const response = await handleApiRequest(
 			new Request("http://localhost/api/providers", {

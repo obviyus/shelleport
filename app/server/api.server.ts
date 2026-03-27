@@ -1,6 +1,8 @@
-import { isAbsolute } from "node:path";
+import { readdir } from "node:fs/promises";
+import { dirname, isAbsolute, join } from "node:path";
 import type {
 	CreateSessionInput,
+	DirectoryListing,
 	ImportSessionPayload,
 	RequestResponsePayload,
 	SessionArchivePayload,
@@ -264,11 +266,50 @@ function sessionIdFromSegments(segments: string[]) {
 	return sessionId;
 }
 
+async function listDirectory(path: string): Promise<DirectoryListing> {
+	await assertDirectory(path, "path");
+
+	const entries = await readdir(path, { withFileTypes: true });
+	const sortedEntries = entries
+		.map((entry) => ({
+			name: entry.name,
+			path: join(path, entry.name),
+			kind: entry.isDirectory() ? ("directory" as const) : ("file" as const),
+		}))
+		.sort((left, right) => {
+			if (left.kind !== right.kind) {
+				return left.kind === "directory" ? -1 : 1;
+			}
+
+			return left.name.localeCompare(right.name, undefined, {
+				numeric: true,
+				sensitivity: "base",
+			});
+		});
+	const parentPath = path === "/" ? null : dirname(path);
+
+	return {
+		path,
+		parentPath,
+		entries: sortedEntries,
+	};
+}
+
 async function dispatchApiRequest(request: Request) {
 	await requireApiAuth(request);
 
 	const url = new URL(request.url);
 	const segments = url.pathname.split("/").filter(Boolean);
+
+	if (request.method === "GET" && url.pathname === "/api/directories") {
+		const path = url.searchParams.get("path");
+
+		if (!path) {
+			throw new ApiError(400, "invalid_path", "path is required");
+		}
+
+		return Response.json(await listDirectory(path));
+	}
 
 	if (request.method === "GET" && url.pathname === "/api/providers") {
 		return Response.json({ providers: listProviders() });
