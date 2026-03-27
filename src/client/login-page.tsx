@@ -95,7 +95,7 @@ export function LoginPage() {
 					</button>
 				</form>
 
-				<p className="mt-10 text-center text-[11px] text-muted-foreground/50">
+				<p className="mt-10 text-center text-[11px] text-muted-foreground/65">
 					Session secured with an HTTP-only cookie
 				</p>
 			</div>

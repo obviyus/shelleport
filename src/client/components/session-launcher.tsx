@@ -1,5 +1,5 @@
 import { motion } from "motion/react";
-import { ChevronRight, FileText, Folder, FolderOpen, Loader2, Plus, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileText, Folder, FolderOpen, Loader2, Plus, Search } from "lucide-react";
 import {
 	type KeyboardEvent,
 	startTransition,
@@ -260,7 +260,7 @@ function DirectoryColumn({
 			tabIndex={0}
 			onFocus={onColumnFocus}
 			onKeyDown={handleKeyDown}
-			className={`flex h-full w-64 shrink-0 flex-col overflow-hidden rounded-xl border ${
+			className={`flex h-full w-full md:w-64 shrink-0 flex-col overflow-hidden rounded-xl border ${
 				isActiveColumn
 					? "border-foreground/18 bg-card shadow-[0_18px_50px_oklch(0_0_0_/_0.28)]"
 					: "border-foreground/10 bg-card/82 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.02)]"
@@ -269,7 +269,7 @@ function DirectoryColumn({
 			<header className="border-b border-foreground/8 px-3 py-2.5">
 				<div className="flex items-center justify-between gap-2">
 					<div className="min-w-0">
-						<p className="truncate text-[11px] font-medium text-foreground/88">
+						<p className="truncate text-[11px] font-medium text-foreground/92">
 							{getPathName(path)}
 						</p>
 						<p className="mt-0.5 truncate text-[10px] text-muted-foreground/68">{path}</p>
@@ -282,7 +282,7 @@ function DirectoryColumn({
 					</label>
 					<Search
 						aria-hidden="true"
-						className="pointer-events-none absolute top-1/2 left-2.5 size-3 -translate-y-1/2 text-muted-foreground/62"
+						className="pointer-events-none absolute top-1/2 left-2.5 size-3 -translate-y-1/2 text-muted-foreground/72"
 					/>
 					<input
 						id={searchInputId}
@@ -299,7 +299,7 @@ function DirectoryColumn({
 						placeholder="Search…"
 						aria-controls={listId}
 						autoComplete="off"
-						className="h-8 w-full rounded-md border border-foreground/10 bg-background/55 pr-2 pl-7 text-[11px] text-foreground outline-none transition placeholder:text-muted-foreground/54 focus-visible:border-foreground/20 focus-visible:ring-1 focus-visible:ring-foreground/12"
+						className="h-10 md:h-8 w-full rounded-md border border-foreground/10 bg-background/55 pr-2 pl-7 text-[11px] text-foreground outline-none transition placeholder:text-muted-foreground/68 focus-visible:border-foreground/20 focus-visible:ring-1 focus-visible:ring-foreground/12"
 					/>
 				</div>
 			</header>
@@ -338,14 +338,14 @@ function DirectoryColumn({
 										role="option"
 										aria-selected={isSelected}
 										style={{ contentVisibility: "auto", containIntrinsicSize: "36px" }}
-										className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[11px] transition ${
+										className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-3 md:py-2 text-left text-[11px] transition ${
 											isFocusedColumn && isActive
 												? "bg-foreground/88 text-background ring-1 ring-background/20 shadow-[0_10px_30px_oklch(1_0_0_/_0.08)]"
 												: isSelected
 													? "bg-foreground/10 text-foreground ring-1 ring-foreground/20"
 													: isHovered
 														? "bg-foreground/8 text-foreground"
-														: "text-foreground/76 hover:bg-foreground/8 hover:text-foreground"
+														: "text-foreground/84 hover:bg-foreground/8 hover:text-foreground"
 										} ${!isFocusedColumn && isActive ? "bg-foreground/14 text-foreground" : ""}`}
 									>
 										{isSelected ? (
@@ -372,14 +372,14 @@ function DirectoryColumn({
 											setHoveredEntryPath((current) => (current === entry.path ? null : current))
 										}
 										style={{ contentVisibility: "auto", containIntrinsicSize: "36px" }}
-										className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-[11px] ${
+										className={`flex items-center gap-2 rounded-lg px-2.5 py-3 md:py-2 text-[11px] ${
 											isFocusedColumn && isActive
 												? "bg-foreground/88 text-background ring-1 ring-background/20"
 												: isHovered
 													? "bg-foreground/8 text-foreground/72"
 													: isActive
 														? "bg-foreground/14 text-foreground/72"
-														: "text-muted-foreground/62"
+														: "text-muted-foreground/72"
 										}`}
 									>
 										<FileText aria-hidden="true" className="size-3.5 shrink-0" />
@@ -389,7 +389,7 @@ function DirectoryColumn({
 							})}
 						</div>
 					) : (
-						<div className="flex h-full items-center justify-center px-4 text-center text-[11px] text-muted-foreground/62">
+						<div className="flex h-full items-center justify-center px-4 text-center text-[11px] text-muted-foreground/72">
 							{normalizedQuery.length > 0 ? "No matches" : "Empty directory"}
 						</div>
 					)
@@ -429,6 +429,15 @@ export function SessionLauncher({
 		createProviderId ? getDefaultPermissionMode(createProviderId) : "default",
 	);
 	const showsPermissionMode = createProviderId === "claude";
+	const [isMobile, setIsMobile] = useState(false);
+
+	useEffect(() => {
+		const mql = window.matchMedia("(max-width: 767px)");
+		setIsMobile(mql.matches);
+		const handler = (event: MediaQueryListEvent) => setIsMobile(event.matches);
+		mql.addEventListener("change", handler);
+		return () => mql.removeEventListener("change", handler);
+	}, []);
 
 	const pathChain = useMemo(() => getPathChain(currentPath), [currentPath]);
 	const visiblePathChain = useMemo(
@@ -592,16 +601,16 @@ export function SessionLauncher({
 
 	return (
 		<div className="flex h-full flex-col">
-			<div className="border-b border-border px-6 py-5">
-				<div className="mx-auto flex w-full max-w-[110rem] items-end justify-between gap-6">
+			<div className="border-b border-border px-3 md:px-6 py-4 md:py-5">
+				<div className="mx-auto flex w-full max-w-[110rem] flex-col md:flex-row md:items-end md:justify-between gap-4 md:gap-6">
 					<div className="min-w-0 flex-1">
-						<p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-foreground/56">
+						<p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-foreground/68">
 							New Session
 						</p>
 						<h1 className="mt-2 text-lg font-medium tracking-[-0.04em] text-foreground">
 							Pick a workspace. Launch from the path itself.
 						</h1>
-						<p className="mt-2 max-w-2xl text-[11px] leading-[1.8] text-muted-foreground/84">
+						<p className="mt-2 max-w-2xl text-[11px] leading-[1.8] text-muted-foreground/88">
 							Finder-style column browsing. Directories expand to the right. Files stay visible for
 							context.
 						</p>
@@ -609,7 +618,7 @@ export function SessionLauncher({
 					<div className="w-full max-w-sm shrink-0">
 						<label
 							htmlFor={titleInputId}
-							className="mb-1.5 block text-[10px] font-medium uppercase tracking-[0.14em] text-foreground/56"
+							className="mb-1.5 block text-[10px] font-medium uppercase tracking-[0.14em] text-foreground/68"
 						>
 							Title
 						</label>
@@ -621,28 +630,28 @@ export function SessionLauncher({
 							onChange={(event) => setTitle(event.target.value)}
 							autoComplete="off"
 							placeholder="Optional session title…"
-							className="h-10 w-full rounded-md border border-foreground/10 bg-card/90 px-3 text-xs text-foreground outline-none transition placeholder:text-muted-foreground/58 focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
+							className="h-10 w-full rounded-md border border-foreground/10 bg-card/90 px-3 text-xs text-foreground outline-none transition placeholder:text-muted-foreground/70 focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
 						/>
 					</div>
 				</div>
 				{showsPermissionMode && (
-					<div className="mx-auto mt-4 flex w-full max-w-[110rem] items-start justify-between gap-6 border-t border-foreground/8 pt-4">
+					<div className="mx-auto mt-4 flex w-full max-w-[110rem] flex-col md:flex-row md:items-start md:justify-between gap-4 md:gap-6 border-t border-foreground/12 pt-4">
 						<div className="min-w-0">
-							<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/56">
+							<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
 								Claude permissions
 							</p>
-							<p className="mt-1 max-w-2xl text-[11px] leading-[1.7] text-muted-foreground/80">
+							<p className="mt-1 max-w-2xl text-[11px] leading-[1.7] text-muted-foreground/84">
 								Bypass works best here. Claude approval prompts are unreliable in shelleport.
 							</p>
 						</div>
-						<div className="grid w-full max-w-xl grid-cols-2 gap-2">
+						<div className="grid w-full max-w-xl grid-cols-1 md:grid-cols-2 gap-2">
 							<button
 								type="button"
 								onClick={() => setPermissionMode("bypassPermissions")}
 								className={`rounded-md border px-3 py-2.5 text-left transition ${
 									permissionMode === "bypassPermissions"
 										? "border-foreground/20 bg-foreground text-background"
-										: "border-foreground/10 bg-card/90 text-foreground/84 hover:border-foreground/18"
+										: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
 								}`}
 							>
 								<p className="text-[11px] font-medium">Bypass permissions</p>
@@ -650,7 +659,7 @@ export function SessionLauncher({
 									className={`mt-1 text-[10px] leading-[1.5] ${
 										permissionMode === "bypassPermissions"
 											? "text-background/78"
-											: "text-muted-foreground/76"
+											: "text-muted-foreground/82"
 									}`}
 								>
 									Recommended. Runs best in shelleport.
@@ -662,13 +671,13 @@ export function SessionLauncher({
 								className={`rounded-md border px-3 py-2.5 text-left transition ${
 									permissionMode === "default"
 										? "border-foreground/20 bg-foreground text-background"
-										: "border-foreground/10 bg-card/90 text-foreground/84 hover:border-foreground/18"
+										: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
 								}`}
 							>
 								<p className="text-[11px] font-medium">Ask for approvals</p>
 								<p
 									className={`mt-1 text-[10px] leading-[1.5] ${
-										permissionMode === "default" ? "text-background/78" : "text-muted-foreground/76"
+										permissionMode === "default" ? "text-background/78" : "text-muted-foreground/82"
 									}`}
 								>
 									Available, but prompts do not work especially well yet.
@@ -679,20 +688,20 @@ export function SessionLauncher({
 				)}
 			</div>
 
-			<div className="border-b border-border px-6 py-3">
-				<div className="mx-auto flex w-full max-w-[110rem] items-center justify-between gap-4">
+			<div className="border-b border-border px-3 md:px-6 py-3">
+				<div className="mx-auto flex w-full max-w-[110rem] flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4">
 					<div className="min-w-0 flex-1 rounded-md border border-foreground/10 bg-card/86 px-3 py-2 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]">
-						<div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.14em] text-foreground/52">
+						<div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.14em] text-foreground/65">
 							<FolderOpen aria-hidden="true" className="size-3" />
 							Selected Directory
 						</div>
-						<p className="mt-1 truncate text-xs text-foreground/88">{currentPath}</p>
+						<p className="mt-1 truncate text-xs text-foreground/92">{currentPath}</p>
 					</div>
 					<button
 						type="button"
 						onClick={() => void onCreate(currentPath, title.trim(), permissionMode)}
 						disabled={isCreating || createDisabledReason !== null}
-						className="flex h-10 shrink-0 items-center gap-2 rounded-md bg-foreground px-4 text-xs font-medium text-background transition hover:bg-foreground/90 focus-visible:ring-2 focus-visible:ring-foreground/20 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-30"
+						className="flex h-12 md:h-10 w-full md:w-auto shrink-0 items-center justify-center gap-2 rounded-md bg-foreground px-4 text-xs font-medium text-background transition hover:bg-foreground/90 focus-visible:ring-2 focus-visible:ring-foreground/20 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-30"
 					>
 						{isCreating ? (
 							<Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
@@ -714,12 +723,33 @@ export function SessionLauncher({
 				)}
 			</div>
 
-			<div className="min-h-0 flex-1 px-6 py-5">
+			<div className="min-h-0 flex-1 px-3 md:px-6 py-4 md:py-5">
+				{isMobile && pathChain.length > 1 && (
+					<div className="mx-auto flex max-w-[110rem] items-center gap-2 mb-3">
+						<button
+							type="button"
+							onClick={() => {
+								const parentPath = pathChain[pathChain.length - 2];
+								if (parentPath) {
+									setCurrentPath(parentPath);
+									setActiveColumnPath(parentPath);
+								}
+							}}
+							className="flex h-10 items-center gap-1.5 rounded-lg border border-foreground/10 bg-card/90 px-3 text-[11px] text-foreground/84 active:bg-accent"
+						>
+							<ChevronLeft className="size-3.5" />
+							Back
+						</button>
+						<div className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground/80">
+							{currentPath}
+						</div>
+					</div>
+				)}
 				<div
 					ref={browserRef}
 					className="mx-auto flex h-full w-full max-w-[110rem] gap-3 overflow-hidden pb-2"
 				>
-					{visiblePathChain.map((path, index) => {
+					{(isMobile ? pathChain.slice(-1) : visiblePathChain).map((path, index) => {
 						const absoluteIndex = windowStartIndex + index;
 						const listing = directoryMap[path];
 						const nextPath = pathChain[absoluteIndex + 1] ?? null;

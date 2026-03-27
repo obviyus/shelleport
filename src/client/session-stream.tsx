@@ -56,12 +56,12 @@ function MarkdownMessage({ text }: { text: string }) {
 					</h3>
 				),
 				h4: ({ children }) => (
-					<h4 className="mt-3 mb-1.5 text-[11px] font-medium text-foreground/88 first:mt-0">
+					<h4 className="mt-3 mb-1.5 text-[11px] font-medium text-foreground/92 first:mt-0">
 						{children}
 					</h4>
 				),
 				h5: ({ children }) => (
-					<h5 className="mt-3 mb-1 text-[11px] font-medium text-foreground/84 first:mt-0">
+					<h5 className="mt-3 mb-1 text-[11px] font-medium text-foreground/90 first:mt-0">
 						{children}
 					</h5>
 				),
@@ -71,7 +71,7 @@ function MarkdownMessage({ text }: { text: string }) {
 					</h6>
 				),
 				p: ({ children }) => (
-					<p className="my-0 whitespace-pre-wrap text-xs leading-[1.8] text-foreground/85">
+					<p className="my-0 whitespace-pre-wrap text-xs leading-[1.8] text-foreground/90">
 						{children}
 					</p>
 				),
@@ -90,10 +90,10 @@ function MarkdownMessage({ text }: { text: string }) {
 					<ol className="my-2 list-decimal space-y-1 pl-5 text-xs">{children}</ol>
 				),
 				li: ({ children }) => (
-					<li className="text-foreground/84 marker:text-muted-foreground">{children}</li>
+					<li className="text-foreground/90 marker:text-muted-foreground">{children}</li>
 				),
 				blockquote: ({ children }) => (
-					<blockquote className="my-3 border-l border-foreground/14 pl-3 text-foreground/72">
+					<blockquote className="my-3 border-l border-foreground/14 pl-3 text-foreground/82">
 						{children}
 					</blockquote>
 				),
@@ -106,13 +106,13 @@ function MarkdownMessage({ text }: { text: string }) {
 					}
 
 					return (
-						<code className="rounded border border-foreground/10 bg-card px-1.5 py-0.5 text-[11px] text-foreground/88">
+						<code className="rounded border border-foreground/10 bg-card px-1.5 py-0.5 text-[11px] text-foreground/92">
 							{children}
 						</code>
 					);
 				},
 				pre: ({ children }) => (
-					<pre className="my-3 overflow-x-auto rounded-md border border-foreground/10 bg-card/90 px-3 py-2.5 text-[11px] leading-[1.7] text-foreground/80">
+					<pre className="my-3 overflow-x-auto rounded-md border border-foreground/10 bg-card/90 px-3 py-2.5 text-[11px] leading-[1.7] text-foreground/86">
 						{children}
 					</pre>
 				),
@@ -124,14 +124,14 @@ function MarkdownMessage({ text }: { text: string }) {
 					</div>
 				),
 				thead: ({ children }) => (
-					<thead className="bg-card/90 text-foreground/84">{children}</thead>
+					<thead className="bg-card/90 text-foreground/90">{children}</thead>
 				),
 				tbody: ({ children }) => <tbody className="divide-y divide-foreground/8">{children}</tbody>,
 				tr: ({ children }) => <tr className="align-top">{children}</tr>,
 				th: ({ children }) => (
 					<th className="border-b border-foreground/10 px-3 py-2 font-medium">{children}</th>
 				),
-				td: ({ children }) => <td className="px-3 py-2 text-foreground/78">{children}</td>,
+				td: ({ children }) => <td className="px-3 py-2 text-foreground/84">{children}</td>,
 				input: ({ checked }) => (
 					<input
 						type="checkbox"
@@ -431,7 +431,7 @@ function DiffStatBlock({ text }: { text: string }) {
 							return (
 								<div
 									key={`${line}-${index}`}
-									className="px-3 py-2 text-[11px] text-muted-foreground/82"
+									className="px-3 py-2 text-[11px] text-muted-foreground/86"
 								>
 									{line}
 								</div>
@@ -442,7 +442,7 @@ function DiffStatBlock({ text }: { text: string }) {
 
 						if (!match) {
 							return (
-								<div key={`${line}-${index}`} className="px-3 py-2 text-[11px] text-foreground/78">
+								<div key={`${line}-${index}`} className="px-3 py-2 text-[11px] text-foreground/84">
 									{line}
 								</div>
 							);
@@ -454,8 +454,8 @@ function DiffStatBlock({ text }: { text: string }) {
 								key={`${line}-${index}`}
 								className="grid grid-cols-[minmax(0,1fr)_auto_minmax(4rem,9rem)] items-center gap-3 px-3 py-2 text-[11px]"
 							>
-								<span className="truncate text-foreground/84">{fileName.trim()}</span>
-								<span className="text-muted-foreground/72">{count.trim()}</span>
+								<span className="truncate text-foreground/90">{fileName.trim()}</span>
+								<span className="text-muted-foreground/80">{count.trim()}</span>
 								<span className="overflow-hidden rounded bg-background/60 px-2 py-1 font-mono text-[10px] leading-none text-foreground/82">
 									{markers}
 								</span>
@@ -548,7 +548,7 @@ function LazyCodeFile({
 
 	if (!CodeFile) {
 		return (
-			<pre className="overflow-x-auto px-3 py-2.5 text-[11px] leading-[1.7] whitespace-pre-wrap text-foreground/80">
+			<pre className="overflow-x-auto px-3 py-2.5 text-[11px] leading-[1.7] whitespace-pre-wrap text-foreground/86">
 				{truncate(content, 12_000)}
 			</pre>
 		);
@@ -833,21 +833,21 @@ function UserMessageRenderer({ event }: { event: HostEvent }) {
 
 	return (
 		<div className="animate-event-enter group mb-4 flex justify-end">
-			<div className="max-w-[90%] min-w-[14rem]">
-				<div className="mb-1 px-1 text-right text-[10px] uppercase tracking-[0.14em] text-muted-foreground/55">
+			<div className="max-w-[90%] min-w-0 md:min-w-[14rem]">
+				<div className="mb-1 px-1 text-right text-[10px] uppercase tracking-[0.14em] text-muted-foreground/68">
 					You
 				</div>
 				<div className="overflow-hidden rounded-xl rounded-tr-sm border border-foreground/10 bg-card/95 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]">
-					<div className="px-4 py-3 text-xs leading-[1.8] text-foreground/88">
+					<div className="px-4 py-3 text-xs leading-[1.8] text-foreground/92">
 						<MarkdownMessage text={readString(event.data.text)} />
 					</div>
 					{attachments.length > 0 && (
-						<div className="border-t border-foreground/8 bg-background/40 px-4 py-2">
+						<div className="border-t border-foreground/12 bg-background/40 px-4 py-2">
 							<div className="flex flex-wrap gap-2">
 								{attachments.map((attachment) => (
 									<div
 										key={attachment.name}
-										className="rounded-md border border-foreground/10 bg-background/70 px-2 py-1 text-[10px] text-muted-foreground/82"
+										className="rounded-md border border-foreground/10 bg-background/70 px-2 py-1 text-[10px] text-muted-foreground/86"
 									>
 										{attachment.name}
 									</div>
@@ -881,7 +881,7 @@ function ToolCard({ call, result }: { call: HostEvent; result: HostEvent | null 
 				}
 			}}
 		>
-			<summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 transition hover:bg-accent/45">
+			<summary className="flex cursor-pointer list-none items-center gap-3 px-3 md:px-4 py-3 transition hover:bg-accent/45">
 				<ChevronRight className="size-3 shrink-0 text-muted-foreground transition group-open:rotate-90" />
 				<div className="min-w-0 flex-1">
 					<div className="flex items-center gap-2">
@@ -889,7 +889,7 @@ function ToolCard({ call, result }: { call: HostEvent; result: HostEvent | null 
 							{call.data.toolName as string}
 						</span>
 						{isRunning ? (
-							<span className="inline-flex items-center gap-1 rounded border border-foreground/10 px-1.5 py-px text-[9px] uppercase tracking-[0.12em] text-muted-foreground/82">
+							<span className="inline-flex items-center gap-1 rounded border border-foreground/10 px-1.5 py-px text-[9px] uppercase tracking-[0.12em] text-muted-foreground/86">
 								<Loader2 className="size-2.5 animate-spin" />
 								running
 							</span>
@@ -898,23 +898,23 @@ function ToolCard({ call, result }: { call: HostEvent; result: HostEvent | null 
 								error
 							</span>
 						) : (
-							<span className="rounded border border-foreground/10 px-1.5 py-px text-[9px] uppercase tracking-[0.12em] text-muted-foreground/72">
+							<span className="rounded border border-foreground/10 px-1.5 py-px text-[9px] uppercase tracking-[0.12em] text-muted-foreground/80">
 								done
 							</span>
 						)}
 					</div>
-					<p className="mt-0.5 truncate text-[10px] text-muted-foreground/75">
+					<p className="mt-0.5 truncate text-[10px] text-muted-foreground/86">
 						{getToolPreview(call)}
 					</p>
 				</div>
 			</summary>
-			<div className="border-t border-foreground/8 bg-background/35 px-4 py-3">
+			<div className="border-t border-foreground/12 bg-background/35 px-4 py-3">
 				{hasOutput ? (
 					isDiffStat ? (
 						<DiffStatBlock text={content} />
 					) : (
 						<div className="overflow-hidden rounded-md border border-foreground/10 bg-card/90">
-							<div className="flex items-center justify-between border-b border-foreground/8 px-3 py-2 text-[10px] text-muted-foreground/72">
+							<div className="flex items-center justify-between border-b border-foreground/12 px-3 py-2 text-[10px] text-muted-foreground/80">
 								<span>{fileName}</span>
 								{strippedRead && strippedRead.matched > 0 && (
 									<span>starts at line {strippedRead.firstLineNumber}</span>
@@ -924,7 +924,7 @@ function ToolCard({ call, result }: { call: HostEvent; result: HostEvent | null 
 								{shouldRenderCode ? (
 									<LazyCodeFile content={content} fileName={fileName} language={language} />
 								) : (
-									<div className="px-3 py-2 text-[11px] text-muted-foreground/72">
+									<div className="px-3 py-2 text-[11px] text-muted-foreground/80">
 										Open to load preview
 									</div>
 								)}
@@ -932,7 +932,7 @@ function ToolCard({ call, result }: { call: HostEvent; result: HostEvent | null 
 						</div>
 					)
 				) : (
-					<p className="text-[11px] text-muted-foreground/72">No output</p>
+					<p className="text-[11px] text-muted-foreground/80">No output</p>
 				)}
 			</div>
 		</details>
@@ -942,11 +942,11 @@ function ToolCard({ call, result }: { call: HostEvent; result: HostEvent | null 
 function AssistantTextRunRenderer({ entries }: { entries: HostEvent[] }) {
 	return (
 		<div className="animate-event-enter mb-4">
-			<div className="mb-1 px-1 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/55">
+			<div className="mb-1 px-1 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/68">
 				Claude
 			</div>
 			<div className="overflow-hidden rounded-xl rounded-tl-sm border border-foreground/10 bg-card/95 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]">
-				<div className="px-4 py-3 text-xs leading-[1.8] text-foreground/88">
+				<div className="px-4 py-3 text-xs leading-[1.8] text-foreground/92">
 					<MarkdownMessage text={entries.map((entry) => readString(entry.data.text)).join("")} />
 				</div>
 			</div>
@@ -960,11 +960,11 @@ function EventRenderer({ event }: { event: HostEvent }) {
 			<UserMessageRenderer event={event} />
 		) : (
 			<div className="animate-event-enter mb-4">
-				<div className="mb-1 px-1 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/55">
+				<div className="mb-1 px-1 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/68">
 					Claude
 				</div>
 				<div className="overflow-hidden rounded-xl rounded-tl-sm border border-foreground/10 bg-card/95 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]">
-					<div className="px-4 py-3 text-xs leading-[1.8] text-foreground/88">
+					<div className="px-4 py-3 text-xs leading-[1.8] text-foreground/92">
 						<MarkdownMessage text={readString(event.data.text)} />
 					</div>
 				</div>
@@ -982,7 +982,7 @@ function EventRenderer({ event }: { event: HostEvent }) {
 
 	if (event.kind === "state") {
 		return (
-			<div className="animate-event-enter mb-4 rounded-lg border border-foreground/10 bg-card/88 px-4 py-2 text-[11px] text-muted-foreground/82">
+			<div className="animate-event-enter mb-4 rounded-lg border border-foreground/10 bg-card/88 px-4 py-2 text-[11px] text-muted-foreground/86">
 				{readString(event.data.message) || event.summary}
 			</div>
 		);
@@ -990,7 +990,7 @@ function EventRenderer({ event }: { event: HostEvent }) {
 
 	if (event.kind === "system") {
 		return (
-			<div className="animate-event-enter mb-4 text-center text-[10px] uppercase tracking-[0.14em] text-muted-foreground/50">
+			<div className="animate-event-enter mb-4 text-center text-[10px] uppercase tracking-[0.14em] text-muted-foreground/65">
 				{event.summary}
 			</div>
 		);
@@ -1007,21 +1007,21 @@ export function PendingRequestBanner({
 	onRespond: (id: string, payload: RequestResponsePayload) => void;
 }) {
 	return (
-		<div className="border-t border-foreground/10 bg-accent/80 px-6 py-3.5">
-			<div className="mx-auto flex max-w-[70rem] items-center justify-between gap-4">
-				<span className="min-w-0 truncate text-xs text-foreground/88">{request.prompt}</span>
+		<div className="border-t border-foreground/10 bg-accent/80 px-3 md:px-6 py-3.5">
+			<div className="mx-auto flex max-w-[70rem] flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+				<span className="min-w-0 truncate text-xs text-foreground/92">{request.prompt}</span>
 				<div className="flex shrink-0 gap-2">
 					<button
 						type="button"
 						onClick={() => onRespond(request.id, { decision: "allow" })}
-						className="rounded border border-foreground/20 bg-foreground px-3 py-1 text-[11px] font-medium text-background transition hover:bg-foreground/90"
+						className="rounded border border-foreground/20 bg-foreground px-4 py-2.5 md:px-3 md:py-1 text-[11px] font-medium text-background transition hover:bg-foreground/90"
 					>
 						Allow
 					</button>
 					<button
 						type="button"
 						onClick={() => onRespond(request.id, { decision: "deny" })}
-						className="rounded border border-border px-3 py-1 text-[11px] font-medium text-muted-foreground transition hover:border-foreground/16 hover:text-foreground"
+						className="rounded border border-border px-4 py-2.5 md:px-3 md:py-1 text-[11px] font-medium text-muted-foreground transition hover:border-foreground/16 hover:text-foreground"
 					>
 						Deny
 					</button>
@@ -1044,7 +1044,7 @@ export function DraftImagePreview({
 			<button
 				type="button"
 				onClick={onRemove}
-				className="absolute top-1 right-1 flex size-5 items-center justify-center rounded-full bg-background/92 text-foreground/72 shadow-sm transition hover:text-foreground"
+				className="absolute top-1 right-1 flex size-8 md:size-5 items-center justify-center rounded-full bg-background/92 text-foreground/82 shadow-sm transition hover:text-foreground"
 				aria-label={`Remove ${image.name}`}
 			>
 				<X className="size-3" />
