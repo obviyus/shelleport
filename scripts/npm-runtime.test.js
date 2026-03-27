@@ -46,10 +46,8 @@ describe("npm runtime helpers", () => {
 		expect(await fetchLatestReleaseVersion()).toBe("9.9.9");
 	});
 
-	test("derives the user systemd service path", () => {
-		expect(getSystemdServicePath("/tmp/home")).toBe(
-			"/tmp/home/.config/systemd/user/shelleport.service",
-		);
+	test("derives the systemd service path", () => {
+		expect(getSystemdServicePath()).toBe("/etc/systemd/system/shelleport.service");
 	});
 
 	test("upserts systemd environment lines before install", () => {

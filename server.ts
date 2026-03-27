@@ -16,18 +16,82 @@ type CliOptions = {
 	help: boolean;
 	host: string;
 	port: number;
+	serviceUser: string | null;
 	version: boolean;
 };
 
-export function getServiceEnvironment() {
-	const path = process.env.PATH ?? "";
+export async function getServiceEnvironment(home = Bun.env.HOME ?? process.cwd()) {
+	const pathEntries = [`${home}/.local/bin`, ...(process.env.PATH ?? "").split(":")].filter(
+		Boolean,
+	);
+	const path = [...new Set(pathEntries)].join(":");
+	const claudeBinCandidate = `${home}/.local/bin/claude`;
 	const claudeBin =
-		process.env.SHELLEPORT_CLAUDE_BIN ?? (Bun.which(getClaudeBin()) ? getClaudeBin() : null);
+		process.env.SHELLEPORT_CLAUDE_BIN ??
+		((await Bun.file(claudeBinCandidate)
+			.stat()
+			.catch(() => null))
+			? claudeBinCandidate
+			: Bun.which(getClaudeBin())
+				? getClaudeBin()
+				: null);
 
 	return {
 		claudeBin,
 		path,
 	};
+}
+
+export function getInstallServiceUser(serviceUser: string | null) {
+	if (serviceUser && serviceUser.trim().length > 0) {
+		return serviceUser.trim();
+	}
+
+	if (process.env.SUDO_USER && process.env.SUDO_USER !== "root") {
+		return process.env.SUDO_USER;
+	}
+
+	if (process.env.USER && process.env.USER !== "root") {
+		return process.env.USER;
+	}
+
+	throw new Error("install-service requires --service-user when run as root directly");
+}
+
+async function getUserHomeDirectory(user: string) {
+	const passwd = await Bun.file("/etc/passwd").text();
+	const record =
+		passwd
+			.split("\n")
+			.map((line) => line.trim())
+			.find((line) => line.startsWith(`${user}:`)) ?? null;
+
+	if (!record) {
+		throw new Error(`Unknown service user: ${user}`);
+	}
+
+	const home = record.split(":")[5];
+
+	if (!home) {
+		throw new Error(`User ${user} is missing a home directory`);
+	}
+
+	return home;
+}
+
+async function getLinuxServiceCommand() {
+	if (usingBunRuntime) {
+		return ["bun", "run", serverFilePath, "serve"];
+	}
+
+	const installDir = "/usr/local/lib/shelleport";
+	const installPath = `${installDir}/shelleport`;
+
+	await Bun.$`mkdir -p ${installDir}`.quiet();
+	await Bun.write(installPath, Bun.file(process.execPath));
+	await Bun.$`chmod 755 ${installPath}`.quiet();
+
+	return [installPath, "serve"];
 }
 
 function getCliCommand() {
@@ -105,6 +169,7 @@ export async function parseCliOptions(argv = Bun.argv.slice(2)): Promise<CliOpti
 	let host = config.defaultHost;
 	let port = config.defaultPort;
 	let hostSource: "default" | "explicit" = "default";
+	let serviceUser: string | null = null;
 	let version = false;
 
 	for (let index = 0; index < argv.length; index += 1) {
@@ -170,6 +235,23 @@ export async function parseCliOptions(argv = Bun.argv.slice(2)): Promise<CliOpti
 			continue;
 		}
 
+		if (argument === "--service-user") {
+			const value = argv[index + 1];
+
+			if (!value) {
+				throw new Error("--service-user requires a value");
+			}
+
+			serviceUser = value;
+			index += 1;
+			continue;
+		}
+
+		if (argument.startsWith("--service-user=")) {
+			serviceUser = argument.slice("--service-user=".length);
+			continue;
+		}
+
 		if (argument === "--public") {
 			if (hostSource === "explicit") {
 				throw new Error("Choose one host option");
@@ -198,6 +280,7 @@ export async function parseCliOptions(argv = Bun.argv.slice(2)): Promise<CliOpti
 		help,
 		host,
 		port,
+		serviceUser,
 		version,
 	};
 }
@@ -216,6 +299,7 @@ function printHelp() {
 	console.log("  --port <port>      Bind one port");
 	console.log("  --public           Bind 0.0.0.0");
 	console.log("  --tailscale        Bind the Tailscale IPv4");
+	console.log("  --service-user     Linux systemd service user (install-service only)");
 	console.log("  -h, --help         Show this help");
 	console.log("  -v, --version      Show version");
 }
@@ -333,14 +417,14 @@ async function runDoctor(options: CliOptions) {
 
 async function runInstallService(options: CliOptions) {
 	await ensureDataDir();
-	const command = [...getCliCommand(), "serve"];
 	const host = getInstallServiceHost(options.host);
-	const serviceEnvironment = getServiceEnvironment();
 	const workingDirectory = usingBunRuntime
 		? dirname(fileURLToPath(import.meta.url))
 		: dirname(process.execPath);
 
 	if (process.platform === "darwin") {
+		const command = [...getCliCommand(), "serve"];
+		const serviceEnvironment = await getServiceEnvironment();
 		const launchAgentsDir = join(Bun.env.HOME ?? workingDirectory, "Library", "LaunchAgents");
 		await Bun.$`mkdir -p ${launchAgentsDir}`.quiet();
 		const plistPath = join(launchAgentsDir, "dev.shelleport.plist");
@@ -379,31 +463,38 @@ ${command.map((part) => `		<string>${part}</string>`).join("\n")}
 		return;
 	}
 
-	const systemdDir = join(Bun.env.HOME ?? workingDirectory, ".config", "systemd", "user");
-	await Bun.$`mkdir -p ${systemdDir}`.quiet();
-	const servicePath = join(systemdDir, "shelleport.service");
+	if (typeof process.getuid === "function" && process.getuid() !== 0) {
+		throw new Error("Linux install-service now writes a system unit; rerun as root");
+	}
+
+	const serviceUser = getInstallServiceUser(options.serviceUser);
+	const serviceHome = await getUserHomeDirectory(serviceUser);
+	const command = await getLinuxServiceCommand();
+	const serviceEnvironment = await getServiceEnvironment(serviceHome);
+	const servicePath = "/etc/systemd/system/shelleport.service";
 	const service = `[Unit]
 Description=Shelleport host daemon
 After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=${workingDirectory}
+User=${serviceUser}
+WorkingDirectory=${serviceHome}
 ExecStart=${command.join(" ")}
 Restart=always
+Environment=HOME=${serviceHome}
 Environment=HOST=${host}
 Environment=PORT=${options.port}
 ${serviceEnvironment.path ? `Environment=PATH=${serviceEnvironment.path}\n` : ""}${serviceEnvironment.claudeBin ? `Environment=SHELLEPORT_CLAUDE_BIN=${serviceEnvironment.claudeBin}\n` : ""}
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target
 `;
 	await Bun.write(servicePath, service);
-	await runCheckedCommand(["systemctl", "--user", "daemon-reload"]);
-	await runCheckedCommand(["systemctl", "--user", "enable", "--now", "shelleport.service"]);
-	await runCheckedCommand(["systemctl", "--user", "restart", "shelleport.service"]);
+	await runCheckedCommand(["systemctl", "daemon-reload"]);
+	await runCheckedCommand(["systemctl", "enable", "--now", "shelleport.service"]);
 	console.log(`Wrote ${servicePath}`);
-	console.log("Installed and started shelleport.service");
+	console.log(`Installed and started shelleport.service as ${serviceUser}`);
 }
 
 async function runToken() {

@@ -159,6 +159,12 @@ ensureColumn(
 	"ALTER TABLE app_provider_limits ADD COLUMN utilization REAL",
 );
 
+database.exec(`
+	UPDATE host_sessions
+	SET permission_mode = 'bypassPermissions'
+	WHERE permission_mode = 'dontAsk'
+`);
+
 type SqlSessionRow = {
 	id: string;
 	provider: string;
@@ -477,8 +483,7 @@ function addUsageTotals(total: SessionUsage | null, next: SessionUsage | null) {
 		inputTokens: total.inputTokens + next.inputTokens,
 		outputTokens: total.outputTokens + next.outputTokens,
 		cacheReadInputTokens: total.cacheReadInputTokens + next.cacheReadInputTokens,
-		cacheCreationInputTokens:
-			total.cacheCreationInputTokens + next.cacheCreationInputTokens,
+		cacheCreationInputTokens: total.cacheCreationInputTokens + next.cacheCreationInputTokens,
 		costUsd: total.costUsd === null || next.costUsd === null ? null : total.costUsd + next.costUsd,
 		model: next.model ?? total.model,
 	} satisfies SessionUsage;

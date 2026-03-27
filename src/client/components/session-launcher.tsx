@@ -638,9 +638,9 @@ export function SessionLauncher({
 						<div className="grid w-full max-w-xl grid-cols-2 gap-2">
 							<button
 								type="button"
-								onClick={() => setPermissionMode("dontAsk")}
+								onClick={() => setPermissionMode("bypassPermissions")}
 								className={`rounded-md border px-3 py-2.5 text-left transition ${
-									permissionMode === "dontAsk"
+									permissionMode === "bypassPermissions"
 										? "border-foreground/20 bg-foreground text-background"
 										: "border-foreground/10 bg-card/90 text-foreground/84 hover:border-foreground/18"
 								}`}
@@ -648,7 +648,9 @@ export function SessionLauncher({
 								<p className="text-[11px] font-medium">Bypass permissions</p>
 								<p
 									className={`mt-1 text-[10px] leading-[1.5] ${
-										permissionMode === "dontAsk" ? "text-background/78" : "text-muted-foreground/76"
+										permissionMode === "bypassPermissions"
+											? "text-background/78"
+											: "text-muted-foreground/76"
 									}`}
 								>
 									Recommended. Runs best in shelleport.
