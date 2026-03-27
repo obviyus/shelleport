@@ -1,6 +1,6 @@
 {
 	"name": "shelleport",
-	"version": "0.0.2",
+	"version": "0.0.3",
 	"description": "Browser control plane for coding agent sessions",
 	"keywords": [
 		"agent",
@@ -52,9 +52,9 @@
 		"lint": "oxlint --type-aware src server.ts scripts bin",
 		"lint:fix": "oxlint --type-aware src server.ts scripts bin --fix",
 		"smoke": "bun run ./scripts/smoke.ts",
-		"test:claude": "bun test ./src/server/api.claude.integration.ts --timeout 120000",
+		"test:claude": "bun test ./src/server/api.claude.integration.ts --max-concurrency 1 --timeout 120000",
 		"typecheck": "bunx tsgo --noEmit -p tsconfig.json",
-		"test": "bun test",
+		"test": "bun test --max-concurrency 1",
 		"check": "bun run format && bun run lint && bun run typecheck"
 	},
 	"dependencies": {
