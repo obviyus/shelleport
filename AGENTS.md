@@ -104,6 +104,7 @@ Providers yield events; the broker consumes them. To add a new provider, impleme
 ## Release Workflow
 
 - `0.0.1` claimed the npm name manually. Treat it as bootstrap, not the template for future releases.
+- Pre-1.0 policy: no backwards-compatibility or migration burden by default. Prefer clean cutovers. If a schema/config/runtime change breaks old installs, acceptable answer is "reset the installation" until 1.0.
 - Future public releases are npm wrapper publishes plus matching GitHub binary assets.
 - Release order:
   1. update `CHANGELOG.md` from the last tag (or from repo start if no tags yet)
