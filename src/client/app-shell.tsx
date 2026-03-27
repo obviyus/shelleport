@@ -95,7 +95,7 @@ function formatPermissionModeLabel(session: HostSession) {
 		return null;
 	}
 
-	return session.permissionMode === "dontAsk" ? "Bypass permissions" : "Approval prompts";
+	return session.permissionMode === "bypassPermissions" ? "Bypass permissions" : "Approval prompts";
 }
 
 function getSessionLimitProgress(limit: SessionLimit) {
@@ -644,7 +644,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 					</DialogFooter>
 				</DialogContent>
 			</Dialog>
-			<aside className="flex w-56 shrink-0 flex-col border-r border-foreground/10 bg-card/55 backdrop-blur-sm">
+			<aside className="flex w-60 shrink-0 flex-col border-r border-foreground/10 bg-card/55 backdrop-blur-md">
 				<div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-4">
 					<span className="text-[11px] font-semibold uppercase tracking-[0.15em] text-foreground/72">
 						shelleport
@@ -659,8 +659,8 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 					</button>
 				</div>
 
-				<div className="flex-1 overflow-y-auto px-2 py-2">
-					<div className="mb-2 px-1">
+				<div className="flex-1 overflow-y-auto px-3 py-3">
+					<div className="mb-3">
 						<div className="relative">
 							<Search className="pointer-events-none absolute top-1/2 left-2.5 size-3 -translate-y-1/2 text-muted-foreground/70" />
 							<input
@@ -687,7 +687,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 							</button>
 						</div>
 					) : (
-						<div className="space-y-px">
+						<div className="space-y-1">
 							{activeSessions.map((candidate) => (
 								<div
 									key={candidate.id}
@@ -775,13 +775,13 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 					)}
 				</div>
 
-				<div className="shrink-0 px-2 pt-2">
+				<div className="shrink-0 px-3 pt-3">
 					{claudeLimits.length > 0 && (
-						<div className="mb-2 rounded-md border border-foreground/10 bg-background/40 px-2.5 py-2">
-							<div className="mb-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/68">
+						<div className="mb-3 rounded-md border border-foreground/10 bg-background/40 px-3 py-3">
+							<div className="mb-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/68">
 								Claude limits
 							</div>
-							<div className="space-y-1">
+							<div className="space-y-2">
 								{claudeLimits.map((limit) => (
 									<div key={limit.window} className="text-[10px]">
 										<div className="flex items-center justify-between gap-2">
@@ -809,7 +809,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 						</div>
 					)}
 				</div>
-				<div className="shrink-0 border-t border-border px-2 py-2">
+				<div className="shrink-0 border-t border-border px-3 py-3">
 					<button
 						type="button"
 						onClick={() => navigate("/archived")}
@@ -839,16 +839,16 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			<main className="flex flex-1 flex-col overflow-hidden">
 				{isArchivedView ? (
 					<div className="flex flex-1 flex-col overflow-hidden">
-						<header className="flex min-h-12 shrink-0 items-center justify-between border-b border-border px-5 py-2">
-							<div>
+						<header className="shrink-0 border-b border-border bg-background/72 px-6 py-4 backdrop-blur-sm">
+							<div className="mx-auto max-w-[70rem]">
 								<h1 className="text-xs font-medium text-foreground">Archived sessions</h1>
 								<p className="text-[10px] text-muted-foreground/78">
 									Restore a thread to move it back into the main list.
 								</p>
 							</div>
 						</header>
-						<div className="flex-1 overflow-y-auto px-5 py-4">
-							<div className="mx-auto max-w-3xl">
+						<div className="flex-1 overflow-y-auto px-6 py-6">
+							<div className="mx-auto max-w-[70rem]">
 								{archivedSessions.length === 0 ? (
 									<div className="flex h-full min-h-48 items-center justify-center">
 										<p className="text-xs text-muted-foreground/72">No archived sessions</p>
@@ -894,128 +894,134 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 					</div>
 				) : selectedId && session ? (
 					<>
-						<header className="flex h-12 shrink-0 items-center justify-between border-b border-border px-5">
-							<div className="min-w-0">
-								<div className="flex items-center gap-2">
-									{session.pinned && <Pin className="size-3 shrink-0 text-foreground/72" />}
-									{isRenaming ? (
-										<div className="flex min-w-0 items-center gap-1.5">
-											<input
-												value={renameDraft}
-												onChange={(event) => setRenameDraft(event.target.value)}
-												onKeyDown={(event) => {
-													if (event.key === "Enter") {
-														event.preventDefault();
-														void handleRename();
-													}
+						<header className="shrink-0 border-b border-border bg-background/72 px-6 py-5 backdrop-blur-sm">
+							<div className="mx-auto flex max-w-[70rem] flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+								<div className="min-w-0 flex-1">
+									<div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+										{session.pinned && <Pin className="size-3 shrink-0 text-foreground/72" />}
+										{isRenaming ? (
+											<div className="flex min-w-0 items-center gap-1.5">
+												<input
+													value={renameDraft}
+													onChange={(event) => setRenameDraft(event.target.value)}
+													onKeyDown={(event) => {
+														if (event.key === "Enter") {
+															event.preventDefault();
+															void handleRename();
+														}
 
-													if (event.key === "Escape") {
-														event.preventDefault();
+														if (event.key === "Escape") {
+															event.preventDefault();
+															setRenameDraft(session.title);
+															setIsRenaming(false);
+														}
+													}}
+													autoFocus
+													className="h-8 min-w-0 rounded border border-foreground/12 bg-card px-2.5 text-sm font-medium text-foreground outline-none"
+												/>
+												<button
+													type="button"
+													onClick={() => void handleRename()}
+													className="flex size-7 items-center justify-center rounded border border-foreground/10 text-muted-foreground/82 transition hover:border-foreground/18 hover:text-foreground"
+													title="Save title"
+												>
+													<Check className="size-3" />
+												</button>
+												<button
+													type="button"
+													onClick={() => {
 														setRenameDraft(session.title);
 														setIsRenaming(false);
-													}
-												}}
-												autoFocus
-												className="h-7 min-w-0 rounded border border-foreground/12 bg-card px-2 text-xs font-medium text-foreground outline-none"
-											/>
-											<button
-												type="button"
-												onClick={() => void handleRename()}
-												className="flex size-6 items-center justify-center rounded border border-foreground/10 text-muted-foreground/82 transition hover:border-foreground/18 hover:text-foreground"
-												title="Save title"
-											>
-												<Check className="size-3" />
-											</button>
-											<button
-												type="button"
-												onClick={() => {
-													setRenameDraft(session.title);
-													setIsRenaming(false);
-												}}
-												className="flex size-6 items-center justify-center rounded border border-foreground/10 text-muted-foreground/82 transition hover:border-foreground/18 hover:text-foreground"
-												title="Cancel rename"
-											>
-												<X className="size-3" />
-											</button>
-										</div>
-									) : (
-										<>
-											<h1 className="truncate text-xs font-medium text-foreground">
-												{session.title}
-											</h1>
-											<button
-												type="button"
-												onClick={() => setIsRenaming(true)}
-												className="flex size-6 items-center justify-center rounded text-muted-foreground/82 transition hover:bg-accent hover:text-foreground"
-												title="Rename chat"
-											>
-												<Pencil className="size-3" />
-											</button>
-										</>
-									)}
-									<span className="shrink-0 text-[10px] text-muted-foreground/78">
-										{session.cwd}
-									</span>
-									{permissionModeLabel && (
-										<span className="shrink-0 rounded border border-foreground/10 bg-card/90 px-1.5 py-px text-[9px] uppercase tracking-[0.08em] text-muted-foreground/80">
-											{permissionModeLabel}
+													}}
+													className="flex size-7 items-center justify-center rounded border border-foreground/10 text-muted-foreground/82 transition hover:border-foreground/18 hover:text-foreground"
+													title="Cancel rename"
+												>
+													<X className="size-3" />
+												</button>
+											</div>
+										) : (
+											<>
+												<h1 className="truncate text-sm font-medium text-foreground">
+													{session.title}
+												</h1>
+												<button
+													type="button"
+													onClick={() => setIsRenaming(true)}
+													className="flex size-7 items-center justify-center rounded text-muted-foreground/82 transition hover:bg-accent hover:text-foreground"
+													title="Rename chat"
+												>
+													<Pencil className="size-3" />
+												</button>
+											</>
+										)}
+									</div>
+									<div className="mt-2 flex flex-wrap items-center gap-2">
+										<span className="rounded-full border border-foreground/10 bg-card/90 px-2.5 py-1 text-[10px] text-muted-foreground/82">
+											{session.cwd}
 										</span>
+										{permissionModeLabel && (
+											<span className="rounded-full border border-foreground/10 bg-card/90 px-2.5 py-1 text-[9px] uppercase tracking-[0.1em] text-muted-foreground/80">
+												{permissionModeLabel}
+											</span>
+										)}
+									</div>
+									{usageBadges.length > 0 && (
+										<div className="mt-4 border-t border-foreground/8 pt-3">
+											<div className="flex flex-wrap gap-2">
+												{usageBadges.map((badge) => (
+													<span
+														key={badge}
+														className="rounded-full border border-foreground/10 bg-card/90 px-2.5 py-1 text-[9px] uppercase tracking-[0.12em] text-muted-foreground/80"
+													>
+														{badge}
+													</span>
+												))}
+											</div>
+										</div>
 									)}
 								</div>
-								{usageBadges.length > 0 && (
-									<div className="mt-1 flex flex-wrap gap-1.5">
-										{usageBadges.map((badge) => (
-											<span
-												key={badge}
-												className="rounded border border-foreground/10 bg-card/90 px-1.5 py-px text-[9px] uppercase tracking-[0.08em] text-muted-foreground/80"
-											>
-												{badge}
-											</span>
-										))}
+								<div className="flex shrink-0 flex-wrap items-center gap-2.5 xl:max-w-sm xl:justify-end">
+									<div className="flex items-center gap-2 rounded-full border border-foreground/10 bg-card/90 px-2.5 py-1.5">
+										<StatusDot status={session.status} />
+										<span className="text-[10px] text-muted-foreground/82">
+											{formatStatus(session, now)}
+										</span>
 									</div>
-								)}
-							</div>
-							<div className="flex shrink-0 items-center gap-3">
-								<button
-									type="button"
-									onClick={() => void handlePinned(session.id, !session.pinned)}
-									className={`flex items-center gap-1.5 rounded border px-2 py-1 text-[11px] transition ${
-										session.pinned
-											? "border-foreground/18 bg-accent text-foreground"
-											: "border-foreground/10 text-muted-foreground/82 hover:border-foreground/22 hover:text-foreground"
-									}`}
-								>
-									<Pin className="size-3" />
-									{session.pinned ? "Pinned" : "Pin"}
-								</button>
-								<div className="flex items-center gap-1.5">
-									<StatusDot status={session.status} />
-									<span className="text-[10px] text-muted-foreground/82">
-										{formatStatus(session, now)}
-									</span>
 									{streamState === "reconnecting" && (
-										<span className="rounded border border-foreground/12 px-1.5 py-px text-[9px] uppercase tracking-[0.12em] text-muted-foreground/82">
+										<span className="rounded-full border border-foreground/12 bg-card/90 px-2.5 py-1 text-[9px] uppercase tracking-[0.12em] text-muted-foreground/82">
 											Reconnecting
 										</span>
 									)}
-								</div>
-								{(session.status === "running" || session.status === "retrying") && (
 									<button
 										type="button"
-										onClick={() => void handleInterrupt()}
-										className="flex items-center gap-1.5 rounded border border-foreground/10 px-2 py-1 text-[11px] text-muted-foreground/82 transition hover:border-foreground/22 hover:text-foreground"
+										onClick={() => void handlePinned(session.id, !session.pinned)}
+										className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] transition ${
+											session.pinned
+												? "border-foreground/18 bg-accent text-foreground"
+												: "border-foreground/10 text-muted-foreground/82 hover:border-foreground/22 hover:text-foreground"
+										}`}
 									>
-										<CircleStop className="size-3" />
-										Stop
+										<Pin className="size-3" />
+										{session.pinned ? "Pinned" : "Pin"}
 									</button>
-								)}
+									{(session.status === "running" || session.status === "retrying") && (
+										<button
+											type="button"
+											onClick={() => void handleInterrupt()}
+											className="flex items-center gap-1.5 rounded-full border border-foreground/10 px-3 py-1.5 text-[11px] text-muted-foreground/82 transition hover:border-foreground/22 hover:text-foreground"
+										>
+											<CircleStop className="size-3" />
+											Stop
+										</button>
+									)}
+								</div>
 							</div>
 						</header>
 
 						<div
 							ref={scrollRef}
 							onScroll={handleScroll}
-							className="flex-1 overflow-y-auto px-5 py-4"
+							className="flex-1 overflow-y-auto px-6 py-6"
 						>
 							{grouped.length === 0 &&
 							session.status !== "running" &&
@@ -1024,9 +1030,9 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 									<p className="text-xs text-muted-foreground/72">Send a message to start</p>
 								</div>
 							) : (
-								<div className="mx-auto max-w-3xl">
+								<div className="mx-auto max-w-[70rem]">
 									{getStatusMessage(session) && (
-										<div className="mb-3 rounded-md border border-foreground/10 bg-card/90 px-3 py-2 text-[11px] text-muted-foreground/88">
+										<div className="mb-5 rounded-lg border border-foreground/10 bg-card/90 px-4 py-3 text-[11px] text-muted-foreground/88">
 											{getStatusMessage(session)}
 										</div>
 									)}
@@ -1057,8 +1063,8 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 							<PendingRequestBanner request={pendingRequests[0]} onRespond={handleRespond} />
 						)}
 
-						<div className="shrink-0 border-t border-border px-5 py-3">
-							<div className="mx-auto max-w-3xl">
+						<div className="shrink-0 border-t border-border px-6 py-4">
+							<div className="mx-auto max-w-[70rem]">
 								<div className="relative rounded-md border border-foreground/10 bg-card/92 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)] transition-colors focus-within:border-foreground/22">
 									<input
 										ref={fileInputRef}
@@ -1069,7 +1075,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 										className="hidden"
 									/>
 									{draftImages.length > 0 && (
-										<div className="flex flex-wrap gap-2 border-b border-border px-3 py-2">
+										<div className="flex flex-wrap gap-2 border-b border-border px-4 py-3">
 											{draftImages.map((image, index) => (
 												<DraftImagePreview
 													key={image.url}
@@ -1108,7 +1114,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 													: "Message Claude... (Enter to send)"
 										}
 										disabled={isSessionBusy}
-										className="w-full resize-none bg-transparent px-3 py-2.5 pr-20 text-xs text-foreground outline-none placeholder:text-muted-foreground/60 disabled:cursor-not-allowed disabled:opacity-60"
+										className="w-full resize-none bg-transparent px-4 py-3 pr-20 text-xs text-foreground outline-none placeholder:text-muted-foreground/60 disabled:cursor-not-allowed disabled:opacity-60"
 									/>
 									{canAttachImages && (
 										<button
