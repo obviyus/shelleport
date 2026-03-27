@@ -632,7 +632,13 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 									)}
 									{grouped.map((group) => (
 										<GroupedEntryRenderer
-											key={group.type === "tool" ? group.call.id : group.entry.id}
+											key={
+												group.type === "tool"
+													? group.call.id
+													: group.type === "assistant-text-run"
+														? group.entries[0]?.id ?? "assistant-text-run"
+														: group.entry.id
+											}
 											group={group}
 										/>
 									))}

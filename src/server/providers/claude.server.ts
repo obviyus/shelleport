@@ -75,6 +75,7 @@ function createClaudeCommand(input: ProviderAdapterRunInput) {
 		getClaudeBin(),
 		"-p",
 		"--verbose",
+		"--include-partial-messages",
 		"--output-format",
 		"stream-json",
 		"--permission-mode",
@@ -275,6 +276,151 @@ function normalizeClaudeResult(rawEvent: Record<string, unknown>) {
 	return events;
 }
 
+function tryParsePartialJsonRecord(text: string) {
+	if (text.trim().length === 0) {
+		return {};
+	}
+
+	try {
+		const parsed = JSON.parse(text) as unknown;
+		return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
+	} catch {
+		return {};
+	}
+}
+
+type ClaudeStreamToolUseState = {
+	id: string | null;
+	inputJson: string;
+	name: string;
+};
+
+export function normalizeClaudeStreamEvent(
+	rawEvent: Record<string, unknown>,
+	toolUseStateByIndex?: Map<number, ClaudeStreamToolUseState>,
+): ProviderAdapterEvent[] {
+	if (rawEvent.type !== "stream_event") {
+		return [];
+	}
+
+	const event =
+		rawEvent.event && typeof rawEvent.event === "object"
+			? (rawEvent.event as Record<string, unknown>)
+			: null;
+
+	if (!event) {
+		return [];
+	}
+
+	if (event.type === "content_block_start") {
+		const contentBlock =
+			event.content_block && typeof event.content_block === "object"
+				? (event.content_block as Record<string, unknown>)
+				: null;
+		const index = typeof event.index === "number" ? event.index : null;
+
+		if (
+			contentBlock?.type === "tool_use" &&
+			typeof contentBlock.name === "string" &&
+			index !== null &&
+			toolUseStateByIndex
+		) {
+			const initialInput = getToolInputRecord(contentBlock.input);
+			const state: ClaudeStreamToolUseState = {
+				id: typeof contentBlock.id === "string" ? contentBlock.id : null,
+				inputJson: Object.keys(initialInput).length === 0 ? "" : JSON.stringify(initialInput),
+				name: contentBlock.name,
+			};
+			toolUseStateByIndex.set(index, state);
+
+			return [
+				{
+					type: "host-event",
+					kind: "tool-call",
+					summary: contentBlock.name,
+					data: {
+						toolName: contentBlock.name,
+						toolUseId: state.id,
+						input: initialInput,
+						partial: true,
+					},
+					rawProviderEvent: rawEvent,
+				},
+			];
+		}
+
+		return [];
+	}
+
+	if (event.type === "content_block_stop") {
+		if (typeof event.index === "number") {
+			toolUseStateByIndex?.delete(event.index);
+		}
+
+		return [];
+	}
+
+	if (event.type !== "content_block_delta") {
+		return [];
+	}
+
+	const delta =
+		event.delta && typeof event.delta === "object" ? (event.delta as Record<string, unknown>) : null;
+
+	if (!delta) {
+		return [];
+	}
+
+	if (delta.type === "text_delta" && typeof delta.text === "string" && delta.text.length > 0) {
+		return [
+			{
+				type: "host-event",
+				kind: "text",
+				summary: "Assistant message",
+				data: {
+					role: "assistant",
+					text: delta.text,
+					partial: true,
+				},
+				rawProviderEvent: rawEvent,
+			},
+		];
+	}
+
+	if (
+		delta.type === "input_json_delta" &&
+		typeof delta.partial_json === "string" &&
+		typeof event.index === "number" &&
+		toolUseStateByIndex?.has(event.index)
+	) {
+		const state = toolUseStateByIndex.get(event.index);
+
+		if (!state) {
+			return [];
+		}
+
+		state.inputJson += delta.partial_json;
+
+		return [
+			{
+				type: "host-event",
+				kind: "tool-call",
+				summary: state.name,
+				data: {
+					toolName: state.name,
+					toolUseId: state.id,
+					input: tryParsePartialJsonRecord(state.inputJson),
+					inputJson: state.inputJson,
+					partial: true,
+				},
+				rawProviderEvent: rawEvent,
+			},
+		];
+	}
+
+	return [];
+}
+
 export function normalizeClaudeEvent(rawEvent: Record<string, unknown>): ProviderAdapterEvent[] {
 	const type = typeof rawEvent.type === "string" ? rawEvent.type : "unknown";
 
@@ -402,6 +548,9 @@ async function* streamClaudeProcess(
 	const stderrReader = subprocess.stderr.getReader();
 
 	let buffer = "";
+	let sawAssistantTextDelta = false;
+	const partialToolUseIds = new Set<string>();
+	const toolUseStateByIndex = new Map<number, ClaudeStreamToolUseState>();
 
 	try {
 		while (true) {
@@ -424,7 +573,61 @@ async function* streamClaudeProcess(
 
 				const rawEvent = JSON.parse(trimmed) as Record<string, unknown>;
 
-				for (const event of normalizeClaudeEvent(rawEvent)) {
+				if (rawEvent.type === "stream_event") {
+					const partialEvents = normalizeClaudeStreamEvent(rawEvent, toolUseStateByIndex);
+
+					if (partialEvents.length > 0) {
+						for (const event of partialEvents) {
+							if (event.type !== "host-event") {
+								continue;
+							}
+
+							if (event.kind === "text") {
+								sawAssistantTextDelta = true;
+							}
+
+							if (event.kind === "tool-call" && typeof event.data.toolUseId === "string") {
+								partialToolUseIds.add(event.data.toolUseId);
+							}
+						}
+
+						for (const event of partialEvents) {
+							yield event;
+						}
+					}
+
+					continue;
+				}
+
+				const normalizedEvents = normalizeClaudeEvent(rawEvent).filter((event) => {
+					if (
+						sawAssistantTextDelta &&
+						rawEvent.type === "assistant" &&
+						event.type === "host-event" &&
+						event.kind === "text" &&
+						event.data.role === "assistant"
+					) {
+						return false;
+					}
+
+					if (
+						rawEvent.type === "assistant" &&
+						event.type === "host-event" &&
+						event.kind === "tool-call" &&
+						typeof event.data.toolUseId === "string" &&
+						partialToolUseIds.has(event.data.toolUseId)
+					) {
+						return false;
+					}
+
+					return true;
+				});
+
+				if (rawEvent.type === "assistant") {
+					sawAssistantTextDelta = false;
+				}
+
+				for (const event of normalizedEvents) {
 					yield event;
 				}
 			}
@@ -433,8 +636,60 @@ async function* streamClaudeProcess(
 		if (buffer.trim().length > 0) {
 			const rawEvent = JSON.parse(buffer.trim()) as Record<string, unknown>;
 
-			for (const event of normalizeClaudeEvent(rawEvent)) {
-				yield event;
+			if (rawEvent.type === "stream_event") {
+				const partialEvents = normalizeClaudeStreamEvent(rawEvent, toolUseStateByIndex);
+
+				if (partialEvents.length > 0) {
+					for (const event of partialEvents) {
+						if (event.type !== "host-event") {
+							continue;
+						}
+
+						if (event.kind === "text") {
+							sawAssistantTextDelta = true;
+						}
+
+						if (event.kind === "tool-call" && typeof event.data.toolUseId === "string") {
+							partialToolUseIds.add(event.data.toolUseId);
+						}
+					}
+				}
+
+				for (const event of partialEvents) {
+					yield event;
+				}
+			} else {
+				const normalizedEvents = normalizeClaudeEvent(rawEvent).filter((event) => {
+					if (
+						sawAssistantTextDelta &&
+						rawEvent.type === "assistant" &&
+						event.type === "host-event" &&
+						event.kind === "text" &&
+						event.data.role === "assistant"
+					) {
+						return false;
+					}
+
+					if (
+						rawEvent.type === "assistant" &&
+						event.type === "host-event" &&
+						event.kind === "tool-call" &&
+						typeof event.data.toolUseId === "string" &&
+						partialToolUseIds.has(event.data.toolUseId)
+					) {
+						return false;
+					}
+
+					return true;
+				});
+
+				if (rawEvent.type === "assistant") {
+					sawAssistantTextDelta = false;
+				}
+
+				for (const event of normalizedEvents) {
+					yield event;
+				}
 			}
 		}
 
