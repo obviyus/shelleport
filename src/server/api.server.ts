@@ -10,7 +10,12 @@ import type {
 	SessionInputPayload,
 	SessionStreamMessage,
 } from "~/shared/shelleport";
-import { requireApiAuth } from "~/server/auth.server";
+import {
+	clearAuthCookie,
+	createAuthCookie,
+	isValidAdminToken,
+	requireApiAuth,
+} from "~/server/auth.server";
 import { storeSessionAttachments } from "~/server/attachments.server";
 import { isApiError, ApiError } from "~/server/api-error.server";
 import { sessionBroker } from "~/server/session-broker.server";
@@ -22,6 +27,16 @@ async function readJson<T>(request: Request) {
 		return (await request.json()) as T;
 	} catch {
 		throw new ApiError(400, "invalid_json", "Invalid JSON body");
+	}
+}
+
+function assertAuthToken(token: unknown) {
+	if (typeof token !== "string" || token.trim().length === 0) {
+		throw new ApiError(400, "invalid_token", "token must be a non-empty string");
+	}
+
+	if (!isValidAdminToken(token)) {
+		throw new ApiError(401, "unauthorized", "Unauthorized");
 	}
 }
 
@@ -296,10 +311,41 @@ async function listDirectory(path: string): Promise<DirectoryListing> {
 }
 
 async function dispatchApiRequest(request: Request) {
-	requireApiAuth(request);
-
 	const url = new URL(request.url);
 	const segments = url.pathname.split("/").filter(Boolean);
+
+	if (url.pathname === "/api/auth/session") {
+		if (request.method === "GET") {
+			requireApiAuth(request);
+			return Response.json({ authenticated: true });
+		}
+
+		if (request.method === "POST") {
+			const payload = await readJson<{ token: string }>(request);
+			assertAuthToken(payload.token);
+			return Response.json(
+				{ authenticated: true },
+				{
+					headers: {
+						"Set-Cookie": createAuthCookie(),
+					},
+				},
+			);
+		}
+
+		if (request.method === "DELETE") {
+			return Response.json(
+				{ authenticated: false },
+				{
+					headers: {
+						"Set-Cookie": clearAuthCookie(),
+					},
+				},
+			);
+		}
+	}
+
+	requireApiAuth(request);
 
 	if (request.method === "GET" && url.pathname === "/api/directories") {
 		const path = url.searchParams.get("path");

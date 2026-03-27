@@ -1,10 +1,8 @@
 import { KeyRound, Loader2, Terminal } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { getToken, setToken, validateToken } from "~/client/api";
-import { useRouter } from "~/client/router";
+import { login, validateSession } from "~/client/api";
 
 export function LoginPage() {
-	const { navigate } = useRouter();
 	const inputRef = useRef<HTMLInputElement>(null);
 	const [value, setValue] = useState("");
 	const [error, setError] = useState<string | null>(null);
@@ -12,21 +10,16 @@ export function LoginPage() {
 	const [checking, setChecking] = useState(() => typeof window !== "undefined");
 
 	useEffect(() => {
-		const existing = getToken();
-
-		if (!existing) {
-			setChecking(false);
-			return;
-		}
-
 		setLoading(true);
-		validateToken(existing)
-			.then(() => navigate("/", { replace: true }))
+		validateSession()
+			.then(() => {
+				window.location.replace("/");
+			})
 			.catch(() => {
 				setChecking(false);
 				setLoading(false);
 			});
-	}, [navigate]);
+	}, []);
 
 	useEffect(() => {
 		if (!checking) {
@@ -46,9 +39,8 @@ export function LoginPage() {
 		setError(null);
 
 		try {
-			await validateToken(token);
-			setToken(token);
-			navigate("/", { replace: true });
+			await login(token);
+			window.location.replace("/");
 		} catch {
 			setError("Invalid token. Check your SHELLEPORT_ADMIN_TOKEN.");
 			setLoading(false);
@@ -104,7 +96,7 @@ export function LoginPage() {
 				</form>
 
 				<p className="mt-10 text-center text-[11px] text-muted-foreground/50">
-					Token stored locally in your browser
+					Session secured with an HTTP-only cookie
 				</p>
 			</div>
 		</main>

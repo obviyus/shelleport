@@ -9,29 +9,14 @@ import type {
 	SessionStreamMessage,
 } from "~/shared/shelleport";
 
-const TOKEN_KEY = "shelleport_token";
-
-export function getToken(): string | null {
-	if (typeof window === "undefined") return null;
-	return localStorage.getItem(TOKEN_KEY);
-}
-
-export function setToken(token: string) {
-	localStorage.setItem(TOKEN_KEY, token);
-}
-
-export function clearToken() {
-	localStorage.removeItem(TOKEN_KEY);
-}
-
-function headers(token: string, json = false): HeadersInit {
-	const h: Record<string, string> = { Authorization: `Bearer ${token}` };
+function headers(json = false): HeadersInit {
+	const h: Record<string, string> = {};
 	if (json) h["Content-Type"] = "application/json";
 	return h;
 }
 
-function mergeHeaders(token: string, json: boolean, initHeaders?: HeadersInit) {
-	const merged = new Headers(headers(token, json));
+function mergeHeaders(json: boolean, initHeaders?: HeadersInit) {
+	const merged = new Headers(headers(json));
 
 	if (initHeaders) {
 		for (const [key, value] of new Headers(initHeaders).entries()) {
@@ -42,15 +27,15 @@ function mergeHeaders(token: string, json: boolean, initHeaders?: HeadersInit) {
 	return merged;
 }
 
-async function request<T>(path: string, token: string, init?: RequestInit): Promise<T> {
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
 	const isJsonBody = init?.body !== undefined && !(init.body instanceof FormData);
 	const res = await fetch(path, {
 		...init,
-		headers: mergeHeaders(token, isJsonBody, init?.headers),
+		credentials: "same-origin",
+		headers: mergeHeaders(isJsonBody, init?.headers),
 	});
 
 	if (res.status === 401) {
-		clearToken();
 		window.location.href = "/login";
 		throw new Error("Unauthorized");
 	}
@@ -63,35 +48,42 @@ async function request<T>(path: string, token: string, init?: RequestInit): Prom
 	return res.json() as Promise<T>;
 }
 
-export function validateToken(token: string) {
-	return request<{ providers: ProviderSummary[] }>("/api/providers", token);
+export function validateSession() {
+	return request<{ authenticated: true }>("/api/auth/session");
 }
 
-export function fetchSessions(token: string) {
-	return request<{ sessions: HostSession[] }>("/api/sessions", token);
+export function login(token: string) {
+	return request<{ authenticated: true }>("/api/auth/session", {
+		method: "POST",
+		body: JSON.stringify({ token }),
+	});
 }
 
-export function fetchDirectory(token: string, path: string) {
+export function fetchSessions() {
+	return request<{ sessions: HostSession[] }>("/api/sessions");
+}
+
+export function fetchDirectory(path: string) {
 	const params = new URLSearchParams({ path });
-	return request<DirectoryListing>(`/api/directories?${params.toString()}`, token);
+	return request<DirectoryListing>(`/api/directories?${params.toString()}`);
 }
 
-export function fetchSessionDetail(token: string, sessionId: string) {
-	return request<SessionDetail>(`/api/sessions/${sessionId}`, token);
+export function fetchSessionDetail(sessionId: string) {
+	return request<SessionDetail>(`/api/sessions/${sessionId}`);
 }
 
-export function createSession(token: string, input: CreateSessionInput) {
-	return request<{ session: HostSession }>("/api/sessions", token, {
+export function createSession(input: CreateSessionInput) {
+	return request<{ session: HostSession }>("/api/sessions", {
 		method: "POST",
 		body: JSON.stringify(input),
 	});
 }
 
-export function fetchProviders(token: string) {
-	return request<{ providers: ProviderSummary[] }>("/api/providers", token);
+export function fetchProviders() {
+	return request<{ providers: ProviderSummary[] }>("/api/providers");
 }
 
-export function sendInput(token: string, sessionId: string, prompt: string, images: File[]) {
+export function sendInput(sessionId: string, prompt: string, images: File[]) {
 	const formData = new FormData();
 	formData.set("prompt", prompt);
 
@@ -99,47 +91,34 @@ export function sendInput(token: string, sessionId: string, prompt: string, imag
 		formData.append("images", image);
 	}
 
-	return request<{ session: HostSession }>(`/api/sessions/${sessionId}/input`, token, {
+	return request<{ session: HostSession }>(`/api/sessions/${sessionId}/input`, {
 		method: "POST",
 		body: formData,
 	});
 }
 
-export function controlSession(
-	token: string,
-	sessionId: string,
-	action: "interrupt" | "terminate",
-) {
-	return request<{ ok: boolean }>(`/api/sessions/${sessionId}/control`, token, {
+export function controlSession(sessionId: string, action: "interrupt" | "terminate") {
+	return request<{ ok: boolean }>(`/api/sessions/${sessionId}/control`, {
 		method: "POST",
 		body: JSON.stringify({ action }),
 	});
 }
 
-export function setSessionArchived(token: string, sessionId: string, archived: boolean) {
-	return request<{ session: HostSession }>(`/api/sessions/${sessionId}/archive`, token, {
+export function setSessionArchived(sessionId: string, archived: boolean) {
+	return request<{ session: HostSession }>(`/api/sessions/${sessionId}/archive`, {
 		method: "POST",
 		body: JSON.stringify({ archived }),
 	});
 }
 
-export function respondToRequest(
-	token: string,
-	requestId: string,
-	payload: RequestResponsePayload,
-) {
-	return request<{ request: PendingRequest }>(`/api/requests/${requestId}/respond`, token, {
+export function respondToRequest(requestId: string, payload: RequestResponsePayload) {
+	return request<{ request: PendingRequest }>(`/api/requests/${requestId}/respond`, {
 		method: "POST",
 		body: JSON.stringify(payload),
 	});
 }
 
-/**
- * Connect to SSE stream for a session. Returns an AbortController to disconnect.
- * AIDEV-NOTE: Uses fetch-based SSE (not EventSource) to support Bearer token auth headers.
- */
 export function connectSSE(
-	token: string,
 	sessionId: string,
 	onMessage: (msg: SessionStreamMessage) => void,
 	onError?: (err: Error) => void,
@@ -195,7 +174,7 @@ export function connectSSE(
 
 		try {
 			const res = await fetch(`/api/sessions/${sessionId}/events`, {
-				headers: headers(token),
+				credentials: "same-origin",
 				signal: streamController.signal,
 			});
 

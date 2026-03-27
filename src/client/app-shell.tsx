@@ -11,6 +11,7 @@ import {
 	Send,
 } from "lucide-react";
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { AppBootData } from "~/client/boot";
 import { SessionLauncher } from "~/client/components/session-launcher";
 import {
 	connectSSE,
@@ -18,7 +19,6 @@ import {
 	createSession,
 	fetchProviders,
 	fetchSessions,
-	getToken,
 	respondToRequest,
 	sendInput,
 	setSessionArchived,
@@ -45,15 +45,7 @@ import {
 	StatusDot,
 } from "~/client/session-stream";
 
-function LoadingShell() {
-	return (
-		<div className="grid h-screen place-items-center bg-background">
-			<Loader2 className="size-4 animate-spin text-muted-foreground" />
-		</div>
-	);
-}
-
-export function AppShell({ defaultCwd }: { defaultCwd: string }) {
+export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated: true }> }) {
 	const route = useCurrentRoute();
 	const { navigate } = useRouter();
 	const scrollRef = useRef<HTMLDivElement>(null);
@@ -63,86 +55,91 @@ export function AppShell({ defaultCwd }: { defaultCwd: string }) {
 	const isAtBottom = useRef(true);
 	const selectedId = route.kind === "session" ? route.params.sessionId : null;
 	const isArchivedView = route.kind === "archived";
+	const initialDetail = boot.route.kind === "session" ? boot.sessionDetail : null;
 
-	const [authChecked, setAuthChecked] = useState(false);
-	const [token, setToken] = useState<string | null>(null);
-	const [providers, setProviders] = useState<ProviderSummary[]>([]);
-	const [sessions, setSessions] = useState<HostSession[]>([]);
-	const [session, setSession] = useState<HostSession | null>(null);
-	const [stream, setStream] = useState<HostEvent[]>([]);
-	const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
+	const [providers, setProviders] = useState<ProviderSummary[]>(boot.providers);
+	const [sessions, setSessions] = useState<HostSession[]>(boot.sessions);
+	const [session, setSession] = useState<HostSession | null>(initialDetail?.session ?? null);
+	const [stream, setStream] = useState<HostEvent[]>(initialDetail?.events ?? []);
+	const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>(
+		initialDetail?.pendingRequests.filter((request) => request.status === "pending") ?? [],
+	);
 	const [prompt, setPrompt] = useState("");
 	const [draftImages, setDraftImages] = useState<DraftImage[]>([]);
 	const [isCreating, setIsCreating] = useState(false);
-	const [initialLoading, setInitialLoading] = useState(true);
+	const [initialLoading, setInitialLoading] = useState(false);
 	const [now, setNow] = useState(() => Date.now());
 	const [streamState, setStreamState] = useState<"connected" | "reconnecting">("connected");
 	const [archiveConfirmId, setArchiveConfirmId] = useState<string | null>(null);
-	const activeSessions = sessions.filter((candidate) => !candidate.archived);
-	const archivedSessions = sessions.filter((candidate) => candidate.archived);
+	const { activeSessions, archivedSessions } = useMemo(() => {
+		const active: HostSession[] = [];
+		const archived: HostSession[] = [];
+
+		for (const candidate of sessions) {
+			if (candidate.archived) {
+				archived.push(candidate);
+				continue;
+			}
+
+			active.push(candidate);
+		}
+
+		return {
+			activeSessions: active,
+			archivedSessions: archived,
+		};
+	}, [sessions]);
 	const grouped = useMemo(() => groupStream(stream), [stream]);
+
+	const replaceSession = useCallback((nextSession: HostSession) => {
+		setSessions((previous) =>
+			previous.map((candidate) => (candidate.id === nextSession.id ? nextSession : candidate)),
+		);
+	}, []);
 
 	useEffect(() => {
 		draftImagesRef.current = draftImages;
 	}, [draftImages]);
 
 	useEffect(() => {
-		setToken(getToken());
-		setAuthChecked(true);
+		fetchProviders()
+			.then(({ providers: nextProviders }) => setProviders(nextProviders))
+			.catch(() => {});
 	}, []);
 
 	useEffect(() => {
-		if (authChecked && !token) {
-			navigate("/login", { replace: true });
-		}
-	}, [authChecked, navigate, token]);
-
-	useEffect(() => {
-		if (!token) {
-			return;
-		}
-
-		fetchProviders(token)
-			.then(({ providers: nextProviders }) => setProviders(nextProviders))
-			.catch(() => {});
-	}, [token]);
-
-	useEffect(() => {
-		if (!token) {
-			return;
-		}
-
-		fetchSessions(token)
+		fetchSessions()
 			.then(({ sessions: nextSessions }) => {
 				setSessions(nextSessions);
 				setInitialLoading(false);
 			})
 			.catch(() => setInitialLoading(false));
-	}, [token]);
+	}, []);
 
 	useEffect(() => {
-		if (!selectedId || !token) {
+		if (!selectedId) {
 			return;
 		}
 
-		setStream([]);
-		setPendingRequests([]);
-		setSession(null);
-		setStreamState("connected");
-		setDraftImages((previous) => {
-			for (const image of previous) {
-				URL.revokeObjectURL(image.url);
+		if (session?.id !== selectedId) {
+			setStream([]);
+			setPendingRequests([]);
+			setSession(null);
+			setStreamState("connected");
+			setDraftImages((previous) => {
+				for (const image of previous) {
+					URL.revokeObjectURL(image.url);
+				}
+
+				return [];
+			});
+
+			if (fileInputRef.current) {
+				fileInputRef.current.value = "";
 			}
-
-			return [];
-		});
-
-		if (fileInputRef.current) {
-			fileInputRef.current.value = "";
 		}
 
 		const controller = connectSSE(
-			token,
 			selectedId,
 			(message) => {
 				startTransition(() => {
@@ -152,21 +149,13 @@ export function AppShell({ defaultCwd }: { defaultCwd: string }) {
 						setPendingRequests(
 							message.payload.pendingRequests.filter((request) => request.status === "pending"),
 						);
-						setSessions((previous) =>
-							previous.map((candidate) =>
-								candidate.id === message.payload.session.id ? message.payload.session : candidate,
-							),
-						);
+						replaceSession(message.payload.session);
 						return;
 					}
 
 					if (message.type === "session") {
 						setSession(message.payload);
-						setSessions((previous) =>
-							previous.map((candidate) =>
-								candidate.id === message.payload.id ? message.payload : candidate,
-							),
-						);
+						replaceSession(message.payload);
 						return;
 					}
 
@@ -190,7 +179,7 @@ export function AppShell({ defaultCwd }: { defaultCwd: string }) {
 		);
 
 		return () => controller.abort();
-	}, [selectedId, token]);
+	}, [replaceSession, selectedId, session?.id]);
 
 	useEffect(() => {
 		if (selectedId) {
@@ -224,14 +213,14 @@ export function AppShell({ defaultCwd }: { defaultCwd: string }) {
 
 	const handleCreateSession = useCallback(
 		async (cwd: string, title: string) => {
-			if (!token || !cwd.trim()) {
+			if (!cwd.trim()) {
 				return;
 			}
 
 			setIsCreating(true);
 
 			try {
-				const result = await createSession(token, {
+				const result = await createSession({
 					provider: "claude",
 					cwd: cwd.trim(),
 					title: title || undefined,
@@ -245,11 +234,11 @@ export function AppShell({ defaultCwd }: { defaultCwd: string }) {
 				setIsCreating(false);
 			}
 		},
-		[navigate, token],
+		[navigate],
 	);
 
 	const handleSend = useCallback(async () => {
-		if (!token || !selectedId || session?.status === "running" || session?.status === "retrying") {
+		if (!selectedId || session?.status === "running" || session?.status === "retrying") {
 			return;
 		}
 
@@ -272,36 +261,27 @@ export function AppShell({ defaultCwd }: { defaultCwd: string }) {
 		}
 
 		try {
-			await sendInput(
-				token,
-				selectedId,
-				nextPrompt,
-				nextImages.map((image) => image.file),
-			);
+			await sendInput(selectedId, nextPrompt, nextImages.map((image) => image.file));
 		} catch {
 			setPrompt(nextPrompt);
 			setDraftImages(nextImages);
 		}
-	}, [draftImages, prompt, selectedId, session?.status, token]);
+	}, [draftImages, prompt, selectedId, session?.status]);
 
 	const handleInterrupt = useCallback(async () => {
-		if (!token || !selectedId) {
+		if (!selectedId) {
 			return;
 		}
 
 		try {
-			await controlSession(token, selectedId, "interrupt");
+			await controlSession(selectedId, "interrupt");
 		} catch {}
-	}, [selectedId, token]);
+	}, [selectedId]);
 
 	const handleArchive = useCallback(
 		async (sessionId: string, archived: boolean) => {
-			if (!token) {
-				return;
-			}
-
 			try {
-				const result = await setSessionArchived(token, sessionId, archived);
+				const result = await setSessionArchived(sessionId, archived);
 				setSessions((previous) =>
 					previous.map((candidate) =>
 						candidate.id === result.session.id ? result.session : candidate,
@@ -324,22 +304,18 @@ export function AppShell({ defaultCwd }: { defaultCwd: string }) {
 				console.error("Failed to update archive state:", error);
 			}
 		},
-		[isArchivedView, navigate, selectedId, token],
+		[isArchivedView, navigate, selectedId],
 	);
 
 	const handleRespond = useCallback(
 		async (requestId: string, payload: RequestResponsePayload) => {
-			if (!token) {
-				return;
-			}
-
 			try {
-				await respondToRequest(token, requestId, payload);
+				await respondToRequest(requestId, payload);
 			} catch (error) {
 				console.error("Failed to respond:", error);
 			}
 		},
-		[token],
+		[],
 	);
 
 	const addDraftImages = useCallback(async (files: File[]) => {
@@ -376,10 +352,6 @@ export function AppShell({ defaultCwd }: { defaultCwd: string }) {
 		},
 		[addDraftImages],
 	);
-
-	if (!authChecked || !token) {
-		return <LoadingShell />;
-	}
 
 	const sessionProvider = session
 		? providers.find((provider) => provider.id === session.provider)
@@ -757,10 +729,9 @@ export function AppShell({ defaultCwd }: { defaultCwd: string }) {
 					</>
 				) : (
 					<SessionLauncher
-						defaultPath={defaultCwd}
+						defaultPath={boot.defaultCwd}
 						isCreating={isCreating}
 						onCreate={handleCreateSession}
-						token={token}
 					/>
 				)}
 			</main>

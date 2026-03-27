@@ -1,4 +1,5 @@
 import { hydrateRoot } from "react-dom/client";
+import "~/client/styles.css";
 import { App } from "~/client/app";
 import { getBootData } from "~/client/boot";
 import { BrowserRouterProvider } from "~/client/router";
@@ -14,6 +15,6 @@ const boot = getBootData();
 hydrateRoot(
 	root,
 	<BrowserRouterProvider initialRoute={boot.route}>
-		<App defaultCwd={boot.defaultCwd} />
+		<App boot={boot} />
 	</BrowserRouterProvider>,
 );

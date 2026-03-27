@@ -1,29 +1,7 @@
 import { join } from "node:path";
+import tailwind from "bun-plugin-tailwind";
 
 const outdir = join(process.cwd(), "build", "client");
-
-async function buildStyles() {
-	const process = Bun.spawn(
-		[
-			"bunx",
-			"--bun",
-			"@tailwindcss/cli",
-			"-i",
-			"./src/client/styles.css",
-			"-o",
-			join(outdir, "client.css"),
-			"--minify",
-		],
-		{
-			stderr: "inherit",
-			stdout: "inherit",
-		},
-	);
-
-	if ((await process.exited) !== 0) {
-		throw new Error("Tailwind build failed");
-	}
-}
 
 async function buildClient() {
 	const result = await Bun.build({
@@ -35,6 +13,7 @@ async function buildClient() {
 			entry: "[name].[ext]",
 		},
 		outdir,
+		plugins: [tailwind],
 		splitting: false,
 		target: "browser",
 	});
@@ -52,9 +31,14 @@ async function buildClient() {
 	if (!entry) {
 		throw new Error("Missing browser entry: client.js");
 	}
+
+	const style = result.outputs.find((output) => output.path.endsWith("/client.css"));
+
+	if (!style) {
+		throw new Error("Missing browser stylesheet: client.css");
+	}
 }
 
 await Bun.$`rm -rf ${outdir} build/server`.quiet();
 await Bun.$`mkdir -p ${outdir}`.quiet();
-await buildStyles();
 await buildClient();

@@ -17,7 +17,6 @@ type SessionLauncherProps = {
 	defaultPath: string;
 	isCreating: boolean;
 	onCreate: (cwd: string, title: string) => void | Promise<void>;
-	token: string;
 };
 
 const ROOT_PATH = "/";
@@ -401,7 +400,6 @@ export function SessionLauncher({
 	defaultPath,
 	isCreating,
 	onCreate,
-	token,
 }: SessionLauncherProps) {
 	const titleInputId = useId();
 	const [title, setTitle] = useState("");
@@ -498,7 +496,7 @@ export function SessionLauncher({
 			return next;
 		});
 
-		void Promise.all(missingPaths.map((path) => fetchDirectory(token, path)))
+		void Promise.all(missingPaths.map((path) => fetchDirectory(path)))
 			.then((listings) => {
 				if (cancelled) {
 					return;
@@ -548,7 +546,7 @@ export function SessionLauncher({
 		return () => {
 			cancelled = true;
 		};
-	}, [directoryMap, pathChain, token]);
+	}, [directoryMap, pathChain]);
 
 	useEffect(() => {
 		const browser = browserRef.current;
