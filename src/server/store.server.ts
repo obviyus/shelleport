@@ -14,6 +14,7 @@ import type {
 	SessionLimit,
 	SessionStatus,
 	SessionStatusDetail,
+	SessionUsage,
 } from "~/shared/shelleport";
 import { config, ensureDataDir, getDatabasePath } from "~/server/config.server";
 import { createId, createTimestamp } from "~/server/id.server";
@@ -39,6 +40,8 @@ database.exec(`
 		imported INTEGER NOT NULL DEFAULT 0,
 		permission_mode TEXT NOT NULL DEFAULT 'default',
 		allowed_tools_json TEXT NOT NULL DEFAULT '[]',
+		usage_json TEXT NOT NULL DEFAULT 'null',
+		active_usage_json TEXT NOT NULL DEFAULT 'null',
 		last_event_sequence INTEGER NOT NULL DEFAULT 0,
 		create_time INTEGER NOT NULL,
 		update_time INTEGER NOT NULL
@@ -136,6 +139,16 @@ ensureColumn(
 	"ALTER TABLE host_sessions ADD COLUMN allowed_tools_json TEXT NOT NULL DEFAULT '[]'",
 );
 ensureColumn(
+	"host_sessions",
+	"usage_json",
+	"ALTER TABLE host_sessions ADD COLUMN usage_json TEXT NOT NULL DEFAULT 'null'",
+);
+ensureColumn(
+	"host_sessions",
+	"active_usage_json",
+	"ALTER TABLE host_sessions ADD COLUMN active_usage_json TEXT NOT NULL DEFAULT 'null'",
+);
+ensureColumn(
 	"pending_requests",
 	"block_reason",
 	"ALTER TABLE pending_requests ADD COLUMN block_reason TEXT",
@@ -160,6 +173,8 @@ type SqlSessionRow = {
 	imported: number;
 	permission_mode: string;
 	allowed_tools_json: string;
+	usage_json: string;
+	active_usage_json: string;
 	last_event_sequence: number;
 	create_time: number;
 	update_time: number;
@@ -222,6 +237,11 @@ function parseAllowedTools(value: string) {
 	return JSON.parse(value) as string[];
 }
 
+function parseUsage(value: string) {
+	const parsed = JSON.parse(value) as SessionUsage | null;
+	return parsed;
+}
+
 function emptyStatusDetail(): SessionStatusDetail {
 	return {
 		message: null,
@@ -241,6 +261,10 @@ function parseStatusDetail(value: string) {
 }
 
 function mapSession(row: SqlSessionRow): HostSession {
+	const totalUsage = parseUsage(row.usage_json);
+	const activeUsage = parseUsage(row.active_usage_json);
+	const usage = activeUsage ? addUsageTotals(totalUsage, activeUsage) : totalUsage;
+
 	return {
 		id: row.id,
 		provider: row.provider as ProviderId,
@@ -255,6 +279,7 @@ function mapSession(row: SqlSessionRow): HostSession {
 		imported: row.imported === 1,
 		permissionMode: row.permission_mode as PermissionMode,
 		allowedTools: parseAllowedTools(row.allowed_tools_json),
+		usage,
 		lastEventSequence: row.last_event_sequence,
 		createTime: row.create_time,
 		updateTime: row.update_time,
@@ -293,8 +318,8 @@ function mapRequest(row: SqlRequestRow): PendingRequest {
 
 const insertSessionStatement = database.query(
 	`INSERT INTO host_sessions (
-		id, provider, title, cwd, pinned, archived, status, status_detail_json, provider_session_ref, pid, imported, permission_mode, allowed_tools_json, last_event_sequence, create_time, update_time
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, provider, title, cwd, pinned, archived, status, status_detail_json, provider_session_ref, pid, imported, permission_mode, allowed_tools_json, usage_json, active_usage_json, last_event_sequence, create_time, update_time
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 );
 
 const listSessionsStatement = database.query<SqlSessionRow, []>(
@@ -321,6 +346,10 @@ const updateSessionStatement = database.query(
 
 const updateSessionSequenceStatement = database.query(
 	"UPDATE host_sessions SET last_event_sequence = ?, update_time = ? WHERE id = ?",
+);
+
+const updateSessionUsageStatement = database.query(
+	"UPDATE host_sessions SET usage_json = ?, active_usage_json = ?, update_time = ? WHERE id = ?",
 );
 
 const insertEventStatement = database.query(
@@ -435,6 +464,26 @@ function buildSessionSearchQuery(query: string) {
 		.join(" AND ");
 }
 
+function addUsageTotals(total: SessionUsage | null, next: SessionUsage | null) {
+	if (!next) {
+		return total;
+	}
+
+	if (!total) {
+		return { ...next };
+	}
+
+	return {
+		inputTokens: total.inputTokens + next.inputTokens,
+		outputTokens: total.outputTokens + next.outputTokens,
+		cacheReadInputTokens: total.cacheReadInputTokens + next.cacheReadInputTokens,
+		cacheCreationInputTokens:
+			total.cacheCreationInputTokens + next.cacheCreationInputTokens,
+		costUsd: total.costUsd === null || next.costUsd === null ? null : total.costUsd + next.costUsd,
+		model: next.model ?? total.model,
+	} satisfies SessionUsage;
+}
+
 rebuildSessionSearchIndex();
 
 export type CreateStoredSessionInput = {
@@ -483,6 +532,7 @@ export const sessionStore = {
 			imported: input.imported ?? false,
 			permissionMode: input.permissionMode,
 			allowedTools: input.allowedTools,
+			usage: null,
 			lastEventSequence: 0,
 			createTime: now,
 			updateTime: now,
@@ -502,6 +552,8 @@ export const sessionStore = {
 			session.imported ? 1 : 0,
 			session.permissionMode,
 			JSON.stringify(session.allowedTools),
+			JSON.stringify(session.usage),
+			JSON.stringify(null),
 			session.lastEventSequence,
 			session.createTime,
 			session.updateTime,
@@ -577,6 +629,39 @@ export const sessionStore = {
 	},
 	listEventsAfter(sessionId: string, sequence: number) {
 		return listEventsAfterStatement.all(sessionId, sequence).map(mapEvent);
+	},
+	resetSessionUsageProgress(sessionId: string) {
+		const row = getSessionStatement.get(sessionId);
+
+		if (!row) {
+			return null;
+		}
+
+		const total = parseUsage(row.usage_json);
+		const active = parseUsage(row.active_usage_json);
+		const nextTotal = active ? addUsageTotals(total, active) : total;
+		updateSessionUsageStatement.run(
+			JSON.stringify(nextTotal),
+			JSON.stringify(null),
+			createTimestamp(),
+			sessionId,
+		);
+		return this.getSession(sessionId);
+	},
+	updateSessionUsage(sessionId: string, usage: SessionUsage) {
+		const row = getSessionStatement.get(sessionId);
+
+		if (!row) {
+			return null;
+		}
+
+		updateSessionUsageStatement.run(
+			row.usage_json,
+			JSON.stringify(usage),
+			createTimestamp(),
+			sessionId,
+		);
+		return this.getSession(sessionId);
 	},
 	updateSession(sessionId: string, update: SessionUpdate) {
 		const current = this.getSession(sessionId);

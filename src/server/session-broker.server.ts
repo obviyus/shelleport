@@ -12,6 +12,7 @@ import type {
 	SessionControlPayload,
 	SessionInputPayload,
 	SessionStreamMessage,
+	SessionUsage,
 } from "~/shared/shelleport";
 import { getDefaultPermissionMode } from "~/shared/shelleport";
 import { ApiError } from "~/server/api-error.server";
@@ -93,6 +94,32 @@ function readSessionLimit(value: unknown): SessionLimit | null {
 	};
 }
 
+function readSessionUsage(value: unknown): SessionUsage | null {
+	if (!value || typeof value !== "object") {
+		return null;
+	}
+
+	const usage = value as Record<string, unknown>;
+
+	if (
+		typeof usage.inputTokens !== "number" ||
+		typeof usage.outputTokens !== "number" ||
+		typeof usage.cacheReadInputTokens !== "number" ||
+		typeof usage.cacheCreationInputTokens !== "number"
+	) {
+		return null;
+	}
+
+	return {
+		inputTokens: usage.inputTokens,
+		outputTokens: usage.outputTokens,
+		cacheReadInputTokens: usage.cacheReadInputTokens,
+		cacheCreationInputTokens: usage.cacheCreationInputTokens,
+		costUsd: typeof usage.costUsd === "number" ? usage.costUsd : null,
+		model: typeof usage.model === "string" ? usage.model : null,
+	};
+}
+
 function updateSessionStatus(
 	sessionId: string,
 	status: HostSession["status"],
@@ -139,6 +166,7 @@ async function consumeProviderRun(
 	};
 
 	activeRuns.set(sessionId, activeRun);
+	sessionStore.resetSessionUsageProgress(sessionId);
 	session = updateSessionStatus(sessionId, "running");
 
 	if (!session) {
@@ -217,6 +245,17 @@ async function consumeProviderRun(
 
 			if (session.provider === "claude" && (limit?.window || hasUsage)) {
 				void refreshClaudeProviderLimits();
+			}
+
+			const usage = readSessionUsage(event.data.usage);
+
+			if (usage) {
+				const updatedSession = sessionStore.updateSessionUsage(sessionId, usage);
+
+				if (updatedSession) {
+					session = updatedSession;
+					publishSession(updatedSession);
+				}
 			}
 
 			publishEvent(storedEvent);

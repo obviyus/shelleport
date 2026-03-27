@@ -9,7 +9,6 @@ import type {
 	RequestResponsePayload,
 	SessionLimit,
 	SessionStatus,
-	SessionUsage,
 } from "~/shared/shelleport";
 
 type ImagePreview = {
@@ -34,7 +33,6 @@ export type DraftImage = ImagePreview & {
 
 type UsageSnapshot = {
 	limit: SessionLimit | null;
-	usage: SessionUsage | null;
 };
 
 type LimitSnapshot = SessionLimit & {
@@ -190,32 +188,6 @@ function readString(value: unknown) {
 	return typeof value === "string" ? value : "";
 }
 
-function readUsage(value: unknown): SessionUsage | null {
-	if (!value || typeof value !== "object") {
-		return null;
-	}
-
-	const usage = value as Record<string, unknown>;
-
-	if (
-		typeof usage.inputTokens !== "number" ||
-		typeof usage.outputTokens !== "number" ||
-		typeof usage.cacheReadInputTokens !== "number" ||
-		typeof usage.cacheCreationInputTokens !== "number"
-	) {
-		return null;
-	}
-
-	return {
-		inputTokens: usage.inputTokens,
-		outputTokens: usage.outputTokens,
-		cacheReadInputTokens: usage.cacheReadInputTokens,
-		cacheCreationInputTokens: usage.cacheCreationInputTokens,
-		costUsd: typeof usage.costUsd === "number" ? usage.costUsd : null,
-		model: typeof usage.model === "string" ? usage.model : null,
-	};
-}
-
 function readLimit(value: unknown): SessionLimit | null {
 	if (!value || typeof value !== "object") {
 		return null;
@@ -252,27 +224,14 @@ function getSessionLimitMap(entries: HostEvent[]) {
 }
 
 function getUsageSnapshot(entries: HostEvent[]): UsageSnapshot {
-	let usage: SessionUsage | null = null;
 	const limits = getSessionLimitMap(entries);
 	let limit: SessionLimit | null = null;
-
-	for (let index = entries.length - 1; index >= 0; index -= 1) {
-		const entry = entries[index];
-
-		if (!usage) {
-			usage = readUsage(entry.data.usage);
-		}
-
-		if (usage) {
-			break;
-		}
-	}
 
 	for (const candidate of limits.values()) {
 		limit = candidate;
 	}
 
-	return { limit, usage };
+	return { limit };
 }
 
 function formatMetricCount(value: number) {
@@ -725,9 +684,14 @@ export function getSidebarMeta(session: HostSession, now: number) {
 	return session.cwd;
 }
 
-export function getSessionUsageBadges(entries: HostEvent[], now: number) {
+export function getSessionUsageBadges(
+	session: Pick<HostSession, "usage"> | null,
+	entries: HostEvent[],
+	now: number,
+) {
 	const badges: string[] = [];
-	const { usage, limit } = getUsageSnapshot(entries);
+	const { limit } = getUsageSnapshot(entries);
+	const usage = session?.usage ?? null;
 
 	if (usage) {
 		badges.push(`in ${formatMetricCount(usage.inputTokens)}`);
