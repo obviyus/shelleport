@@ -1,6 +1,8 @@
 {
 	"name": "shelleport",
-	"version": "0.1.0",
+	"version": "0.0.1",
+	"description": "Browser control plane for coding agent sessions",
+	"license": "MIT",
 	"homepage": "https://github.com/obviyus/shelleport#readme",
 	"bugs": {
 		"url": "https://github.com/obviyus/shelleport/issues"
@@ -10,14 +12,31 @@
 		"url": "git+https://github.com/obviyus/shelleport.git"
 	},
 	"bin": {
-		"shelleport": "./bin/shelleport.js"
+		"shelleport": "bin/shelleport.js"
 	},
 	"files": [
 		"bin",
-		"scripts",
-		"README.md"
+		"scripts/npm-runtime.js",
+		"scripts/postinstall.js",
+		"README.md",
+		"LICENSE"
 	],
 	"type": "module",
+	"os": [
+		"darwin",
+		"linux"
+	],
+	"engines": {
+		"node": ">=18"
+	},
+	"keywords": [
+		"agent",
+		"claude",
+		"cli",
+		"bun",
+		"remote-control",
+		"sse"
+	],
 	"publishConfig": {
 		"access": "public"
 	},
