@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { createWriteStream } from "node:fs";
-import { chmod, mkdir, readFile, rename, rm } from "node:fs/promises";
+import { chmod, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Readable } from "node:stream";
@@ -11,6 +11,10 @@ const packageJson = JSON.parse(await readFile(join(packageRoot, "package.json"),
 const installRoot = join(packageRoot, ".shelleport");
 const binaryPath = join(installRoot, "shelleport");
 const repository = "obviyus/shelleport";
+
+export function getSystemdServicePath(home = process.env.HOME ?? process.cwd()) {
+	return join(home, ".config", "systemd", "user", "shelleport.service");
+}
 
 function getTarget() {
 	if (process.platform === "darwin" && process.arch === "arm64") {
@@ -32,12 +36,16 @@ function getTarget() {
 	throw new Error(`Unsupported platform: ${process.platform}-${process.arch}`);
 }
 
-function getReleaseAssetName() {
-	return `shelleport-v${packageJson.version}-${getTarget()}`;
+export function normalizeReleaseVersion(tag) {
+	return tag.startsWith("v") ? tag.slice(1) : tag;
 }
 
-function getReleaseUrl(fileName) {
-	return `https://github.com/${repository}/releases/download/v${packageJson.version}/${fileName}`;
+export function getReleaseAssetName(version = packageJson.version) {
+	return `shelleport-v${version}-${getTarget()}`;
+}
+
+function getReleaseUrl(version, fileName) {
+	return `https://github.com/${repository}/releases/download/v${version}/${fileName}`;
 }
 
 function formatBytes(bytes) {
@@ -115,9 +123,9 @@ async function downloadFile(url, destinationPath, label) {
 	finishDownloadProgress();
 }
 
-async function verifyBinaryChecksum(downloadPath) {
+async function verifyBinaryChecksum(downloadPath, version) {
 	const checksums = await readFile(join(installRoot, "SHASUMS256.txt"), "utf8");
-	const assetName = getReleaseAssetName();
+	const assetName = getReleaseAssetName(version);
 	const expectedLine = checksums
 		.split("\n")
 		.map((line) => line.trim())
@@ -136,23 +144,172 @@ async function verifyBinaryChecksum(downloadPath) {
 	}
 }
 
-export async function installBundle() {
-	const assetName = getReleaseAssetName();
+async function installBundleForVersion(version) {
+	const assetName = getReleaseAssetName(version);
 	const downloadPath = join(installRoot, assetName);
 	const checksumsPath = join(installRoot, "SHASUMS256.txt");
 	const stagingPath = join(installRoot, `.tmp-${process.pid}-${Date.now()}`);
 
 	await rm(stagingPath, { force: true });
 	await mkdir(installRoot, { recursive: true });
-	await downloadFile(getReleaseUrl(assetName), downloadPath, `Downloading ${assetName}`);
-	await downloadFile(getReleaseUrl("SHASUMS256.txt"), checksumsPath, "Verifying checksum");
-	await verifyBinaryChecksum(downloadPath);
+	await downloadFile(getReleaseUrl(version, assetName), downloadPath, `Downloading ${assetName}`);
+	await downloadFile(getReleaseUrl(version, "SHASUMS256.txt"), checksumsPath, "Verifying checksum");
+	await verifyBinaryChecksum(downloadPath, version);
 	await rm(stagingPath, { force: true });
 	await rename(downloadPath, stagingPath);
 	await chmod(stagingPath, 0o755);
 	await rm(binaryPath, { force: true });
 	await rename(stagingPath, binaryPath);
 	await rm(checksumsPath, { force: true });
+}
+
+export async function installBundle(version = packageJson.version) {
+	await installBundleForVersion(version);
+}
+
+export async function fetchLatestReleaseVersion() {
+	const response = await fetch(`https://api.github.com/repos/${repository}/releases/latest`, {
+		headers: {
+			accept: "application/vnd.github+json",
+			"user-agent": "shelleport-installer",
+		},
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to fetch latest release: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = await response.json();
+
+	if (!payload || typeof payload.tag_name !== "string" || payload.tag_name.length === 0) {
+		throw new Error("Latest release is missing tag_name");
+	}
+
+	return normalizeReleaseVersion(payload.tag_name);
+}
+
+async function serviceFileExists(path) {
+	try {
+		await stat(path);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+async function findClaudeBinary() {
+	if (process.env.SHELLEPORT_CLAUDE_BIN) {
+		return process.env.SHELLEPORT_CLAUDE_BIN;
+	}
+
+	const home = process.env.HOME;
+
+	if (!home) {
+		return null;
+	}
+
+	const candidate = join(home, ".local", "bin", "claude");
+
+	try {
+		await stat(candidate);
+		return candidate;
+	} catch {
+		return null;
+	}
+}
+
+export function upsertSystemdEnvironment(text, key, value) {
+	const line = `Environment=${key}=${value}`;
+	const pattern = new RegExp(`^Environment=${key}=.*$`, "m");
+
+	if (pattern.test(text)) {
+		return text.replace(pattern, line);
+	}
+
+	const anchor = "[Install]";
+	const index = text.indexOf(anchor);
+
+	if (index === -1) {
+		return `${text.trimEnd()}\n${line}\n`;
+	}
+
+	return `${text.slice(0, index)}${line}\n${text.slice(index)}`;
+}
+
+export async function patchInstalledSystemdService() {
+	if (process.platform !== "linux") {
+		return false;
+	}
+
+	const servicePath = getSystemdServicePath();
+
+	if (!(await serviceFileExists(servicePath))) {
+		return false;
+	}
+
+	let text = await readFile(servicePath, "utf8");
+	const path = process.env.PATH ?? "";
+	const claudeBin = await findClaudeBinary();
+
+	if (path) {
+		text = upsertSystemdEnvironment(text, "PATH", path);
+	}
+
+	if (claudeBin) {
+		text = upsertSystemdEnvironment(text, "SHELLEPORT_CLAUDE_BIN", claudeBin);
+	}
+
+	await writeFile(servicePath, text);
+	await runCommand("systemctl", ["--user", "daemon-reload"]);
+	return true;
+}
+
+function runCommand(command, args) {
+	return new Promise((resolve, reject) => {
+		const child = spawn(command, args, {
+			env: process.env,
+			stdio: "inherit",
+		});
+
+		child.once("error", reject);
+		child.once("exit", (code, signal) => {
+			if (signal) {
+				reject(new Error(`${command} exited with signal ${signal}`));
+				return;
+			}
+
+			if (code !== 0) {
+				reject(new Error(`${command} ${args.join(" ")} failed with exit code ${code}`));
+				return;
+			}
+
+			resolve();
+		});
+	});
+}
+
+export async function restartInstalledService() {
+	if (process.platform !== "linux") {
+		return false;
+	}
+
+	if (!(await serviceFileExists(getSystemdServicePath()))) {
+		return false;
+	}
+
+	await runCommand("systemctl", ["--user", "restart", "shelleport.service"]);
+	return true;
+}
+
+export async function upgradeBundle() {
+	const version = await fetchLatestReleaseVersion();
+	await installBundleForVersion(version);
+	await patchInstalledSystemdService();
+	const restartedService = await restartInstalledService();
+	return {
+		restartedService,
+		version,
+	};
 }
 
 export function getInstalledBinaryPath() {
