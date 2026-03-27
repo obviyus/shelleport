@@ -4,7 +4,6 @@ import { createWriteStream } from "node:fs";
 import { chmod, mkdir, readFile, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
 
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -41,7 +40,42 @@ function getReleaseUrl(fileName) {
 	return `https://github.com/${repository}/releases/download/v${packageJson.version}/${fileName}`;
 }
 
-async function downloadFile(url, destinationPath) {
+function formatBytes(bytes) {
+	if (bytes < 1024 * 1024) {
+		return `${(bytes / 1024).toFixed(1)} KB`;
+	}
+
+	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function renderDownloadProgress(label, downloadedBytes, totalBytes) {
+	if (!process.stderr.isTTY) {
+		return;
+	}
+
+	if (!totalBytes) {
+		process.stderr.write(`\r${label} ${formatBytes(downloadedBytes)}`);
+		return;
+	}
+
+	const width = 28;
+	const ratio = Math.min(downloadedBytes / totalBytes, 1);
+	const filled = Math.round(width * ratio);
+	const bar = `${"=".repeat(filled)}${" ".repeat(width - filled)}`;
+	const percent = String(Math.round(ratio * 100)).padStart(3, " ");
+
+	process.stderr.write(
+		`\r${label} [${bar}] ${percent}% ${formatBytes(downloadedBytes)} / ${formatBytes(totalBytes)}`,
+	);
+}
+
+function finishDownloadProgress() {
+	if (process.stderr.isTTY) {
+		process.stderr.write("\n");
+	}
+}
+
+async function downloadFile(url, destinationPath, label) {
 	const response = await fetch(url, {
 		headers: {
 			"user-agent": "shelleport-installer",
@@ -52,7 +86,33 @@ async function downloadFile(url, destinationPath) {
 		throw new Error(`Download failed: ${response.status} ${response.statusText}`);
 	}
 
-	await pipeline(Readable.fromWeb(response.body), createWriteStream(destinationPath));
+	const totalBytesHeader = response.headers.get("content-length");
+	const totalBytes = totalBytesHeader ? Number(totalBytesHeader) : 0;
+	const input = Readable.fromWeb(response.body);
+	const output = createWriteStream(destinationPath);
+	let downloadedBytes = 0;
+	let lastRenderTime = 0;
+
+	for await (const chunk of input) {
+		downloadedBytes += chunk.length;
+		if (!output.write(chunk)) {
+			await new Promise((resolve) => output.once("drain", resolve));
+		}
+
+		const now = Date.now();
+		if (now - lastRenderTime >= 100) {
+			renderDownloadProgress(label, downloadedBytes, totalBytes);
+			lastRenderTime = now;
+		}
+	}
+
+	output.end();
+	await new Promise((resolve, reject) => {
+		output.once("finish", resolve);
+		output.once("error", reject);
+	});
+	renderDownloadProgress(label, downloadedBytes, totalBytes);
+	finishDownloadProgress();
 }
 
 async function verifyBinaryChecksum(downloadPath) {
@@ -84,8 +144,8 @@ export async function installBundle() {
 
 	await rm(stagingPath, { force: true });
 	await mkdir(installRoot, { recursive: true });
-	await downloadFile(getReleaseUrl(assetName), downloadPath);
-	await downloadFile(getReleaseUrl("SHASUMS256.txt"), checksumsPath);
+	await downloadFile(getReleaseUrl(assetName), downloadPath, `Downloading ${assetName}`);
+	await downloadFile(getReleaseUrl("SHASUMS256.txt"), checksumsPath, "Verifying checksum");
 	await verifyBinaryChecksum(downloadPath);
 	await rm(stagingPath, { force: true });
 	await rename(downloadPath, stagingPath);

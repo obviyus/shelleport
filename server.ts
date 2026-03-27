@@ -166,8 +166,12 @@ export async function createServerFetchHandler() {
 export async function runServe() {
 	await ensureDataDir();
 	const fetch = await createServerFetchHandler();
+	const browserHost =
+		config.defaultHost === "0.0.0.0" || config.defaultHost === "::"
+			? "localhost"
+			: config.defaultHost;
 
-	console.log(`Server starting on ${config.defaultHost}:${config.defaultPort}`);
+	console.log(`Server starting on http://${browserHost}:${config.defaultPort}`);
 
 	Bun.serve({
 		development: isDevelopment
