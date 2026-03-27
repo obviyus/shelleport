@@ -113,7 +113,7 @@ try {
 		throw new Error("Missing client script");
 	}
 
-	await assertPage(scriptPath, 200, "createRoot");
+	await assertPage(new URL(scriptPath, `http://${host}:${port}/`).pathname, 200, "createRoot");
 } finally {
 	child.kill();
 	await child.exited.catch(() => {});
