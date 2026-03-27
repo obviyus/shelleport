@@ -45,6 +45,7 @@ export type HostSession = {
 	imported: boolean;
 	permissionMode: PermissionMode;
 	allowedTools: string[];
+	queuedInputCount: number;
 	statusDetail: SessionStatusDetail;
 	usage: SessionUsage | null;
 	createTime: number;
@@ -109,6 +110,13 @@ export type PendingRequest = {
 	updateTime: number;
 };
 
+export type QueuedSessionInput = {
+	id: string;
+	prompt: string;
+	attachments: SessionAttachment[];
+	createTime: number;
+};
+
 export type HistoricalSession = {
 	provider: ProviderId;
 	providerSessionRef: string;
@@ -124,6 +132,7 @@ export type SessionDetail = {
 	session: HostSession;
 	events: HostEvent[];
 	pendingRequests: PendingRequest[];
+	queuedInputs: QueuedSessionInput[];
 };
 
 export type SessionStreamMessage =
@@ -142,6 +151,10 @@ export type SessionStreamMessage =
 	| {
 			type: "request";
 			payload: PendingRequest;
+	  }
+	| {
+			type: "queued-inputs";
+			payload: QueuedSessionInput[];
 	  };
 
 export type CreateSessionInput = {
@@ -199,4 +212,8 @@ export type ImportSessionPayload = {
 export type RequestResponsePayload = {
 	decision: "allow" | "deny";
 	toolRule?: string;
+};
+
+export type QueuedSessionInputUpdatePayload = {
+	prompt: string;
 };

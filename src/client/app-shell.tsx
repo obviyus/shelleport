@@ -12,6 +12,7 @@ import {
 	Plus,
 	Search,
 	Send,
+	Trash2,
 	X,
 } from "lucide-react";
 import {
@@ -37,11 +38,13 @@ import {
 	connectSSE,
 	controlSession,
 	createSession,
+	deleteQueuedInput,
 	fetchProviders,
 	fetchSessions,
 	respondToRequest,
 	sendInput,
 	setSessionArchived,
+	updateQueuedInput,
 	updateSessionMeta,
 } from "~/client/api";
 import type {
@@ -51,6 +54,7 @@ import type {
 	PermissionMode,
 	ProviderLimitState,
 	ProviderSummary,
+	QueuedSessionInput,
 	RequestResponsePayload,
 	SessionLimit,
 } from "~/shared/shelleport";
@@ -120,6 +124,16 @@ function getSessionLimitTone(limit: SessionLimit) {
 	return "bg-white shadow-[0_0_18px_oklch(1_0_0_/_0.26)]";
 }
 
+function formatQueuedAttachmentLabel(queuedInput: QueuedSessionInput) {
+	const count = queuedInput.attachments.length;
+
+	if (count === 0) {
+		return null;
+	}
+
+	return `${count} image${count === 1 ? "" : "s"}`;
+}
+
 export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated: true }> }) {
 	const route = useCurrentRoute();
 	const { navigate } = useRouter();
@@ -140,6 +154,9 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>(
 		initialDetail?.pendingRequests.filter((request) => request.status === "pending") ?? [],
 	);
+	const [queuedInputs, setQueuedInputs] = useState<QueuedSessionInput[]>(
+		initialDetail?.queuedInputs ?? [],
+	);
 	const [prompt, setPrompt] = useState("");
 	const [draftImages, setDraftImages] = useState<DraftImage[]>([]);
 	const [isCreating, setIsCreating] = useState(false);
@@ -151,6 +168,9 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const [isRenaming, setIsRenaming] = useState(false);
 	const [sessionQuery, setSessionQuery] = useState("");
 	const [showsClaudeBypassWarning, setShowsClaudeBypassWarning] = useState(false);
+	const [editingQueuedInputId, setEditingQueuedInputId] = useState<string | null>(null);
+	const [queuedInputDraft, setQueuedInputDraft] = useState("");
+	const [busyQueuedInputId, setBusyQueuedInputId] = useState<string | null>(null);
 	const deferredSessionQuery = useDeferredValue(sessionQuery);
 	const { activeSessions, archivedSessions } = useMemo(() => {
 		const active: HostSession[] = [];
@@ -266,6 +286,19 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	}, [session?.id, session?.title]);
 
 	useEffect(() => {
+		if (!editingQueuedInputId) {
+			return;
+		}
+
+		const queuedInput = queuedInputs.find((candidate) => candidate.id === editingQueuedInputId) ?? null;
+
+		if (!queuedInput) {
+			setEditingQueuedInputId(null);
+			setQueuedInputDraft("");
+		}
+	}, [editingQueuedInputId, queuedInputs]);
+
+	useEffect(() => {
 		if (!selectedId) {
 			return;
 		}
@@ -273,6 +306,10 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		if (session?.id !== selectedId) {
 			setStream([]);
 			setPendingRequests([]);
+			setQueuedInputs([]);
+			setEditingQueuedInputId(null);
+			setQueuedInputDraft("");
+			setBusyQueuedInputId(null);
 			setSession(null);
 			setStreamState("connected");
 			setDraftImages((previous) => {
@@ -298,6 +335,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 						setPendingRequests(
 							message.payload.pendingRequests.filter((request) => request.status === "pending"),
 						);
+						setQueuedInputs(message.payload.queuedInputs);
 						replaceSession(message.payload.session);
 						return;
 					}
@@ -325,6 +363,11 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 						return;
 					}
 
+					if (message.type === "queued-inputs") {
+						setQueuedInputs(message.payload);
+						return;
+					}
+
 					setPendingRequests((previous) =>
 						message.payload.status === "pending"
 							? [
@@ -343,15 +386,19 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	}, [replaceSession, selectedId, session?.id]);
 
 	useEffect(() => {
-		if (selectedId) {
-			return;
-		}
+	if (selectedId) {
+		return;
+	}
 
-		setSession(null);
-		setStream([]);
-		setPendingRequests([]);
-		setStreamState("connected");
-	}, [selectedId]);
+	setSession(null);
+	setStream([]);
+	setPendingRequests([]);
+	setQueuedInputs([]);
+	setEditingQueuedInputId(null);
+	setQueuedInputDraft("");
+	setBusyQueuedInputId(null);
+	setStreamState("connected");
+}, [selectedId]);
 
 	useEffect(() => {
 		if (isAtBottom.current && scrollRef.current) {
@@ -422,12 +469,13 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	}
 
 	const handleSend = useCallback(async () => {
-		if (!selectedId || session?.status === "running" || session?.status === "retrying") {
+		if (!selectedId) {
 			return;
 		}
 
 		const nextPrompt = prompt;
-		const nextImages = draftImages;
+		const nextDraftImages = draftImages;
+		const nextImages = nextDraftImages.map((image) => image.file);
 
 		if (nextPrompt.trim().length === 0 && nextImages.length === 0) {
 			return;
@@ -445,16 +493,12 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		}
 
 		try {
-			await sendInput(
-				selectedId,
-				nextPrompt,
-				nextImages.map((image) => image.file),
-			);
+			await sendInput(selectedId, nextPrompt, nextImages);
 		} catch {
 			setPrompt(nextPrompt);
-			setDraftImages(nextImages);
+			setDraftImages(nextDraftImages);
 		}
-	}, [draftImages, prompt, selectedId, session?.status]);
+	}, [draftImages, prompt, selectedId]);
 
 	const handleInterrupt = useCallback(async () => {
 		if (!selectedId) {
@@ -499,6 +543,60 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			console.error("Failed to respond:", error);
 		}
 	}, []);
+
+	const handleStartQueuedInputEdit = useCallback((queuedInput: QueuedSessionInput) => {
+		setEditingQueuedInputId(queuedInput.id);
+		setQueuedInputDraft(queuedInput.prompt);
+	}, []);
+
+	const handleCancelQueuedInputEdit = useCallback(() => {
+		setEditingQueuedInputId(null);
+		setQueuedInputDraft("");
+	}, []);
+
+	const handleSaveQueuedInput = useCallback(async () => {
+		if (!selectedId || !editingQueuedInputId || queuedInputDraft.trim().length === 0) {
+			return;
+		}
+
+		setBusyQueuedInputId(editingQueuedInputId);
+
+		try {
+			await updateQueuedInput(selectedId, editingQueuedInputId, {
+				prompt: queuedInputDraft.trim(),
+			});
+			setEditingQueuedInputId(null);
+			setQueuedInputDraft("");
+		} catch (error) {
+			console.error("Failed to update queued input:", error);
+		} finally {
+			setBusyQueuedInputId((current) => (current === editingQueuedInputId ? null : current));
+		}
+	}, [editingQueuedInputId, queuedInputDraft, selectedId]);
+
+	const handleDeleteQueuedInput = useCallback(
+		async (queuedInputId: string) => {
+			if (!selectedId) {
+				return;
+			}
+
+			setBusyQueuedInputId(queuedInputId);
+
+			try {
+				await deleteQueuedInput(selectedId, queuedInputId);
+
+				if (editingQueuedInputId === queuedInputId) {
+					setEditingQueuedInputId(null);
+					setQueuedInputDraft("");
+				}
+			} catch (error) {
+				console.error("Failed to delete queued input:", error);
+			} finally {
+				setBusyQueuedInputId((current) => (current === queuedInputId ? null : current));
+			}
+		},
+		[editingQueuedInputId, selectedId],
+	);
 
 	const handlePinned = useCallback(
 		async (sessionId: string, pinned: boolean) => {
@@ -576,9 +674,10 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		? providers.find((provider) => provider.id === session.provider)
 		: null;
 	const canAttachImages = sessionProvider?.capabilities.supportsImages === true;
-	const isSessionBusy = session?.status === "running" || session?.status === "retrying";
-	const canSend =
-		!!selectedId && (prompt.trim().length > 0 || draftImages.length > 0) && !isSessionBusy;
+	const isSessionBusy =
+		session?.status === "running" || session?.status === "retrying" || session?.status === "waiting";
+	const queuedInputCount = queuedInputs.length;
+	const canSend = !!selectedId && (prompt.trim().length > 0 || draftImages.length > 0);
 	const permissionModeLabel = session ? formatPermissionModeLabel(session) : null;
 
 	function handleScroll() {
@@ -1096,6 +1195,96 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											))}
 										</div>
 									)}
+									{queuedInputs.length > 0 && (
+										<div className="border-b border-border px-4 py-3">
+											<div className="mb-2 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/74">
+												Queued
+											</div>
+											<div className="space-y-2">
+												{queuedInputs.map((queuedInput, index) => {
+													const attachmentLabel = formatQueuedAttachmentLabel(queuedInput);
+													const isEditing = editingQueuedInputId === queuedInput.id;
+													const isBusy = busyQueuedInputId === queuedInput.id;
+
+													return (
+														<div
+															key={queuedInput.id}
+															className="rounded-md border border-foreground/10 bg-background/42 px-3 py-2"
+														>
+															<div className="flex items-center justify-between gap-3">
+																<div className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground/72">
+																	#{index + 1}
+																</div>
+																<div className="flex items-center gap-1">
+																	{attachmentLabel && (
+																		<div className="mr-1 text-[10px] text-muted-foreground/72">
+																			{attachmentLabel}
+																		</div>
+																	)}
+																	{isBusy ? (
+																		<div className="flex size-6 items-center justify-center">
+																			<Loader2 className="size-3 animate-spin text-muted-foreground/72" />
+																		</div>
+																	) : isEditing ? (
+																		<>
+																			<button
+																				type="button"
+																				onClick={() => void handleSaveQueuedInput()}
+																				disabled={queuedInputDraft.trim().length === 0}
+																				className="flex size-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground disabled:opacity-30"
+																				title="Save queued message"
+																			>
+																				<Check className="size-3" />
+																			</button>
+																			<button
+																				type="button"
+																				onClick={handleCancelQueuedInputEdit}
+																				className="flex size-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
+																				title="Cancel edit"
+																			>
+																				<X className="size-3" />
+																			</button>
+																		</>
+																	) : (
+																		<>
+																			<button
+																				type="button"
+																				onClick={() => handleStartQueuedInputEdit(queuedInput)}
+																				className="flex size-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
+																				title="Edit queued message"
+																			>
+																				<Pencil className="size-3" />
+																			</button>
+																			<button
+																				type="button"
+																				onClick={() => void handleDeleteQueuedInput(queuedInput.id)}
+																				className="flex size-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
+																				title="Delete queued message"
+																			>
+																				<Trash2 className="size-3" />
+																			</button>
+																		</>
+																	)}
+																</div>
+															</div>
+															{isEditing ? (
+																<textarea
+																	rows={3}
+																	value={queuedInputDraft}
+																	onChange={(event) => setQueuedInputDraft(event.target.value)}
+																	className="mt-2 w-full resize-none rounded border border-foreground/10 bg-background px-2.5 py-2 text-xs leading-[1.7] text-foreground outline-none"
+																/>
+															) : (
+																<div className="mt-1 whitespace-pre-wrap text-xs leading-[1.7] text-foreground/86">
+																	{queuedInput.prompt}
+																</div>
+															)}
+														</div>
+													);
+												})}
+											</div>
+										</div>
+									)}
 									<textarea
 										ref={textareaRef}
 										rows={1}
@@ -1108,20 +1297,23 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 										onPaste={handlePaste}
 										placeholder={
 											isSessionBusy
-												? "Claude is working..."
+												? "Claude is working... press Enter to queue"
 												: canAttachImages
 													? "Message Claude... paste images or attach files"
 													: "Message Claude... (Enter to send)"
 										}
-										disabled={isSessionBusy}
-										className="w-full resize-none bg-transparent px-4 py-3 pr-20 text-xs text-foreground outline-none placeholder:text-muted-foreground/60 disabled:cursor-not-allowed disabled:opacity-60"
+										className="w-full resize-none bg-transparent px-4 py-3 pr-20 text-xs text-foreground outline-none placeholder:text-muted-foreground/60"
 									/>
+									{queuedInputCount > 0 && (
+										<div className="pointer-events-none absolute bottom-2 left-4 text-[10px] text-muted-foreground/82">
+											{queuedInputCount} queued
+										</div>
+									)}
 									{canAttachImages && (
 										<button
 											type="button"
 											onClick={() => fileInputRef.current?.click()}
-											disabled={isSessionBusy}
-											className="absolute right-10 bottom-2 flex size-7 items-center justify-center rounded border border-foreground/10 bg-background text-muted-foreground/82 transition hover:border-foreground/22 hover:text-foreground disabled:opacity-30"
+											className="absolute right-10 bottom-2 flex size-7 items-center justify-center rounded border border-foreground/10 bg-background text-muted-foreground/82 transition hover:border-foreground/22 hover:text-foreground"
 											title="Attach images"
 										>
 											<ImagePlus className="size-3.5" />

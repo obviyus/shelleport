@@ -4,6 +4,8 @@ import type {
 	HostSession,
 	ImportSessionPayload,
 	PendingRequest,
+	QueuedSessionInput,
+	QueuedSessionInputUpdatePayload,
 	SessionArchivePayload,
 	SessionMetaPayload,
 	RequestResponsePayload,
@@ -61,6 +63,13 @@ function publishRequest(request: PendingRequest) {
 	publish(request.sessionId, {
 		type: "request",
 		payload: request,
+	});
+}
+
+function publishQueuedInputs(sessionId: string, queuedInputs: QueuedSessionInput[]) {
+	publish(sessionId, {
+		type: "queued-inputs",
+		payload: queuedInputs,
 	});
 }
 
@@ -142,6 +151,54 @@ function updateSessionStatus(
 	}
 
 	return updatedSession;
+}
+
+function canStartInputRun(session: HostSession) {
+	return (
+		!activeRuns.has(session.id) &&
+		session.status !== "running" &&
+		session.status !== "retrying" &&
+		session.status !== "waiting"
+	);
+}
+
+function publishPromptEvent(sessionId: string, input: SessionInputPayload) {
+	const promptEvent = sessionStore.appendEvent(sessionId, {
+		kind: "text",
+		summary: "User message",
+		data: {
+			role: "user",
+			text: input.prompt,
+			attachments: input.attachments,
+		},
+		rawProviderEvent: null,
+	});
+	publishEvent(promptEvent);
+}
+
+function startNextQueuedInput(sessionId: string) {
+	const session = sessionStore.getSession(sessionId);
+
+	if (!session || !canStartInputRun(session) || session.queuedInputCount === 0) {
+		return false;
+	}
+
+	const queuedInput = sessionStore.shiftQueuedInput(sessionId);
+
+	if (!queuedInput) {
+		return false;
+	}
+
+	const updatedSession = sessionStore.getSession(sessionId);
+
+	if (updatedSession) {
+		publishSession(updatedSession);
+	}
+
+	publishQueuedInputs(sessionId, sessionStore.listQueuedInputs(sessionId));
+
+	void consumeProviderRun(sessionId, queuedInput, "send");
+	return true;
 }
 
 async function consumeProviderRun(
@@ -301,6 +358,7 @@ async function consumeProviderRun(
 		}
 
 		updateSessionStatus(sessionId, nextStatus, nextStatusDetail, { pid: null });
+		startNextQueuedInput(sessionId);
 
 		activeRun.resolveDone();
 	}
@@ -343,6 +401,10 @@ export const sessionBroker = {
 				},
 				pid: null,
 			});
+		}
+
+		for (const session of sessionStore.listSessions()) {
+			startNextQueuedInput(session.id);
 		}
 	},
 	listSessions(query?: string) {
@@ -401,17 +463,7 @@ export const sessionBroker = {
 		});
 
 		if (input.prompt?.trim()) {
-			const promptEvent = sessionStore.appendEvent(session.id, {
-				kind: "text",
-				summary: "User message",
-				data: {
-					role: "user",
-					text: input.prompt,
-					attachments: [],
-				},
-				rawProviderEvent: null,
-			});
-			publishEvent(promptEvent);
+			publishPromptEvent(session.id, { prompt: input.prompt, attachments: [] });
 			void consumeProviderRun(session.id, { prompt: input.prompt, attachments: [] }, "send");
 		}
 
@@ -439,10 +491,6 @@ export const sessionBroker = {
 		});
 	},
 	async sendInput(sessionId: string, input: SessionInputPayload) {
-		if (activeRuns.has(sessionId)) {
-			throw new ApiError(409, "session_already_running", "Session already running");
-		}
-
 		if (input.prompt.trim().length === 0 && input.attachments.length === 0) {
 			throw new ApiError(400, "prompt_required", "Prompt or image is required");
 		}
@@ -463,21 +511,22 @@ export const sessionBroker = {
 			);
 		}
 
-		const promptEvent = sessionStore.appendEvent(sessionId, {
-			kind: "text",
-			summary: "User message",
-			data: {
-				role: "user",
-				text: input.prompt,
-				attachments: input.attachments,
-			},
-			rawProviderEvent: null,
-		});
-		publishEvent(promptEvent);
+		publishPromptEvent(sessionId, input);
 
-		void consumeProviderRun(sessionId, input, "send");
+		if (canStartInputRun(session)) {
+			void consumeProviderRun(sessionId, input, "send");
+			return sessionStore.getSession(sessionId);
+		}
 
-		return sessionStore.getSession(sessionId);
+		const updatedSession = sessionStore.enqueueSessionInput(sessionId, input);
+
+		if (updatedSession) {
+			publishSession(updatedSession);
+		}
+
+		publishQueuedInputs(sessionId, sessionStore.listQueuedInputs(sessionId));
+
+		return updatedSession;
 	},
 	setSessionArchived(sessionId: string, input: SessionArchivePayload) {
 		const session = sessionStore.updateSession(sessionId, { archived: input.archived });
@@ -501,6 +550,39 @@ export const sessionBroker = {
 
 		publishSession(session);
 		return session;
+	},
+	updateQueuedInput(sessionId: string, queuedInputId: string, input: QueuedSessionInputUpdatePayload) {
+		const session = sessionStore.getSession(sessionId);
+
+		if (!session) {
+			throw new ApiError(404, "session_not_found", `Unknown session: ${sessionId}`);
+		}
+
+		const queuedInput = sessionStore.updateQueuedInput(sessionId, queuedInputId, input.prompt.trim());
+
+		if (!queuedInput) {
+			throw new ApiError(404, "queued_input_not_found", `Unknown queued input: ${queuedInputId}`);
+		}
+
+		publishQueuedInputs(sessionId, sessionStore.listQueuedInputs(sessionId));
+		return queuedInput;
+	},
+	deleteQueuedInput(sessionId: string, queuedInputId: string) {
+		const queuedInput = sessionStore.getQueuedInput(sessionId, queuedInputId);
+
+		if (!queuedInput) {
+			throw new ApiError(404, "queued_input_not_found", `Unknown queued input: ${queuedInputId}`);
+		}
+
+		const session = sessionStore.deleteQueuedInput(sessionId, queuedInputId);
+
+		if (!session) {
+			throw new ApiError(404, "session_not_found", `Unknown session: ${sessionId}`);
+		}
+
+		publishSession(session);
+		publishQueuedInputs(sessionId, sessionStore.listQueuedInputs(sessionId));
+		return queuedInput;
 	},
 	controlSession(sessionId: string, input: SessionControlPayload) {
 		const activeRun = activeRuns.get(sessionId);

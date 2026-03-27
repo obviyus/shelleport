@@ -4,6 +4,7 @@ import type {
 	CreateSessionInput,
 	DirectoryListing,
 	ImportSessionPayload,
+	QueuedSessionInputUpdatePayload,
 	RequestResponsePayload,
 	SessionArchivePayload,
 	SessionControlPayload,
@@ -244,6 +245,12 @@ function validateRequestResponseInput(payload: RequestResponsePayload) {
 	}
 }
 
+function validateQueuedInputUpdateInput(payload: QueuedSessionInputUpdatePayload) {
+	if (typeof payload.prompt !== "string" || payload.prompt.trim().length === 0) {
+		throw new ApiError(400, "invalid_prompt", "prompt must be a non-empty string");
+	}
+}
+
 function createSessionEventStream(sessionId: string) {
 	let unsubscribe = () => {};
 	let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
@@ -476,6 +483,22 @@ async function dispatchApiRequest(request: Request) {
 			validateMetaInput(payload);
 			const session = sessionBroker.updateSessionMeta(sessionId, payload);
 			return Response.json({ session });
+		}
+
+		if (segments[3] === "queued-inputs" && segments[4]) {
+			const queuedInputId = segments[4];
+
+			if (request.method === "PATCH") {
+				const payload = await readJson<QueuedSessionInputUpdatePayload>(request);
+				validateQueuedInputUpdateInput(payload);
+				const queuedInput = sessionBroker.updateQueuedInput(sessionId, queuedInputId, payload);
+				return Response.json({ queuedInput });
+			}
+
+			if (request.method === "DELETE") {
+				const queuedInput = sessionBroker.deleteQueuedInput(sessionId, queuedInputId);
+				return Response.json({ queuedInput });
+			}
 		}
 	}
 
