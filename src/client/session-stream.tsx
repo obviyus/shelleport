@@ -1007,8 +1007,8 @@ export function PendingRequestBanner({
 	onRespond: (id: string, payload: RequestResponsePayload) => void;
 }) {
 	return (
-		<div className="border-t border-foreground/10 bg-accent/80 px-5 py-3">
-			<div className="mx-auto flex max-w-3xl items-center justify-between gap-4">
+		<div className="border-t border-foreground/10 bg-accent/80 px-6 py-3.5">
+			<div className="mx-auto flex max-w-[70rem] items-center justify-between gap-4">
 				<span className="min-w-0 truncate text-xs text-foreground/88">{request.prompt}</span>
 				<div className="flex shrink-0 gap-2">
 					<button
