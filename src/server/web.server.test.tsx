@@ -8,6 +8,8 @@ let dataDir = "";
 let tempDir = "";
 let buildAppBootData: typeof import("~/server/web.server").buildAppBootData;
 let sessionBroker: typeof import("~/server/session-broker.server").sessionBroker;
+let originalGetSessionDetail: typeof import("~/server/session-broker.server").sessionBroker.getSessionDetail;
+let originalListSessions: typeof import("~/server/session-broker.server").sessionBroker.listSessions;
 const sessionId = "session-test";
 const testSession: HostSession = {
 	allowedTools: [],
@@ -48,12 +50,17 @@ beforeAll(async () => {
 	Bun.env.SHELLEPORT_DATA_DIR = dataDir;
 	({ buildAppBootData } = await import("~/server/web.server"));
 	({ sessionBroker } = await import("~/server/session-broker.server"));
+	originalListSessions = sessionBroker.listSessions.bind(sessionBroker);
+	originalGetSessionDetail = sessionBroker.getSessionDetail.bind(sessionBroker);
 	sessionBroker.listSessions = () => [testSession];
 	sessionBroker.getSessionDetail = (requestedSessionId) =>
 		requestedSessionId === sessionId ? testSessionDetail : null;
 });
 
 afterAll(async () => {
+	sessionBroker.listSessions = originalListSessions;
+	sessionBroker.getSessionDetail = originalGetSessionDetail;
+
 	if (tempDir) {
 		await rm(tempDir, { force: true, recursive: true });
 	}
