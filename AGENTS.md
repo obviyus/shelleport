@@ -5,7 +5,7 @@
 - **UI Stack**: React 19 + React Compiler (useMemo/useCallback redundant), Tailwind CSS v4, shadcn/ui via `bunx shadcn@latest add ...`, lucide-react icons, motion v12 for animations.
 - **Database**: `bun:sqlite` with WAL mode. Schema migrations are inline `ensureColumn()` calls, no migration framework. Data lives at `$XDG_DATA_HOME/shelleport/shelleport.sqlite`.
 - **Runtime**: Bun-native everything — `Bun.serve`, `Bun.file()`, `Bun.spawn`, `bun:sqlite`. No Node.js `fs` on the server side.
-- **Auth**: Single admin token (`SHELLEPORT_ADMIN_TOKEN`). Browser login exchanges token for HTTP-only cookie. Bearer header still allowed for direct API callers. Timing-safe comparison via `timingSafeEqual`.
+- **Auth**: Single generated admin token, stored as hash only. Browser login exchanges token for HTTP-only session cookie. Bearer header still allowed for direct API callers.
 - **Packaging**: Ahead-of-time client bundle goes to `build/client`. Release binaries compiled from `server.ts`; npm package is only an installer shell that downloads the matching native binary.
 
 ## Architecture

@@ -41,7 +41,6 @@ const testSessionDetail: SessionDetail = {
 };
 
 beforeAll(async () => {
-	Bun.env.SHELLEPORT_ADMIN_TOKEN = "test-token";
 	tempDir = await mkdtemp(join(tmpdir(), "shelleport-web-test-"));
 	dataDir = join(tempDir, "data");
 
@@ -65,7 +64,6 @@ afterAll(async () => {
 		await rm(tempDir, { force: true, recursive: true });
 	}
 
-	delete Bun.env.SHELLEPORT_ADMIN_TOKEN;
 	delete Bun.env.SHELLEPORT_DATA_DIR;
 });
 

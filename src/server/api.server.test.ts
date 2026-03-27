@@ -298,13 +298,15 @@ emit({
 
 	Bun.env.SHELLEPORT_CLAUDE_BIN = fakeClaudePath;
 	Bun.env.SHELLEPORT_DATA_DIR = dataDir;
-	Bun.env.SHELLEPORT_ADMIN_TOKEN = "test-token";
 
+	const auth = await import("~/server/auth.server");
+	auth.setAdminToken("test-token");
 	handleApiRequest = (await import("~/server/api.server")).handleApiRequest;
 });
 
 afterAll(async () => {
-	await Bun.$`rm -rf ${testRoot}`.quiet();
+	delete Bun.env.SHELLEPORT_CLAUDE_BIN;
+	delete Bun.env.SHELLEPORT_DATA_DIR;
 });
 
 describe("handleApiRequest", () => {

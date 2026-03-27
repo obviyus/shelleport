@@ -90,9 +90,7 @@ async function runDoctor() {
 	console.log(`host: ${config.defaultHost}`);
 	console.log(`port: ${config.defaultPort}`);
 	console.log(`data_dir: ${config.dataDir}`);
-	console.log(
-		`admin_token: ${authStatus.configuredByEnv ? "env-configured" : authStatus.hasStoredTokenHash ? "stored-hash" : "uninitialized"}`,
-	);
+	console.log(`admin_token: ${authStatus.hasStoredTokenHash ? "stored-hash" : "uninitialized"}`);
 }
 
 async function runInstallService() {

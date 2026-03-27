@@ -6,19 +6,12 @@ const ADMIN_COOKIE_NAME = "shelleport_session";
 const SESSION_MAX_AGE = 60 * 60 * 24 * 30;
 
 type AuthSetup = {
-	configuredByEnv: boolean;
 	generatedToken: string | null;
 };
 
 type AuthStatus = {
-	configuredByEnv: boolean;
 	hasStoredTokenHash: boolean;
 };
-
-function getEnvAdminToken() {
-	const token = Bun.env.SHELLEPORT_ADMIN_TOKEN?.trim();
-	return token ? token : null;
-}
 
 function createToken() {
 	return randomBytes(24).toString("base64url");
@@ -30,36 +23,10 @@ function createSecret() {
 
 function getAuthState() {
 	const current = sessionStore.getAuthState();
-	const envAdminToken = getEnvAdminToken();
-
-	if (envAdminToken) {
-		if (!current) {
-			const sessionSecret = createSecret();
-			sessionStore.saveAuthState({
-				adminTokenHash: null,
-				sessionSecret,
-			});
-
-			return {
-				adminTokenHash: null,
-				configuredByEnv: true,
-				generatedToken: null,
-				sessionSecret,
-			};
-		}
-
-		return {
-			adminTokenHash: null,
-			configuredByEnv: true,
-			generatedToken: null,
-			sessionSecret: current.session_secret,
-		};
-	}
 
 	if (current?.admin_token_hash) {
 		return {
 			adminTokenHash: current.admin_token_hash,
-			configuredByEnv: false,
 			generatedToken: null,
 			sessionSecret: current.session_secret,
 		};
@@ -75,7 +42,6 @@ function getAuthState() {
 
 	return {
 		adminTokenHash: sessionStore.getAuthState()?.admin_token_hash ?? null,
-		configuredByEnv: false,
 		generatedToken,
 		sessionSecret,
 	};
@@ -155,24 +121,17 @@ function hasValidSession(request: Request) {
 export function ensureAuthSetup() {
 	const state = getAuthState();
 	return {
-		configuredByEnv: state.configuredByEnv,
 		generatedToken: state.generatedToken,
 	} satisfies AuthSetup;
 }
 
 export function getAuthStatus() {
 	return {
-		configuredByEnv: getEnvAdminToken() !== null,
 		hasStoredTokenHash: sessionStore.getAuthState()?.admin_token_hash !== null,
 	} satisfies AuthStatus;
 }
 
-export function rotateAdminToken() {
-	if (getEnvAdminToken()) {
-		throw new Error("Admin token is managed by SHELLEPORT_ADMIN_TOKEN");
-	}
-
-	const token = createToken();
+export function setAdminToken(token = createToken()) {
 	sessionStore.saveAuthState({
 		adminTokenHash: Bun.password.hashSync(token),
 		sessionSecret: createSecret(),
@@ -180,20 +139,11 @@ export function rotateAdminToken() {
 	return token;
 }
 
+export function rotateAdminToken() {
+	return setAdminToken();
+}
+
 export function isValidAdminToken(value: string) {
-	const adminToken = getEnvAdminToken();
-
-	if (adminToken) {
-		const valueBuffer = Buffer.from(value);
-		const tokenBuffer = Buffer.from(adminToken);
-
-		if (valueBuffer.length !== tokenBuffer.length) {
-			return false;
-		}
-
-		return timingSafeEqual(valueBuffer, tokenBuffer);
-	}
-
 	const { adminTokenHash } = getAuthState();
 	return adminTokenHash ? Bun.password.verifySync(value, adminTokenHash) : false;
 }

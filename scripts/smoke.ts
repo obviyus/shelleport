@@ -6,6 +6,7 @@ const host = "127.0.0.1";
 const port = 41000 + Math.floor(Math.random() * 1000);
 const binaryPath = join(process.cwd(), "dist", "shelleport");
 const dataDir = await mkdtemp(join(tmpdir(), "shelleport-smoke-"));
+const adminToken = "smoke-token";
 
 async function waitFor(url: string) {
 	const deadline = Date.now() + 15_000;
@@ -50,13 +51,14 @@ async function assertPage(pathname: string, status: number, text: string, cookie
 }
 
 await Bun.$`bun run compile`;
+Bun.env.SHELLEPORT_DATA_DIR = dataDir;
+(await import("~/server/auth.server")).setAdminToken(adminToken);
 
 const child = Bun.spawn([binaryPath, "serve"], {
 	env: {
 		...process.env,
 		HOST: host,
 		PORT: String(port),
-		SHELLEPORT_ADMIN_TOKEN: "smoke-token",
 		SHELLEPORT_DATA_DIR: dataDir,
 	},
 	stderr: "pipe",
@@ -67,7 +69,7 @@ try {
 	await waitFor(`http://${host}:${port}/health`);
 	await assertPage("/login", 200, '<div id="root"></div>');
 	const loginResponse = await fetch(`http://${host}:${port}/api/auth/session`, {
-		body: JSON.stringify({ token: "smoke-token" }),
+		body: JSON.stringify({ token: adminToken }),
 		headers: {
 			"Content-Type": "application/json",
 		},

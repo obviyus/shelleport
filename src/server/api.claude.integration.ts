@@ -111,7 +111,6 @@ beforeAll(async () => {
 	await Bun.$`git -C ${repoDir} config user.name shelleport-test`.quiet();
 
 	Bun.env.SHELLEPORT_DATA_DIR = dataDir;
-	Bun.env.SHELLEPORT_ADMIN_TOKEN = "claude-test-token";
 
 	const cliCheck = Bun.spawn(["claude", "--version"], {
 		stdout: "pipe",
@@ -123,6 +122,8 @@ beforeAll(async () => {
 		throw new Error("claude CLI is not available");
 	}
 
+	const auth = await import("~/server/auth.server");
+	auth.setAdminToken("claude-test-token");
 	handleApiRequest = (await import("~/server/api.server")).handleApiRequest;
 });
 
