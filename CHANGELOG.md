@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.8 - 2026-03-27
+
+- seed the admin token in `web.server` tests so clean CI environments authenticate the same way local runs do
+
 ## 0.0.7 - 2026-03-27
 
 - fix release binaries to serve the same Bun browser-build assets as dev, including Tailwind CSS

@@ -47,6 +47,8 @@ beforeAll(async () => {
 	await Bun.$`mkdir -p ${dataDir}`.quiet();
 
 	Bun.env.SHELLEPORT_DATA_DIR = dataDir;
+	const auth = await import("~/server/auth.server");
+	auth.setAdminToken("test-token");
 	({ buildAppBootData } = await import("~/server/web.server"));
 	({ sessionBroker } = await import("~/server/session-broker.server"));
 	originalListSessions = sessionBroker.listSessions.bind(sessionBroker);
