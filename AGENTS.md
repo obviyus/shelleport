@@ -1,132 +1,78 @@
 # Project Information
 
-![Architecture Diagram](public/assets/architecture_diagram.png)
+- **Goal**: Browser-based control plane for host-local coding CLI agents. Start, monitor, and interact with AI coding sessions on any machine via a web UI or HTTP API.
+- **Approach**: React Router 7 (framework mode) with Bun.serve. The main UI is a client-side SPA shell — loaders are minimal, all real data flows through SSE + fetch.
+- **UI Stack**: React 19 + React Compiler (useMemo/useCallback redundant), Tailwind CSS v4, shadcn/ui via `bunx shadcn@latest add ...`, lucide-react icons, motion v12 for animations.
+- **Database**: `bun:sqlite` with WAL mode. Schema migrations are inline `ensureColumn()` calls, no migration framework. Data lives at `$XDG_DATA_HOME/shelleport/shelleport.sqlite`.
+- **Runtime**: Bun-native everything — `Bun.serve`, `Bun.file()`, `Bun.spawn`, `bun:sqlite`. No Node.js `fs` on the server side.
+- **Auth**: Single admin token (`SHELLEPORT_ADMIN_TOKEN`). Bearer header for API, localStorage on the client. Timing-safe comparison via `timingSafeEqual`.
 
-- **Goal**:
-- **Pipeline**:
-- **Approach**: Ship on React Router 7 with Bun.serve, leaning on Bun’s native S3/MySQL/Shell `$` APIs for persistence, storage, and workflows.
-- **UI Stack**: React 19 + React Compiler (useMemo / useCallback redundant), Tailwind CSS, shadcn/ui components via `bunx shadcn@latest add ...`, and lucide-react icons.
-- **Data & Services**: Keep AI adapters in `app/server/ai.server.ts`; prefer Bun-powered adapters (S3, MySQL) before third-party SDKs.
-- **Database**: Turso, used via `@libsql/client`. All migrations and database config stored in `~/server/database.server.ts`.
-- **React Router 7**: Whenever you make a new route, ENSURE that you add a corresponding entry in `routes.ts`.
-- **Framer Motion**: `motion` v12 has been installed as a dependency, use it to add a nice touch to the UI.
-- **UI**: Let's just keep it a nice and clean white mode (only) webapp. Make it heavily inspired by shadcn.
+## Architecture
 
-## React Router 7 – Best Practices (Framework mode)
+### Data flow
 
-### Architecture & mental model
+```
+Browser ──fetch──► /api/* ──► api.server.ts ──► sessionBroker ──► provider (claude/codex)
+   ▲                                                │
+   └──────────── SSE stream ◄── publish() ◄─────────┘
+```
 
-- Prefer **Framework mode** so data flows through **loaders** (reads) and **actions** (writes) that are co-located with route modules; avoid ad-hoc `useEffect` fetching. Treat loader data as the source of truth.
-- Use **typegen** for first-class types of route params, loader/action data, etc. (`react-router typegen`).
-- v7 defaults to the **single-fetch** architecture (one request per navigation) that Remix introduced; design loaders/actions with that in mind.
+- **SSE over fetch**, not EventSource — to support Authorization headers. Manual `ReadableStream` parsing with `\n\n` delimiters.
+- **In-process pub/sub** via module-level `Map<sessionId, Set<subscriber>>`. Single-process only, no external message queue.
+- **Providers are async generators** — they yield `ProviderAdapterEvent` and the broker consumes with `for await`, writing to SQLite and fanning out to SSE subscribers.
 
-## Loading data
+### Key patterns
 
-- Load data in **route loaders**; return plain JS (or Promises for streaming with Suspense). Don’t use `defer`—it was removed. Use Suspense by **returning promises** instead.
-- Keep loaders **pure** and cache-friendly: derive from `request.url`/params, not ambient client state. (This lets the router handle revalidation and cancellation.)
+- The main UI (`home.tsx`) is a **client-side SPA shell**. The route loader returns only `{ defaultCwd }`. All session data, events, and pending requests are loaded via `useEffect` + SSE.
+- State management is plain `useState` — no Redux, Zustand, or React Query.
+- SSE messages: `snapshot` (full hydration), `session` (metadata update), `event` (append), `request` (approval flow).
+- Tool calls are paired with their results via `toolUseId` for collapsible card rendering.
 
-## Mutations: `<Form>` vs `useSubmit` vs `useFetcher`
+### Routes
 
-- **Use `<Form>`** for normal, user-initiated submits that should **navigate** (adds a history entry) and then revalidate affected routes.
-- **Use `useSubmit`** when you need to **submit imperatively** (autosave on change, timers, “Apply” buttons that aren’t within a `<Form>`), i.e., the “imperative version of `<Form>`.”
-- **Use `useFetcher`** when you need to **load or mutate without navigation** (list item toggles, inline editors, modals, combobox search, multiple concurrent ops). Each fetcher has **independent pending/error/data state** and can render a `fetcher.Form`.
-- For cross-component coordination (e.g., show a global “Saving…” while any fetcher is active), read **`useFetchers()`** and aggregate their states.
+| Path | File | Purpose |
+|:-----|:-----|:--------|
+| `/` | `home.tsx` | Main SPA shell (sidebar + chat) |
+| `/sessions/:sessionId` | `session.tsx` | Session view (re-exports home) |
+| `/archived` | `archived.tsx` | Archived sessions (re-exports home) |
+| `/api/*` | `api.ts` | Passthrough to `api.server.ts` |
+| `/login` | `login.tsx` | Token login |
+| `/logout` | `logout.ts` | Clear session |
 
-## Pending & optimistic UI patterns
+When adding a new route, add a corresponding entry in `app/routes.ts`.
 
-- **Global pending**: read `useNavigation()` (`state`, `formData`) to drive spinners/disabled buttons across navigations.
-- **Local pending**: prefer **`fetcher.state`** for per-widget pending (no global spinner/flicker).
+### Server layout
 
-- **Optimistic UI**:
-  - For fetchers: derive “future” values from **`fetcher.formData`** while pending, then let revalidation reconcile.
-  - For navigations: derive from **`navigation.formData`** similarly.
-  - Keep the optimistic change **idempotent** and ensure the action can reconcile or reject cleanly.
+| File | Responsibility |
+|:-----|:---------------|
+| `server.ts` | CLI entry point: `serve`, `doctor`, `install-service` |
+| `api.server.ts` | HTTP request dispatcher for all `/api/*` routes |
+| `session-broker.server.ts` | Session lifecycle, in-process pub/sub, approval flow |
+| `store.server.ts` | SQLite persistence (sessions, events, requests) |
+| `auth.server.ts` | Bearer token + cookie session auth |
+| `config.server.ts` | Env var config |
+| `providers/claude.server.ts` | Claude Code adapter (live + historical) |
+| `providers/codex.server.ts` | Codex adapter (historical import only) |
 
-## Revalidation (keeping data fresh)
+### Provider interface
 
-- **Default**: loaders **re-run after navigations and submissions**. Fine-tune with **`shouldRevalidate(args)`** to skip unaffected routes (check URLs, params, or `actionResult`). Be conservative—stale UIs are worse than an extra fetch.
-
-## Navigation & programmatic control
-
-- Prefer `<Link>`/`<Form>` for most UX. Reserve **`useNavigate`** for **non-interactive** cases (timeouts, guards, logout after inactivity).
-
-## Prefetching for snappy UX
-
-- Use `<Link prefetch="intent|render|viewport">` to prefetch **modules and data**; start with `intent` for desktop, `viewport` for mobile lists.
-- Use **`<PrefetchPageLinks page="/path" />`** to prefetch outside of a visible `<Link>` (e.g., after a search result renders).
-
-## Errors & validation
-
-- Use **route-level error boundaries** (`ErrorBoundary`/`errorElement`) for thrown loader/action/component errors; read via `useRouteError()`.
-- Don’t put form validation in error boundaries—**return action data** and render field errors in the route component.
-
-## Redirects & auth
-
-- Redirect by **throwing `redirect("/path")`** from loaders/actions (a proper `Response`). Avoid client-only redirects for auth gates.
-
-## Package & imports (v7 specifics)
-
-- In v7, import from **`react-router`** (not `react-router-dom`) for most APIs; use `react-router/dom` only for DOM-specific pieces like `RouterProvider` SSR hydration helpers. The official upgrade path codemod replaces imports.
-
-## Quick decision guide
-
-**I’m…** → **Use…** → **Why**
-
-- Submitting a typical form and should navigate → `<Form>` → standard UX + auto-revalidation.
-- Auto-saving on change / submitting from code → `useSubmit` → imperative submit without extra wrappers.
-- Toggling a row / inline edit / modal submit without URL change → `useFetcher` (or `fetcher.Form`) → isolated pending/error state, no navigation.
-- Showing “Saving…” anywhere when _any_ fetcher is busy → `useFetchers()` → aggregate in-flight work.
-- Showing a global spinner between pages → `useNavigation()` → reflects navigation state + `formData`.
-- Making the next click instant → `<Link prefetch="intent|viewport">` or `<PrefetchPageLinks>` → prefetch modules & data.
-- Avoiding unnecessary reloads after a submit → `shouldRevalidate(args)` → skip if URL/params/actionResult prove it’s unaffected.
-
-## Micro-patterns (copyable)
-
-**Optimistic toggle with `useFetcher`**
-
-```tsx
-function TodoItem({ todo }: { todo: { id: string; done: boolean; title: string } }) {
-	const fetcher = useFetcher();
-	const optimisticDone = fetcher.formData?.get("done")?.toString() === "true" ?? todo.done;
-
-	return (
-		<fetcher.Form method="post" action={`/todos/${todo.id}/toggle`}>
-			<input type="hidden" name="done" value={(!todo.done).toString()} />
-			<button type="submit" aria-busy={fetcher.state !== "idle"}>
-				{optimisticDone ? "✅" : "⬜️"} {todo.title}
-			</button>
-		</fetcher.Form>
-	);
+```ts
+interface ProviderAdapter {
+  readonly id: ProviderId;
+  capabilities(): ProviderCapabilities;
+  sendInput(input): AsyncGenerator<ProviderAdapterEvent>;
+  resumeSession(session, input): AsyncGenerator<ProviderAdapterEvent>;
+  listHistoricalSessions(): Promise<HistoricalSession[]>;
 }
 ```
 
-(Use `fetcher.formData` while pending, let revalidation sync after the action completes.)
+Providers yield events; the broker consumes them. To add a new provider, implement this interface and register it in `registry.server.ts`.
 
-**Autosave with `useSubmit`**
+## Conventions
 
-```tsx
-function PreferencesForm() {
-	const submit = useSubmit();
-	return (
-		<Form onChange={(e) => submit(e.currentTarget)} method="post" action="/settings">
-			{/* inputs... */}
-		</Form>
-	);
-}
-```
-
-(Imperative submit from code paths like `onChange`.)
-
-**Prefetch a likely next page**
-
-```tsx
-// In a parent/layout where you know the next page:
-<PrefetchPageLinks page="/dashboard/reports" />
-// or let links handle it:
-<Link to="/products" prefetch="intent">Products</Link>
-```
-
-### Footnotes worth knowing
-
-- **Removed in v7**: `defer`, `json`, and some unstable upload helpers—replace with Suspense/Promises and plain objects/`Response`.
-- Prefer **server-side redirects** and server-validated forms; keep client validation for UX only.
+- **UI**: Light mode only. Clean, minimal, shadcn-inspired.
+- **Icons**: Use lucide-react. Verify icon names exist before using (e.g., `FlaskConical` not `Flask`).
+- **Dependencies**: Prefer Bun built-ins over third-party packages. Use `bun:sqlite`, `Bun.file()`, `Bun.serve`, `Bun.spawn`.
+- **SQL columns**: Use `_time` suffix for timestamps (`create_time`, `update_time`).
+- **No SVG hardcoding**: Import from lucide-react.
+- **motion v12**: Use for animations and transitions.
