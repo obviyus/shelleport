@@ -328,6 +328,94 @@ describe("handleApiRequest", () => {
 		).toBe(true);
 	});
 
+	test("persists create-session prompts in session history", async () => {
+		const createResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "claude",
+					cwd: testRoot,
+					prompt: "First prompt",
+				}),
+			}),
+		);
+		expect(createResponse.status).toBe(201);
+		const createJson = await readJson<{ session: { id: string } }>(createResponse);
+		const sessionId = createJson.session.id;
+
+		const detailResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}`, {
+				headers: authHeader,
+			}),
+		);
+		expect(detailResponse.status).toBe(200);
+		const detail = await readJson<{
+			events: Array<{
+				kind: string;
+				data: Record<string, unknown>;
+			}>;
+		}>(detailResponse);
+		expect(
+			detail.events
+				.filter((event) => event.kind === "text" && event.data.role === "user")
+				.map((event) => event.data.text),
+		).toEqual(expect.arrayContaining(["First prompt"]));
+	});
+
+	test("persists sent prompts in session history", async () => {
+		const createResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "claude",
+					cwd: testRoot,
+					title: "Persist input",
+				}),
+			}),
+		);
+		expect(createResponse.status).toBe(201);
+		const createJson = await readJson<{ session: { id: string } }>(createResponse);
+		const sessionId = createJson.session.id;
+
+		const formData = new FormData();
+		formData.set("prompt", "Second prompt");
+
+		const inputResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}/input`, {
+				method: "POST",
+				headers: authHeader,
+				body: formData,
+			}),
+		);
+		expect(inputResponse.status).toBe(202);
+
+		const detailResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}`, {
+				headers: authHeader,
+			}),
+		);
+		expect(detailResponse.status).toBe(200);
+		const detail = await readJson<{
+			events: Array<{
+				kind: string;
+				data: Record<string, unknown>;
+			}>;
+		}>(detailResponse);
+		expect(
+			detail.events
+				.filter((event) => event.kind === "text" && event.data.role === "user")
+				.map((event) => event.data.text),
+		).toEqual(expect.arrayContaining(["Second prompt"]));
+	});
+
 	test("starts a session, streams SSE, and resumes after approval", async () => {
 		const createResponse = await handleApiRequest(
 			new Request("http://localhost/api/sessions", {
