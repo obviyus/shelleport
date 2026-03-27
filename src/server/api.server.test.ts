@@ -25,6 +25,10 @@ type SessionStreamMessage =
 					status: string;
 					data: Record<string, unknown>;
 				}>;
+				queuedInputs: Array<{
+					id: string;
+					prompt: string;
+				}>;
 			};
 	  }
 	| {
@@ -55,6 +59,13 @@ type SessionStreamMessage =
 				status: string;
 				data: Record<string, unknown>;
 			};
+	  }
+	| {
+			type: "queued-inputs";
+			payload: Array<{
+				id: string;
+				prompt: string;
+			}>;
 	  };
 
 type SessionUsageDetailResponse = {
@@ -1192,6 +1203,276 @@ describe("handleApiRequest", () => {
 		expect(detail.session.status).toBe("idle");
 		expect(detail.session.allowedTools).toEqual(["Bash(git commit:*)"]);
 		expect(detail.pendingRequests).toHaveLength(0);
+
+		await reader.cancel();
+	});
+
+	test("queues session input on the server while approval is pending", async () => {
+		const createResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "claude",
+					cwd: testRoot,
+					prompt: "Run git commit --allow-empty -m test and then say done",
+				}),
+			}),
+		);
+		expect(createResponse.status).toBe(201);
+		const createJson = await readJson<{ session: { id: string } }>(createResponse);
+		const sessionId = createJson.session.id;
+
+		const eventsResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}/events`, {
+				headers: authHeader,
+			}),
+		);
+		expect(eventsResponse.status).toBe(200);
+		const reader = eventsResponse.body?.getReader();
+
+		if (!reader) {
+			throw new Error("Missing SSE body");
+		}
+
+		const streamState = { buffer: "" };
+		const approvalMessage = await waitForMessage(
+			reader,
+			streamState,
+			(message) =>
+				(message.type === "request" && message.payload.status === "pending") ||
+				(message.type === "snapshot" && message.payload.pendingRequests.length > 0),
+		);
+
+		let pendingRequest: {
+			id: string;
+			blockReason: string | null;
+			status: string;
+			data: Record<string, unknown>;
+		} | null = null;
+
+		if (approvalMessage.type === "request") {
+			pendingRequest = approvalMessage.payload;
+		}
+
+		if (approvalMessage.type === "snapshot") {
+			pendingRequest = approvalMessage.payload.pendingRequests[0] ?? null;
+		}
+
+		if (!pendingRequest) {
+			throw new Error("Expected pending request");
+		}
+
+		const formData = new FormData();
+		formData.set("prompt", "Second prompt");
+
+		const inputResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}/input`, {
+				method: "POST",
+				headers: authHeader,
+				body: formData,
+			}),
+		);
+		expect(inputResponse.status).toBe(202);
+		expect(
+			await readJson<{
+				session: {
+					queuedInputCount: number;
+					status: string;
+				};
+			}>(inputResponse),
+		).toMatchObject({
+			session: {
+				queuedInputCount: 1,
+				status: "waiting",
+			},
+		});
+
+		const queuedInputsMessage = await waitForMessage(
+			reader,
+			streamState,
+			(message) =>
+				message.type === "queued-inputs" &&
+				message.payload.length === 1 &&
+				message.payload[0]?.prompt === "Second prompt",
+		);
+		expect(queuedInputsMessage.type).toBe("queued-inputs");
+		if (queuedInputsMessage.type !== "queued-inputs") {
+			throw new Error("Expected queued inputs");
+		}
+
+		const queuedInputId = queuedInputsMessage.payload[0]?.id;
+
+		if (!queuedInputId) {
+			throw new Error("Expected queued input id");
+		}
+
+		const updateQueuedInputResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}/queued-inputs/${queuedInputId}`, {
+				method: "PATCH",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					prompt: "Edited prompt",
+				}),
+			}),
+		);
+		expect(updateQueuedInputResponse.status).toBe(200);
+
+		const editedQueuedInputsMessage = await waitForMessage(
+			reader,
+			streamState,
+			(message) =>
+				message.type === "queued-inputs" &&
+				message.payload.length === 1 &&
+				message.payload[0]?.prompt === "Edited prompt",
+		);
+		expect(editedQueuedInputsMessage.type).toBe("queued-inputs");
+
+		const detailWhileQueuedResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}`, {
+				headers: authHeader,
+			}),
+		);
+		expect(detailWhileQueuedResponse.status).toBe(200);
+		expect(
+			await readJson<{
+				session: {
+					queuedInputCount: number;
+				};
+				queuedInputs: Array<{
+					prompt: string;
+				}>;
+				events: Array<{
+					kind: string;
+					data: Record<string, unknown>;
+				}>;
+			}>(detailWhileQueuedResponse),
+			).toMatchObject({
+				session: {
+					queuedInputCount: 1,
+				},
+				queuedInputs: [{ prompt: "Edited prompt" }],
+			});
+
+		const deleteQueuedInputResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}/queued-inputs/${queuedInputId}`, {
+				method: "DELETE",
+				headers: authHeader,
+			}),
+		);
+		expect(deleteQueuedInputResponse.status).toBe(200);
+
+		const emptiedQueuedInputsMessage = await waitForMessage(
+			reader,
+			streamState,
+			(message) => message.type === "queued-inputs" && message.payload.length === 0,
+		);
+		expect(emptiedQueuedInputsMessage.type).toBe("queued-inputs");
+
+		const detailAfterDeleteResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}`, {
+				headers: authHeader,
+			}),
+		);
+		expect(detailAfterDeleteResponse.status).toBe(200);
+		expect(
+			await readJson<{
+				session: {
+					queuedInputCount: number;
+				};
+				queuedInputs: Array<{
+					prompt: string;
+				}>;
+			}>(detailAfterDeleteResponse),
+			).toMatchObject({
+				session: {
+					queuedInputCount: 0,
+				},
+				queuedInputs: [],
+			});
+
+		const finalQueuedFormData = new FormData();
+		finalQueuedFormData.set("prompt", "Final queued prompt");
+
+		const finalQueueResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}/input`, {
+				method: "POST",
+				headers: authHeader,
+				body: finalQueuedFormData,
+			}),
+		);
+		expect(finalQueueResponse.status).toBe(202);
+
+		const finalQueuedInputsMessage = await waitForMessage(
+			reader,
+			streamState,
+			(message) =>
+				message.type === "queued-inputs" &&
+				message.payload.length === 1 &&
+				message.payload[0]?.prompt === "Final queued prompt",
+		);
+		expect(finalQueuedInputsMessage.type).toBe("queued-inputs");
+
+		const respondResponse = await handleApiRequest(
+			new Request(`http://localhost/api/requests/${pendingRequest.id}/respond`, {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					decision: "allow",
+				}),
+			}),
+		);
+		expect(respondResponse.status).toBe(200);
+
+		const queuedPromptMessage = await waitForMessage(
+			reader,
+			streamState,
+			(message) =>
+				message.type === "event" &&
+				message.payload.kind === "text" &&
+				message.payload.data.role === "assistant" &&
+				message.payload.data.text === "Final queued prompt",
+		);
+		expect(queuedPromptMessage.type).toBe("event");
+
+		for (let attempt = 0; attempt < 100; attempt += 1) {
+			const session = sessionStore.getSession(sessionId);
+
+			if (session?.status === "idle" && session.queuedInputCount === 0) {
+				break;
+			}
+
+			await Bun.sleep(20);
+		}
+
+		const detailAfterDrainResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}`, {
+				headers: authHeader,
+			}),
+		);
+		expect(detailAfterDrainResponse.status).toBe(200);
+		expect(
+			await readJson<{
+				session: {
+					queuedInputCount: number;
+					status: string;
+				};
+			}>(detailAfterDrainResponse),
+		).toMatchObject({
+			session: {
+				queuedInputCount: 0,
+				status: "idle",
+			},
+		});
 
 		await reader.cancel();
 	});

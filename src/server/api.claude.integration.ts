@@ -16,6 +16,10 @@ type SessionStreamMessage =
 					status: string;
 					data: Record<string, unknown>;
 				}>;
+				queuedInputs: Array<{
+					id: string;
+					prompt: string;
+				}>;
 			};
 	  }
 	| {
@@ -41,6 +45,13 @@ type SessionStreamMessage =
 				status: string;
 				data: Record<string, unknown>;
 			};
+	  }
+	| {
+			type: "queued-inputs";
+			payload: Array<{
+				id: string;
+				prompt: string;
+			}>;
 	  };
 
 const testRoot = join(Bun.env.TMPDIR ?? "/tmp", `shelleport-claude-${Bun.randomUUIDv7()}`);

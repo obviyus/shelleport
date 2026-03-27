@@ -4,6 +4,8 @@ import type {
 	HostSession,
 	PendingRequest,
 	ProviderSummary,
+	QueuedSessionInput,
+	QueuedSessionInputUpdatePayload,
 	RequestResponsePayload,
 	SessionDetail,
 	SessionMetaPayload,
@@ -140,6 +142,29 @@ export function updateSessionMeta(sessionId: string, payload: SessionMetaPayload
 		method: "POST",
 		body: JSON.stringify(payload),
 	});
+}
+
+export function updateQueuedInput(
+	sessionId: string,
+	queuedInputId: string,
+	payload: QueuedSessionInputUpdatePayload,
+) {
+	return request<{ queuedInput: QueuedSessionInput }>(
+		`/api/sessions/${sessionId}/queued-inputs/${queuedInputId}`,
+		{
+			method: "PATCH",
+			body: JSON.stringify(payload),
+		},
+	);
+}
+
+export function deleteQueuedInput(sessionId: string, queuedInputId: string) {
+	return request<{ queuedInput: QueuedSessionInput }>(
+		`/api/sessions/${sessionId}/queued-inputs/${queuedInputId}`,
+		{
+			method: "DELETE",
+		},
+	);
 }
 
 export function respondToRequest(requestId: string, payload: RequestResponsePayload) {

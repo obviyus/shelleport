@@ -24,6 +24,7 @@ const testSession: HostSession = {
 	pinned: false,
 	provider: "claude",
 	providerSessionRef: null,
+	queuedInputCount: 0,
 	status: "idle",
 	statusDetail: {
 		attempt: null,
@@ -39,6 +40,7 @@ const testSession: HostSession = {
 const testSessionDetail: SessionDetail = {
 	events: [],
 	pendingRequests: [],
+	queuedInputs: [],
 	session: testSession,
 };
 

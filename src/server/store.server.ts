@@ -10,8 +10,10 @@ import type {
 	PermissionMode,
 	ProviderLimitState,
 	ProviderId,
+	QueuedSessionInput,
 	SessionDetail,
 	SessionLimit,
+	SessionAttachment,
 	SessionStatus,
 	SessionStatusDetail,
 	SessionUsage,
@@ -40,6 +42,7 @@ database.exec(`
 		imported INTEGER NOT NULL DEFAULT 0,
 		permission_mode TEXT NOT NULL DEFAULT 'default',
 		allowed_tools_json TEXT NOT NULL DEFAULT '[]',
+		queued_input_count INTEGER NOT NULL DEFAULT 0,
 		usage_json TEXT NOT NULL DEFAULT 'null',
 		active_usage_json TEXT NOT NULL DEFAULT 'null',
 		last_event_sequence INTEGER NOT NULL DEFAULT 0,
@@ -85,6 +88,13 @@ database.exec(`
 		utilization REAL,
 		update_time INTEGER NOT NULL,
 		PRIMARY KEY (provider, window)
+	);
+	CREATE TABLE IF NOT EXISTS queued_session_inputs (
+		id TEXT PRIMARY KEY,
+		session_id TEXT NOT NULL,
+		prompt TEXT NOT NULL,
+		attachments_json TEXT NOT NULL,
+		create_time INTEGER NOT NULL
 	);
 `);
 
@@ -140,6 +150,11 @@ ensureColumn(
 );
 ensureColumn(
 	"host_sessions",
+	"queued_input_count",
+	"ALTER TABLE host_sessions ADD COLUMN queued_input_count INTEGER NOT NULL DEFAULT 0",
+);
+ensureColumn(
+	"host_sessions",
 	"usage_json",
 	"ALTER TABLE host_sessions ADD COLUMN usage_json TEXT NOT NULL DEFAULT 'null'",
 );
@@ -179,6 +194,7 @@ type SqlSessionRow = {
 	imported: number;
 	permission_mode: string;
 	allowed_tools_json: string;
+	queued_input_count: number;
 	usage_json: string;
 	active_usage_json: string;
 	last_event_sequence: number;
@@ -228,6 +244,14 @@ type SqlProviderLimitRow = {
 	update_time: number;
 };
 
+type SqlQueuedInputRow = {
+	id: string;
+	session_id: string;
+	prompt: string;
+	attachments_json: string;
+	create_time: number;
+};
+
 type SqlSessionSearchRow = {
 	id: string;
 	title: string;
@@ -241,6 +265,10 @@ function parseJsonRecord(value: string) {
 
 function parseAllowedTools(value: string) {
 	return JSON.parse(value) as string[];
+}
+
+function parseAttachments(value: string) {
+	return JSON.parse(value) as SessionAttachment[];
 }
 
 function parseUsage(value: string) {
@@ -285,6 +313,7 @@ function mapSession(row: SqlSessionRow): HostSession {
 		imported: row.imported === 1,
 		permissionMode: row.permission_mode as PermissionMode,
 		allowedTools: parseAllowedTools(row.allowed_tools_json),
+		queuedInputCount: row.queued_input_count,
 		usage,
 		lastEventSequence: row.last_event_sequence,
 		createTime: row.create_time,
@@ -322,10 +351,19 @@ function mapRequest(row: SqlRequestRow): PendingRequest {
 	};
 }
 
+function mapQueuedInput(row: SqlQueuedInputRow): QueuedSessionInput {
+	return {
+		id: row.id,
+		prompt: row.prompt,
+		attachments: parseAttachments(row.attachments_json),
+		createTime: row.create_time,
+	};
+}
+
 const insertSessionStatement = database.query(
 	`INSERT INTO host_sessions (
-		id, provider, title, cwd, pinned, archived, status, status_detail_json, provider_session_ref, pid, imported, permission_mode, allowed_tools_json, usage_json, active_usage_json, last_event_sequence, create_time, update_time
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, provider, title, cwd, pinned, archived, status, status_detail_json, provider_session_ref, pid, imported, permission_mode, allowed_tools_json, queued_input_count, usage_json, active_usage_json, last_event_sequence, create_time, update_time
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 );
 
 const listSessionsStatement = database.query<SqlSessionRow, []>(
@@ -346,7 +384,7 @@ const searchSessionsStatement = database.query<SqlSessionRow, [string]>(
 
 const updateSessionStatement = database.query(
 	`UPDATE host_sessions
-		SET status = ?, status_detail_json = ?, provider_session_ref = ?, pid = ?, title = ?, pinned = ?, archived = ?, permission_mode = ?, allowed_tools_json = ?, update_time = ?
+		SET status = ?, status_detail_json = ?, provider_session_ref = ?, pid = ?, title = ?, pinned = ?, archived = ?, permission_mode = ?, allowed_tools_json = ?, queued_input_count = ?, update_time = ?
 		WHERE id = ?`,
 );
 
@@ -428,6 +466,50 @@ const listSessionsForSearchSyncStatement = database.query<SqlSessionSearchRow, [
 	"SELECT id, title, cwd, provider FROM host_sessions",
 );
 
+const updateQueuedInputCountStatement = database.query(
+	"UPDATE host_sessions SET queued_input_count = ?, update_time = ? WHERE id = ?",
+);
+
+const countQueuedInputsStatement = database.query<{ total: number }, [string]>(
+	"SELECT COUNT(*) as total FROM queued_session_inputs WHERE session_id = ?",
+);
+
+const insertQueuedInputStatement = database.query(
+	`INSERT INTO queued_session_inputs (
+		id, session_id, prompt, attachments_json, create_time
+	) VALUES (?, ?, ?, ?, ?)`,
+);
+
+const getNextQueuedInputStatement = database.query<SqlQueuedInputRow, [string]>(
+	`SELECT *
+		FROM queued_session_inputs
+		WHERE session_id = ?
+		ORDER BY create_time ASC, id ASC
+		LIMIT 1`,
+);
+
+const getQueuedInputStatement = database.query<SqlQueuedInputRow, [string, string]>(
+	`SELECT *
+		FROM queued_session_inputs
+		WHERE session_id = ? AND id = ?
+		LIMIT 1`,
+);
+
+const updateQueuedInputStatement = database.query(
+	"UPDATE queued_session_inputs SET prompt = ? WHERE session_id = ? AND id = ?",
+);
+
+const deleteQueuedInputStatement = database.query(
+	"DELETE FROM queued_session_inputs WHERE session_id = ? AND id = ?",
+);
+
+const listQueuedInputsStatement = database.query<SqlQueuedInputRow, [string]>(
+	`SELECT *
+		FROM queued_session_inputs
+		WHERE session_id = ?
+		ORDER BY create_time ASC, id ASC`,
+);
+
 const clearSessionSearchStatement = database.query("DELETE FROM host_session_fts");
 
 const insertSessionSearchStatement = database.query(
@@ -451,6 +533,12 @@ function mapProviderLimit(row: SqlProviderLimitRow): SessionLimit {
 function syncSessionSearchIndex(session: Pick<HostSession, "id" | "title" | "cwd" | "provider">) {
 	deleteSessionSearchStatement.run(session.id);
 	insertSessionSearchStatement.run(session.id, session.title, session.cwd, session.provider);
+}
+
+function syncQueuedInputCount(sessionId: string) {
+	const total = countQueuedInputsStatement.get(sessionId)?.total ?? 0;
+	updateQueuedInputCountStatement.run(total, createTimestamp(), sessionId);
+	return total;
 }
 
 function rebuildSessionSearchIndex() {
@@ -537,6 +625,7 @@ export const sessionStore = {
 			imported: input.imported ?? false,
 			permissionMode: input.permissionMode,
 			allowedTools: input.allowedTools,
+			queuedInputCount: 0,
 			usage: null,
 			lastEventSequence: 0,
 			createTime: now,
@@ -557,6 +646,7 @@ export const sessionStore = {
 			session.imported ? 1 : 0,
 			session.permissionMode,
 			JSON.stringify(session.allowedTools),
+			session.queuedInputCount,
 			JSON.stringify(session.usage),
 			JSON.stringify(null),
 			session.lastEventSequence,
@@ -591,6 +681,7 @@ export const sessionStore = {
 			session,
 			events: listEventsStatement.all(sessionId).map(mapEvent),
 			pendingRequests: listRequestsStatement.all(sessionId).map(mapRequest),
+			queuedInputs: listQueuedInputsStatement.all(sessionId).map(mapQueuedInput),
 		};
 	},
 	getAuthState() {
@@ -689,6 +780,7 @@ export const sessionStore = {
 			archived: update.archived ?? current.archived,
 			permissionMode: update.permissionMode ?? current.permissionMode,
 			allowedTools: update.allowedTools ?? current.allowedTools,
+			queuedInputCount: current.queuedInputCount,
 			updateTime: createTimestamp(),
 		};
 
@@ -702,6 +794,7 @@ export const sessionStore = {
 			next.archived ? 1 : 0,
 			next.permissionMode,
 			JSON.stringify(next.allowedTools),
+			next.queuedInputCount,
 			next.updateTime,
 			sessionId,
 		);
@@ -786,6 +879,47 @@ export const sessionStore = {
 		);
 
 		return request;
+	},
+	enqueueSessionInput(sessionId: string, input: { prompt: string; attachments: SessionAttachment[] }) {
+		insertQueuedInputStatement.run(
+			createId(),
+			sessionId,
+			input.prompt,
+			JSON.stringify(input.attachments),
+			createTimestamp(),
+		);
+		syncQueuedInputCount(sessionId);
+		return this.getSession(sessionId);
+	},
+	listQueuedInputs(sessionId: string) {
+		return listQueuedInputsStatement.all(sessionId).map(mapQueuedInput);
+	},
+	getQueuedInput(sessionId: string, queuedInputId: string) {
+		const row = getQueuedInputStatement.get(sessionId, queuedInputId);
+		return row ? mapQueuedInput(row) : null;
+	},
+	updateQueuedInput(sessionId: string, queuedInputId: string, prompt: string) {
+		updateQueuedInputStatement.run(prompt, sessionId, queuedInputId);
+		return this.getQueuedInput(sessionId, queuedInputId);
+	},
+	deleteQueuedInput(sessionId: string, queuedInputId: string) {
+		deleteQueuedInputStatement.run(sessionId, queuedInputId);
+		syncQueuedInputCount(sessionId);
+		return this.getSession(sessionId);
+	},
+	shiftQueuedInput(sessionId: string) {
+		const row = getNextQueuedInputStatement.get(sessionId);
+
+		if (!row) {
+			return null;
+		}
+
+		deleteQueuedInputStatement.run(sessionId, row.id);
+		syncQueuedInputCount(sessionId);
+		return {
+			prompt: row.prompt,
+			attachments: parseAttachments(row.attachments_json),
+		};
 	},
 	getPendingRequest(requestId: string) {
 		const row = getRequestStatement.get(requestId);
