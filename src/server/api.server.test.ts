@@ -58,6 +58,9 @@ type SessionStreamMessage =
 	  };
 
 type SessionUsageDetailResponse = {
+	session: {
+		usage: Record<string, unknown> | null;
+	};
 	events: Array<{
 		data: Record<string, unknown>;
 		kind: string;
@@ -801,6 +804,75 @@ describe("handleApiRequest", () => {
 			window: "five_hour",
 			resetsAt: 1774623600 * 1000,
 			isUsingOverage: false,
+		});
+		expect(detail.session.usage).toMatchObject({
+			inputTokens: 12,
+			outputTokens: 4,
+			cacheReadInputTokens: 1200,
+			cacheCreationInputTokens: 600,
+			costUsd: 0.045784,
+			model: "claude-opus-4-6[1m]",
+		});
+	});
+
+	test("accumulates Claude usage across multiple runs in one session", async () => {
+		const createResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "claude",
+					cwd: testRoot,
+					prompt: "track usage",
+				}),
+			}),
+		);
+		expect(createResponse.status).toBe(201);
+		const createJson = await readJson<{ session: { id: string } }>(createResponse);
+
+		for (let attempt = 0; attempt < 100; attempt += 1) {
+			const session = sessionStore.getSession(createJson.session.id);
+
+			if (session?.status === "idle" && session.usage?.outputTokens === 4) {
+				break;
+			}
+
+			await Bun.sleep(20);
+		}
+
+		const formData = new FormData();
+		formData.set("prompt", "track usage");
+		const inputResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${createJson.session.id}/input`, {
+				method: "POST",
+				headers: authHeader,
+				body: formData,
+			}),
+		);
+		expect(inputResponse.status).toBe(202);
+
+		let session = sessionStore.getSession(createJson.session.id);
+
+		for (let attempt = 0; attempt < 100; attempt += 1) {
+			session = sessionStore.getSession(createJson.session.id);
+
+			if (session?.status === "idle" && session.usage?.outputTokens === 8) {
+				break;
+			}
+
+			await Bun.sleep(20);
+		}
+
+		expect(session?.usage).toMatchObject({
+			inputTokens: 24,
+			outputTokens: 8,
+			cacheReadInputTokens: 2400,
+			cacheCreationInputTokens: 1200,
+			costUsd: 0.091568,
+			model: "claude-opus-4-6[1m]",
 		});
 	});
 

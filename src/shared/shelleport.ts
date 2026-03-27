@@ -46,6 +46,7 @@ export type HostSession = {
 	permissionMode: PermissionMode;
 	allowedTools: string[];
 	statusDetail: SessionStatusDetail;
+	usage: SessionUsage | null;
 	createTime: number;
 	updateTime: number;
 	lastEventSequence: number;

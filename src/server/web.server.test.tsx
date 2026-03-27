@@ -34,6 +34,7 @@ const testSession: HostSession = {
 	},
 	title: "Web test session",
 	updateTime: 1,
+	usage: null,
 };
 const testSessionDetail: SessionDetail = {
 	events: [],
