@@ -52,6 +52,7 @@ import {
 	formatStatus,
 	formatSessionLimitLabel,
 	formatSessionLimitReset,
+	formatSessionLimitUsage,
 	getSessionUsageBadges,
 	getSidebarMeta,
 	getSidebarTitle,
@@ -139,8 +140,18 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			return previous;
 		}
 
+		const current = previous.find((candidate) => candidate.window === next.window) ?? null;
 		const withoutWindow = previous.filter((candidate) => candidate.window !== next.window);
-		return [...withoutWindow, next];
+		return [
+			...withoutWindow,
+			{
+				status: next.status ?? current?.status ?? null,
+				resetsAt: next.resetsAt ?? current?.resetsAt ?? null,
+				window: next.window,
+				isUsingOverage: next.isUsingOverage ?? current?.isUsingOverage ?? null,
+				utilization: next.utilization ?? current?.utilization ?? null,
+			},
+		];
 	}
 
 	const replaceSession = useCallback((nextSession: HostSession) => {
@@ -650,16 +661,18 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 							</div>
 							<div className="space-y-1">
 								{claudeLimits.map((limit) => (
-									<div
-										key={limit.window}
-										className="flex items-center justify-between gap-2 text-[10px]"
-									>
-										<span className="text-foreground/76">
-											{formatSessionLimitLabel(limit.window)}
-										</span>
-										<span className="truncate text-right text-muted-foreground/76">
+									<div key={limit.window} className="text-[10px]">
+										<div className="flex items-center justify-between gap-2">
+											<span className="text-foreground/76">
+												{formatSessionLimitLabel(limit.window)}
+											</span>
+											<span className="text-muted-foreground/76">
+												{formatSessionLimitUsage(limit)}
+											</span>
+										</div>
+										<div className="text-[9px] text-muted-foreground/60">
 											{formatSessionLimitReset(limit, now)}
-										</span>
+										</div>
 									</div>
 								))}
 							</div>

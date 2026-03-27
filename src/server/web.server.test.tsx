@@ -81,10 +81,11 @@ function request(pathname: string, authenticated = false) {
 }
 
 describe("buildAppBootData", () => {
-	test("returns login route for unauthenticated app pages", () => {
-		const boot = buildAppBootData(request("/"), {
+	test("returns login route for unauthenticated app pages", async () => {
+		const boot = await buildAppBootData(request("/"), {
 			defaultCwd: "/tmp/project",
 			pathname: "/",
+			refreshProviderLimits: false,
 		});
 
 		expect(boot.authenticated).toBe(false);
@@ -92,10 +93,11 @@ describe("buildAppBootData", () => {
 		expect(boot.route.pathname).toBe("/login");
 	});
 
-	test("returns home route for authenticated login page", () => {
-		const boot = buildAppBootData(request("/login", true), {
+	test("returns home route for authenticated login page", async () => {
+		const boot = await buildAppBootData(request("/login", true), {
 			defaultCwd: "/tmp/project",
 			pathname: "/login",
+			refreshProviderLimits: false,
 		});
 
 		expect(boot.authenticated).toBe(true);
@@ -103,10 +105,11 @@ describe("buildAppBootData", () => {
 		expect(boot.route.pathname).toBe("/");
 	});
 
-	test("includes session detail for authenticated session route", () => {
-		const boot = buildAppBootData(request(`/sessions/${sessionId}`, true), {
+	test("includes session detail for authenticated session route", async () => {
+		const boot = await buildAppBootData(request(`/sessions/${sessionId}`, true), {
 			defaultCwd: "/tmp/project",
 			pathname: `/sessions/${sessionId}`,
+			refreshProviderLimits: false,
 		});
 
 		expect(boot.authenticated).toBe(true);
@@ -119,10 +122,11 @@ describe("buildAppBootData", () => {
 		}
 	});
 
-	test("returns not-found route for missing authenticated session", () => {
-		const boot = buildAppBootData(request("/sessions/missing", true), {
+	test("returns not-found route for missing authenticated session", async () => {
+		const boot = await buildAppBootData(request("/sessions/missing", true), {
 			defaultCwd: "/tmp/project",
 			pathname: "/sessions/missing",
+			refreshProviderLimits: false,
 		});
 
 		expect(boot.authenticated).toBe(true);

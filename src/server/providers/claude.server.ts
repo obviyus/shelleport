@@ -115,6 +115,7 @@ function parseClaudeLimit(rawEvent: Record<string, unknown>): SessionLimit | nul
 		resetsAt: parseResetsAt(info.resetsAt),
 		window: typeof info.rateLimitType === "string" ? info.rateLimitType : null,
 		isUsingOverage: typeof info.isUsingOverage === "boolean" ? info.isUsingOverage : null,
+		utilization: null,
 	};
 }
 

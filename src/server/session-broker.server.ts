@@ -14,6 +14,7 @@ import type {
 	SessionStreamMessage,
 } from "~/shared/shelleport";
 import { ApiError } from "~/server/api-error.server";
+import { refreshClaudeProviderLimits } from "~/server/providers/claude-usage.server";
 import { getProvider } from "~/server/providers/registry.server";
 import { sessionStore } from "~/server/store.server";
 
@@ -87,6 +88,7 @@ function readSessionLimit(value: unknown): SessionLimit | null {
 		resetsAt: typeof limit.resetsAt === "number" ? limit.resetsAt : null,
 		window: typeof limit.window === "string" ? limit.window : null,
 		isUsingOverage: typeof limit.isUsingOverage === "boolean" ? limit.isUsingOverage : null,
+		utilization: typeof limit.utilization === "number" ? limit.utilization : null,
 	};
 }
 
@@ -206,9 +208,14 @@ async function consumeProviderRun(
 			const storedEvent = sessionStore.appendEvent(sessionId, event);
 
 			const limit = readSessionLimit(event.data.limit);
+			const hasUsage = event.data.usage && typeof event.data.usage === "object";
 
 			if (session.provider === "claude" && limit?.window) {
 				sessionStore.saveProviderLimit("claude", limit);
+			}
+
+			if (session.provider === "claude" && (limit?.window || hasUsage)) {
+				void refreshClaudeProviderLimits();
 			}
 
 			publishEvent(storedEvent);

@@ -344,7 +344,7 @@ async function dispatchApiRequest(request: Request) {
 		}
 
 		return Response.json({
-			boot: buildAppBootData(request, {
+			boot: await buildAppBootData(request, {
 				defaultCwd: process.cwd(),
 				pathname: requestedPath,
 			}),

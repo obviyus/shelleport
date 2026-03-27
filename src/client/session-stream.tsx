@@ -228,6 +228,7 @@ function readLimit(value: unknown): SessionLimit | null {
 		resetsAt: typeof limit.resetsAt === "number" ? limit.resetsAt : null,
 		window: typeof limit.window === "string" ? limit.window : null,
 		isUsingOverage: typeof limit.isUsingOverage === "boolean" ? limit.isUsingOverage : null,
+		utilization: typeof limit.utilization === "number" ? limit.utilization : null,
 	};
 }
 
@@ -373,6 +374,14 @@ export function formatSessionLimitReset(limit: SessionLimit, now: number) {
 	}
 
 	return `resets in ${formatResetCountdown(now, limit.resetsAt)}`;
+}
+
+export function formatSessionLimitUsage(limit: SessionLimit) {
+	if (limit.utilization === null) {
+		return limit.status ?? "active";
+	}
+
+	return `${Math.round(limit.utilization)}% used`;
 }
 
 function getHighlightedFileName(call: HostEvent) {
