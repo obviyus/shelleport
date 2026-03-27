@@ -4,6 +4,18 @@ All notable changes to shelleport are documented here.
 
 ## Unreleased
 
+## 0.0.16 - 2026-03-27
+
+### Changed
+
+- Claude bypass mode now uses the current `bypassPermissions` flag, and existing stored sessions are migrated off the old `dontAsk` value
+- Linux `install-service` now writes a plain systemd unit at `/etc/systemd/system/shelleport.service` and runs it as an explicit service user
+- `shelleport upgrade` now targets the system `shelleport.service` on Linux
+
+### Fixed
+
+- Service installs and upgrades now preserve the Claude CLI path in the service environment so restarts do not lose access to `claude`
+
 ## 0.0.15 - 2026-03-27
 
 ### Changed
