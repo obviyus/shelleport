@@ -1,0 +1,769 @@
+import {
+	Archive,
+	ArchiveRestore,
+	Check,
+	CircleStop,
+	CircleX,
+	ImagePlus,
+	Loader2,
+	LogOut,
+	Plus,
+	Send,
+} from "lucide-react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { SessionLauncher } from "~/client/components/session-launcher";
+import {
+	connectSSE,
+	controlSession,
+	createSession,
+	fetchProviders,
+	fetchSessions,
+	getToken,
+	respondToRequest,
+	sendInput,
+	setSessionArchived,
+} from "~/client/api";
+import type {
+	HostEvent,
+	HostSession,
+	PendingRequest,
+	ProviderSummary,
+	RequestResponsePayload,
+} from "~/shared/shelleport";
+import { useCurrentRoute, useRouter } from "~/client/router";
+import {
+	type DraftImage,
+	DraftImagePreview,
+	formatStatus,
+	getSidebarMeta,
+	getSidebarTitle,
+	getStatusMessage,
+	groupStream,
+	GroupedEntryRenderer,
+	normalizeDraftImage,
+	PendingRequestBanner,
+	StatusDot,
+} from "~/client/session-stream";
+
+function LoadingShell() {
+	return (
+		<div className="grid h-screen place-items-center bg-background">
+			<Loader2 className="size-4 animate-spin text-muted-foreground" />
+		</div>
+	);
+}
+
+export function AppShell({ defaultCwd }: { defaultCwd: string }) {
+	const route = useCurrentRoute();
+	const { navigate } = useRouter();
+	const scrollRef = useRef<HTMLDivElement>(null);
+	const textareaRef = useRef<HTMLTextAreaElement>(null);
+	const fileInputRef = useRef<HTMLInputElement>(null);
+	const draftImagesRef = useRef<DraftImage[]>([]);
+	const isAtBottom = useRef(true);
+	const selectedId = route.kind === "session" ? route.params.sessionId : null;
+	const isArchivedView = route.kind === "archived";
+
+	const [authChecked, setAuthChecked] = useState(false);
+	const [token, setToken] = useState<string | null>(null);
+	const [providers, setProviders] = useState<ProviderSummary[]>([]);
+	const [sessions, setSessions] = useState<HostSession[]>([]);
+	const [session, setSession] = useState<HostSession | null>(null);
+	const [stream, setStream] = useState<HostEvent[]>([]);
+	const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
+	const [prompt, setPrompt] = useState("");
+	const [draftImages, setDraftImages] = useState<DraftImage[]>([]);
+	const [isCreating, setIsCreating] = useState(false);
+	const [initialLoading, setInitialLoading] = useState(true);
+	const [now, setNow] = useState(() => Date.now());
+	const [streamState, setStreamState] = useState<"connected" | "reconnecting">("connected");
+	const [archiveConfirmId, setArchiveConfirmId] = useState<string | null>(null);
+	const activeSessions = sessions.filter((candidate) => !candidate.archived);
+	const archivedSessions = sessions.filter((candidate) => candidate.archived);
+	const grouped = useMemo(() => groupStream(stream), [stream]);
+
+	useEffect(() => {
+		draftImagesRef.current = draftImages;
+	}, [draftImages]);
+
+	useEffect(() => {
+		setToken(getToken());
+		setAuthChecked(true);
+	}, []);
+
+	useEffect(() => {
+		if (authChecked && !token) {
+			navigate("/login", { replace: true });
+		}
+	}, [authChecked, navigate, token]);
+
+	useEffect(() => {
+		if (!token) {
+			return;
+		}
+
+		fetchProviders(token)
+			.then(({ providers: nextProviders }) => setProviders(nextProviders))
+			.catch(() => {});
+	}, [token]);
+
+	useEffect(() => {
+		if (!token) {
+			return;
+		}
+
+		fetchSessions(token)
+			.then(({ sessions: nextSessions }) => {
+				setSessions(nextSessions);
+				setInitialLoading(false);
+			})
+			.catch(() => setInitialLoading(false));
+	}, [token]);
+
+	useEffect(() => {
+		if (!selectedId || !token) {
+			return;
+		}
+
+		setStream([]);
+		setPendingRequests([]);
+		setSession(null);
+		setStreamState("connected");
+		setDraftImages((previous) => {
+			for (const image of previous) {
+				URL.revokeObjectURL(image.url);
+			}
+
+			return [];
+		});
+
+		if (fileInputRef.current) {
+			fileInputRef.current.value = "";
+		}
+
+		const controller = connectSSE(
+			token,
+			selectedId,
+			(message) => {
+				startTransition(() => {
+					if (message.type === "snapshot") {
+						setSession(message.payload.session);
+						setStream(message.payload.events);
+						setPendingRequests(
+							message.payload.pendingRequests.filter((request) => request.status === "pending"),
+						);
+						setSessions((previous) =>
+							previous.map((candidate) =>
+								candidate.id === message.payload.session.id ? message.payload.session : candidate,
+							),
+						);
+						return;
+					}
+
+					if (message.type === "session") {
+						setSession(message.payload);
+						setSessions((previous) =>
+							previous.map((candidate) =>
+								candidate.id === message.payload.id ? message.payload : candidate,
+							),
+						);
+						return;
+					}
+
+					if (message.type === "event") {
+						setStream((previous) => [...previous, message.payload]);
+						return;
+					}
+
+					setPendingRequests((previous) =>
+						message.payload.status === "pending"
+							? [
+									...previous.filter((request) => request.id !== message.payload.id),
+									message.payload,
+								]
+							: previous.filter((request) => request.id !== message.payload.id),
+					);
+				});
+			},
+			(error) => console.error("SSE error:", error),
+			(state) => setStreamState(state),
+		);
+
+		return () => controller.abort();
+	}, [selectedId, token]);
+
+	useEffect(() => {
+		if (selectedId) {
+			return;
+		}
+
+		setSession(null);
+		setStream([]);
+		setPendingRequests([]);
+		setStreamState("connected");
+	}, [selectedId]);
+
+	useEffect(() => {
+		if (isAtBottom.current && scrollRef.current) {
+			scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+		}
+	}, [stream]);
+
+	useEffect(() => {
+		const timer = setInterval(() => setNow(Date.now()), 1000);
+		return () => clearInterval(timer);
+	}, []);
+
+	useEffect(() => {
+		return () => {
+			for (const image of draftImagesRef.current) {
+				URL.revokeObjectURL(image.url);
+			}
+		};
+	}, []);
+
+	const handleCreateSession = useCallback(
+		async (cwd: string, title: string) => {
+			if (!token || !cwd.trim()) {
+				return;
+			}
+
+			setIsCreating(true);
+
+			try {
+				const result = await createSession(token, {
+					provider: "claude",
+					cwd: cwd.trim(),
+					title: title || undefined,
+				});
+				setSessions((previous) => [result.session, ...previous]);
+				navigate(`/sessions/${result.session.id}`);
+				setTimeout(() => textareaRef.current?.focus(), 100);
+			} catch (error) {
+				console.error("Failed to create session:", error);
+			} finally {
+				setIsCreating(false);
+			}
+		},
+		[navigate, token],
+	);
+
+	const handleSend = useCallback(async () => {
+		if (!token || !selectedId || session?.status === "running" || session?.status === "retrying") {
+			return;
+		}
+
+		const nextPrompt = prompt;
+		const nextImages = draftImages;
+
+		if (nextPrompt.trim().length === 0 && nextImages.length === 0) {
+			return;
+		}
+
+		setPrompt("");
+		setDraftImages([]);
+
+		if (fileInputRef.current) {
+			fileInputRef.current.value = "";
+		}
+
+		if (textareaRef.current) {
+			textareaRef.current.style.height = "auto";
+		}
+
+		try {
+			await sendInput(
+				token,
+				selectedId,
+				nextPrompt,
+				nextImages.map((image) => image.file),
+			);
+		} catch {
+			setPrompt(nextPrompt);
+			setDraftImages(nextImages);
+		}
+	}, [draftImages, prompt, selectedId, session?.status, token]);
+
+	const handleInterrupt = useCallback(async () => {
+		if (!token || !selectedId) {
+			return;
+		}
+
+		try {
+			await controlSession(token, selectedId, "interrupt");
+		} catch {}
+	}, [selectedId, token]);
+
+	const handleArchive = useCallback(
+		async (sessionId: string, archived: boolean) => {
+			if (!token) {
+				return;
+			}
+
+			try {
+				const result = await setSessionArchived(token, sessionId, archived);
+				setSessions((previous) =>
+					previous.map((candidate) =>
+						candidate.id === result.session.id ? result.session : candidate,
+					),
+				);
+				setSession((previous) => (previous?.id === result.session.id ? result.session : previous));
+				setArchiveConfirmId((current) => (current === sessionId ? null : current));
+
+				if (archived) {
+					if (selectedId === sessionId) {
+						navigate("/");
+					}
+					return;
+				}
+
+				if (isArchivedView) {
+					navigate(`/sessions/${sessionId}`);
+				}
+			} catch (error) {
+				console.error("Failed to update archive state:", error);
+			}
+		},
+		[isArchivedView, navigate, selectedId, token],
+	);
+
+	const handleRespond = useCallback(
+		async (requestId: string, payload: RequestResponsePayload) => {
+			if (!token) {
+				return;
+			}
+
+			try {
+				await respondToRequest(token, requestId, payload);
+			} catch (error) {
+				console.error("Failed to respond:", error);
+			}
+		},
+		[token],
+	);
+
+	const addDraftImages = useCallback(async (files: File[]) => {
+		const normalizedImages = await Promise.all(files.map(normalizeDraftImage));
+		setDraftImages((previous) => [...previous, ...normalizedImages]);
+	}, []);
+
+	const handleImageSelect = useCallback(
+		(event: React.ChangeEvent<HTMLInputElement>) => {
+			const files = Array.from(event.target.files ?? []).filter((file) =>
+				file.type.startsWith("image/"),
+			);
+
+			if (files.length > 0) {
+				void addDraftImages(files);
+			}
+		},
+		[addDraftImages],
+	);
+
+	const handlePaste = useCallback(
+		(event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+			const files = Array.from(event.clipboardData.items)
+				.filter((item) => item.type.startsWith("image/"))
+				.map((item) => item.getAsFile())
+				.filter((file): file is File => file !== null);
+
+			if (files.length === 0) {
+				return;
+			}
+
+			event.preventDefault();
+			void addDraftImages(files);
+		},
+		[addDraftImages],
+	);
+
+	if (!authChecked || !token) {
+		return <LoadingShell />;
+	}
+
+	const sessionProvider = session
+		? providers.find((provider) => provider.id === session.provider)
+		: null;
+	const canAttachImages = sessionProvider?.capabilities.supportsImages === true;
+	const isSessionBusy = session?.status === "running" || session?.status === "retrying";
+	const canSend =
+		!!selectedId && (prompt.trim().length > 0 || draftImages.length > 0) && !isSessionBusy;
+
+	function handleScroll() {
+		const element = scrollRef.current;
+
+		if (!element) {
+			return;
+		}
+
+		isAtBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 60;
+	}
+
+	function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+		if (event.key === "Enter" && !event.shiftKey) {
+			event.preventDefault();
+			void handleSend();
+		}
+	}
+
+	function autoResize(element: HTMLTextAreaElement) {
+		element.style.height = "auto";
+		element.style.height = `${Math.min(element.scrollHeight, 180)}px`;
+	}
+
+	function handleLogout() {
+		window.location.assign("/logout");
+	}
+
+	return (
+		<div className="flex h-screen overflow-hidden bg-background">
+			<aside className="flex w-56 shrink-0 flex-col border-r border-foreground/10 bg-card/55 backdrop-blur-sm">
+				<div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-4">
+					<span className="text-[11px] font-semibold uppercase tracking-[0.15em] text-foreground/72">
+						shelleport
+					</span>
+					<button
+						type="button"
+						onClick={() => navigate("/")}
+						className="flex size-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
+						title="New session"
+					>
+						<Plus className="size-3.5" />
+					</button>
+				</div>
+
+				<div className="flex-1 overflow-y-auto px-2 py-2">
+					{initialLoading ? (
+						<div className="flex items-center justify-center py-8">
+							<Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+						</div>
+					) : activeSessions.length === 0 ? (
+						<div className="py-8 text-center">
+							<p className="text-[11px] text-muted-foreground">No sessions</p>
+							<button
+								type="button"
+								onClick={() => navigate("/")}
+								className="mt-2 text-[11px] text-foreground/68 transition hover:text-foreground"
+							>
+								Create one
+							</button>
+						</div>
+					) : (
+						<div className="space-y-px">
+							{activeSessions.map((candidate) => (
+								<div
+									key={candidate.id}
+									onMouseLeave={() => {
+										if (archiveConfirmId === candidate.id) {
+											setArchiveConfirmId(null);
+										}
+									}}
+									className={`group flex items-start gap-1 rounded-md transition ${
+										candidate.status === "running" || candidate.status === "retrying"
+											? "sidebar-session-running"
+											: ""
+									} ${
+										selectedId === candidate.id
+											? "border border-foreground/10 bg-accent/90 text-foreground shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]"
+											: "text-foreground/72 hover:bg-accent/65 hover:text-foreground"
+									}`}
+								>
+									<button
+										type="button"
+										onClick={() => navigate(`/sessions/${candidate.id}`)}
+										title={getSidebarTitle(candidate)}
+										className="min-w-0 flex-1 px-2.5 py-2 text-left"
+									>
+										<div className="flex items-center gap-2">
+											<StatusDot status={candidate.status} />
+											<span className="line-clamp-1 min-w-0 flex-1 pr-1 text-xs">
+												{candidate.title}
+											</span>
+											{candidate.status === "failed" && (
+												<CircleX className="ml-auto size-3 shrink-0 text-destructive/70" />
+											)}
+										</div>
+										<p className="mt-0.5 ml-3.5 truncate text-[10px] text-muted-foreground/82">
+											{getSidebarMeta(candidate, now)}
+										</p>
+									</button>
+									<button
+										type="button"
+										onClick={() => {
+											if (archiveConfirmId === candidate.id) {
+												void handleArchive(candidate.id, true);
+												return;
+											}
+
+											setArchiveConfirmId(candidate.id);
+										}}
+										className={`mt-2 mr-2 flex size-5 shrink-0 items-center justify-center rounded border transition ${
+											archiveConfirmId === candidate.id
+												? "border-foreground/18 bg-accent text-foreground opacity-100"
+												: "border-transparent text-muted-foreground/0 opacity-0 group-hover:border-foreground/10 group-hover:text-muted-foreground/82 group-hover:opacity-100 hover:border-foreground/18 hover:text-foreground"
+										}`}
+										aria-label={
+											archiveConfirmId === candidate.id
+												? `Confirm archive ${candidate.title}`
+												: `Archive ${candidate.title}`
+										}
+										title={archiveConfirmId === candidate.id ? "Confirm archive" : "Archive"}
+									>
+										{archiveConfirmId === candidate.id ? (
+											<Check className="size-3" />
+										) : (
+											<Archive className="size-3" />
+										)}
+									</button>
+								</div>
+							))}
+						</div>
+					)}
+				</div>
+
+				<div className="shrink-0 border-t border-border px-2 py-2">
+					<button
+						type="button"
+						onClick={() => navigate("/archived")}
+						className={`mb-1 flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-[11px] transition ${
+							isArchivedView
+								? "bg-accent text-foreground"
+								: "text-muted-foreground/85 hover:bg-accent hover:text-foreground"
+						}`}
+					>
+						<Archive className="size-3" />
+						Archived
+						<span className="ml-auto text-[10px] text-muted-foreground/72">
+							{archivedSessions.length}
+						</span>
+					</button>
+					<button
+						type="button"
+						onClick={handleLogout}
+						className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-[11px] text-muted-foreground/85 transition hover:bg-accent hover:text-foreground"
+					>
+						<LogOut className="size-3" />
+						Disconnect
+					</button>
+				</div>
+			</aside>
+
+			<main className="flex flex-1 flex-col overflow-hidden">
+				{isArchivedView ? (
+					<div className="flex flex-1 flex-col overflow-hidden">
+						<header className="flex h-12 shrink-0 items-center justify-between border-b border-border px-5">
+							<div>
+								<h1 className="text-xs font-medium text-foreground">Archived sessions</h1>
+								<p className="text-[10px] text-muted-foreground/78">
+									Restore a thread to move it back into the main list.
+								</p>
+							</div>
+						</header>
+						<div className="flex-1 overflow-y-auto px-5 py-4">
+							<div className="mx-auto max-w-3xl">
+								{archivedSessions.length === 0 ? (
+									<div className="flex h-full min-h-48 items-center justify-center">
+										<p className="text-xs text-muted-foreground/72">No archived sessions</p>
+									</div>
+								) : (
+									<div className="space-y-2">
+										{archivedSessions.map((archivedSession) => (
+											<div
+												key={archivedSession.id}
+												className="flex items-center justify-between gap-4 rounded-md border border-foreground/10 bg-card/90 px-3 py-3"
+											>
+												<div className="min-w-0">
+													<p className="truncate text-xs font-medium text-foreground">
+														{archivedSession.title}
+													</p>
+													<p className="mt-1 truncate text-[10px] text-muted-foreground/82">
+														{archivedSession.cwd}
+													</p>
+												</div>
+												<div className="flex shrink-0 items-center gap-2">
+													<button
+														type="button"
+														onClick={() => navigate(`/sessions/${archivedSession.id}`)}
+														className="rounded border border-foreground/10 px-3 py-1.5 text-[11px] text-muted-foreground/85 transition hover:border-foreground/18 hover:text-foreground"
+													>
+														Open
+													</button>
+													<button
+														type="button"
+														onClick={() => void handleArchive(archivedSession.id, false)}
+														className="flex items-center gap-1.5 rounded bg-foreground px-3 py-1.5 text-[11px] font-medium text-background transition hover:bg-foreground/90"
+													>
+														<ArchiveRestore className="size-3" />
+														Unarchive
+													</button>
+												</div>
+											</div>
+										))}
+									</div>
+								)}
+							</div>
+						</div>
+					</div>
+				) : selectedId && session ? (
+					<>
+						<header className="flex h-12 shrink-0 items-center justify-between border-b border-border px-5">
+							<div className="min-w-0">
+								<div className="flex items-center gap-2">
+									<h1 className="truncate text-xs font-medium text-foreground">{session.title}</h1>
+									<span className="shrink-0 text-[10px] text-muted-foreground/78">
+										{session.cwd}
+									</span>
+								</div>
+							</div>
+							<div className="flex shrink-0 items-center gap-3">
+								<div className="flex items-center gap-1.5">
+									<StatusDot status={session.status} />
+									<span className="text-[10px] text-muted-foreground/82">
+										{formatStatus(session, now)}
+									</span>
+									{streamState === "reconnecting" && (
+										<span className="rounded border border-foreground/12 px-1.5 py-px text-[9px] uppercase tracking-[0.12em] text-muted-foreground/82">
+											Reconnecting
+										</span>
+									)}
+								</div>
+								{(session.status === "running" || session.status === "retrying") && (
+									<button
+										type="button"
+										onClick={() => void handleInterrupt()}
+										className="flex items-center gap-1.5 rounded border border-foreground/10 px-2 py-1 text-[11px] text-muted-foreground/82 transition hover:border-foreground/22 hover:text-foreground"
+									>
+										<CircleStop className="size-3" />
+										Stop
+									</button>
+								)}
+							</div>
+						</header>
+
+						<div
+							ref={scrollRef}
+							onScroll={handleScroll}
+							className="flex-1 overflow-y-auto px-5 py-4"
+						>
+							{grouped.length === 0 &&
+							session.status !== "running" &&
+							session.status !== "retrying" ? (
+								<div className="flex h-full items-center justify-center">
+									<p className="text-xs text-muted-foreground/72">Send a message to start</p>
+								</div>
+							) : (
+								<div className="mx-auto max-w-3xl">
+									{getStatusMessage(session) && (
+										<div className="mb-3 rounded-md border border-foreground/10 bg-card/90 px-3 py-2 text-[11px] text-muted-foreground/88">
+											{getStatusMessage(session)}
+										</div>
+									)}
+									{grouped.map((group) => (
+										<GroupedEntryRenderer
+											key={group.type === "tool" ? group.call.id : group.entry.id}
+											group={group}
+										/>
+									))}
+									{(session.status === "running" || session.status === "retrying") && (
+										<div className="animate-thinking mt-1 flex gap-1 py-2">
+											<span className="size-1 rounded-full bg-foreground" />
+											<span className="size-1 rounded-full bg-foreground" />
+											<span className="size-1 rounded-full bg-foreground" />
+										</div>
+									)}
+								</div>
+							)}
+						</div>
+
+						{pendingRequests.length > 0 && (
+							<PendingRequestBanner request={pendingRequests[0]} onRespond={handleRespond} />
+						)}
+
+						<div className="shrink-0 border-t border-border px-5 py-3">
+							<div className="mx-auto max-w-3xl">
+								<div className="relative rounded-md border border-foreground/10 bg-card/92 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)] transition-colors focus-within:border-foreground/22">
+									<input
+										ref={fileInputRef}
+										type="file"
+										accept="image/*"
+										multiple
+										onChange={handleImageSelect}
+										className="hidden"
+									/>
+									{draftImages.length > 0 && (
+										<div className="flex flex-wrap gap-2 border-b border-border px-3 py-2">
+											{draftImages.map((image, index) => (
+												<DraftImagePreview
+													key={image.url}
+													image={image}
+													onRemove={() =>
+														setDraftImages((previous) => {
+															const nextImages = [...previous];
+															const [removedImage] = nextImages.splice(index, 1);
+
+															if (removedImage) {
+																URL.revokeObjectURL(removedImage.url);
+															}
+
+															return nextImages;
+														})
+													}
+												/>
+											))}
+										</div>
+									)}
+									<textarea
+										ref={textareaRef}
+										rows={1}
+										value={prompt}
+										onChange={(event) => {
+											setPrompt(event.target.value);
+											autoResize(event.currentTarget);
+										}}
+										onKeyDown={handleKeyDown}
+										onPaste={handlePaste}
+										placeholder={
+											isSessionBusy
+												? "Claude is working..."
+												: canAttachImages
+													? "Message Claude... paste images or attach files"
+													: "Message Claude... (Enter to send)"
+										}
+										disabled={isSessionBusy}
+										className="w-full resize-none bg-transparent px-3 py-2.5 pr-20 text-xs text-foreground outline-none placeholder:text-muted-foreground/60 disabled:cursor-not-allowed disabled:opacity-60"
+									/>
+									{canAttachImages && (
+										<button
+											type="button"
+											onClick={() => fileInputRef.current?.click()}
+											disabled={isSessionBusy}
+											className="absolute right-10 bottom-2 flex size-7 items-center justify-center rounded border border-foreground/10 bg-background text-muted-foreground/82 transition hover:border-foreground/22 hover:text-foreground disabled:opacity-30"
+											title="Attach images"
+										>
+											<ImagePlus className="size-3.5" />
+										</button>
+									)}
+									<button
+										type="button"
+										onClick={() => void handleSend()}
+										disabled={!canSend}
+										className="absolute right-2 bottom-2 flex size-7 items-center justify-center rounded bg-foreground text-background shadow-[0_0_18px_oklch(1_0_0_/_0.12)] transition hover:bg-foreground/85 disabled:opacity-20"
+									>
+										<Send className="size-3.5" />
+									</button>
+								</div>
+							</div>
+						</div>
+					</>
+				) : (
+					<SessionLauncher
+						defaultPath={defaultCwd}
+						isCreating={isCreating}
+						onCreate={handleCreateSession}
+						token={token}
+					/>
+				)}
+			</main>
+		</div>
+	);
+}
