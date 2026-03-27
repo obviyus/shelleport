@@ -76,8 +76,15 @@ export function login(token: string) {
 	});
 }
 
-export function fetchSessions() {
-	return request<{ sessions: HostSession[] }>("/api/sessions");
+export function fetchSessions(query = "") {
+	const params = new URLSearchParams();
+
+	if (query.trim().length > 0) {
+		params.set("q", query);
+	}
+
+	const suffix = params.size > 0 ? `?${params.toString()}` : "";
+	return request<{ sessions: HostSession[] }>(`/api/sessions${suffix}`);
 }
 
 export function fetchDirectory(path: string) {
