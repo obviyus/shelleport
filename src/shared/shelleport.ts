@@ -24,6 +24,7 @@ export type ProviderSummary = {
 	id: ProviderId;
 	label: string;
 	status: "ready" | "partial" | "planned";
+	statusDetail: string | null;
 	capabilities: ProviderCapabilities;
 };
 
