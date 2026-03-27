@@ -71,17 +71,36 @@ The provider system is extensible — add new agents by implementing the `Provid
 
 ## Configuration
 
+### Authentication
+
+On first launch, shelleport generates a random admin token and prints it to the console. The token is only shown once — save it. Only the hash is stored.
+
+To regenerate the token (invalidates all existing sessions):
+
+```bash
+shelleport token
+```
+
 ### Environment Variables
 
-| Variable                 | Default     | Description                                |
-| :----------------------- | :---------- | :----------------------------------------- |
-| `SHELLEPORT_ADMIN_TOKEN` | `dev-token` | Bearer token for API and UI authentication |
-| `HOST`                   | `127.0.0.1` | Bind address                               |
-| `PORT`                   | `3000`      | Bind port                                  |
+| Variable | Default     | Description  |
+| :------- | :---------- | :----------- |
+| `HOST`   | `127.0.0.1` | Bind address |
+| `PORT`   | `3000`      | Bind port    |
 
 ### Data Storage
 
 All data lives in `$XDG_DATA_HOME/shelleport` (defaults to `~/.local/share/shelleport`). The SQLite database stores sessions and events. Image attachments are saved in each session's working directory under `.shelleport/uploads/`.
+
+## Remote Access with Tailscale
+
+Shelleport binds to `127.0.0.1` by default. To securely access it from your other devices, use [Tailscale Serve](https://tailscale.com/kb/1242/tailscale-serve) to proxy it over your tailnet:
+
+```bash
+tailscale serve --bg 3000
+```
+
+Then visit `https://<your-machine>.<tailnet>.ts.net` from any device on your tailnet. Traffic stays within your private network and is encrypted end-to-end by Tailscale.
 
 ## API Reference
 
