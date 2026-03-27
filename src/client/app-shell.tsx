@@ -98,6 +98,28 @@ function formatPermissionModeLabel(session: HostSession) {
 	return session.permissionMode === "dontAsk" ? "Bypass permissions" : "Approval prompts";
 }
 
+function getSessionLimitProgress(limit: SessionLimit) {
+	if (limit.utilization === null) {
+		return null;
+	}
+
+	return Math.max(0, Math.min(limit.utilization, 100));
+}
+
+function getSessionLimitTone(limit: SessionLimit) {
+	const utilization = limit.utilization ?? 0;
+
+	if (utilization >= 90) {
+		return "bg-red-500 shadow-[0_0_18px_oklch(0.62_0.24_25_/_0.42)]";
+	}
+
+	if (utilization >= 75) {
+		return "bg-amber-300 shadow-[0_0_18px_oklch(0.86_0.16_92_/_0.34)]";
+	}
+
+	return "bg-white shadow-[0_0_18px_oklch(1_0_0_/_0.26)]";
+}
+
 export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated: true }> }) {
 	const route = useCurrentRoute();
 	const { navigate } = useRouter();
@@ -149,7 +171,10 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		};
 	}, [sessions]);
 	const grouped = useMemo(() => groupStream(stream), [stream]);
-	const usageBadges = useMemo(() => getSessionUsageBadges(stream, now), [now, stream]);
+	const usageBadges = useMemo(
+		() => getSessionUsageBadges(session, stream, now),
+		[now, session, stream],
+	);
 	const claudeLimits = useMemo(
 		() => orderSessionLimits(providerLimits.claude),
 		[providerLimits.claude],
@@ -750,7 +775,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 					)}
 				</div>
 
-				<div className="shrink-0 border-t border-border px-2 py-2">
+				<div className="shrink-0 px-2 pt-2">
 					{claudeLimits.length > 0 && (
 						<div className="mb-2 rounded-md border border-foreground/10 bg-background/40 px-2.5 py-2">
 							<div className="mb-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/68">
@@ -767,6 +792,14 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 												{formatSessionLimitUsage(limit)}
 											</span>
 										</div>
+										{getSessionLimitProgress(limit) !== null && (
+											<div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/8 ring-1 ring-white/8">
+												<div
+													className={`h-full rounded-full transition-[width,background-color,box-shadow] duration-300 ${getSessionLimitTone(limit)}`}
+													style={{ width: `${getSessionLimitProgress(limit)}%` }}
+												/>
+											</div>
+										)}
 										<div className="text-[9px] text-muted-foreground/60">
 											{formatSessionLimitReset(limit, now)}
 										</div>
@@ -775,6 +808,8 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 							</div>
 						</div>
 					)}
+				</div>
+				<div className="shrink-0 border-t border-border px-2 py-2">
 					<button
 						type="button"
 						onClick={() => navigate("/archived")}
