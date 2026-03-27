@@ -1,13 +1,6 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { config, ensureDataDir, getClaudeBin } from "~/server/config.server";
-import { handleApiRequest } from "~/server/api.server";
-import {
-	clearAuthCookie,
-	ensureAuthSetup,
-	getAuthStatus,
-	rotateAdminToken,
-} from "~/server/auth.server";
 import { browserOutdir, buildBrowser, readBrowserBuild } from "./scripts/build";
 
 const serverFilePath = fileURLToPath(import.meta.url);
@@ -15,8 +8,190 @@ const usingBunRuntime =
 	process.execPath.endsWith("/bun") || process.execPath.endsWith("/bun-debug");
 const isDevelopment = usingBunRuntime && Bun.env.NODE_ENV !== "production";
 
+type CommandName = "serve" | "doctor" | "token" | "install-service";
+
+type CliOptions = {
+	command: CommandName;
+	help: boolean;
+	host: string;
+	port: number;
+};
+
 function getCliCommand() {
 	return usingBunRuntime ? ["bun", "run", serverFilePath] : [process.execPath];
+}
+
+async function loadAuthModule() {
+	return import("~/server/auth.server");
+}
+
+async function loadApiModule() {
+	return import("~/server/api.server");
+}
+
+function parsePort(value: string) {
+	const port = Number(value);
+
+	if (!Number.isInteger(port) || port < 1 || port > 65535) {
+		throw new Error(`Invalid port: ${value}`);
+	}
+
+	return port;
+}
+
+async function getTailscaleIPv4() {
+	const process = Bun.spawn(["tailscale", "ip", "-4"], {
+		stdout: "pipe",
+		stderr: "pipe",
+	});
+	const exitCode = await process.exited;
+	const stdout = await new Response(process.stdout).text();
+	const stderr = await new Response(process.stderr).text();
+
+	if (exitCode !== 0) {
+		throw new Error(stderr.trim() || "tailscale ip -4 failed");
+	}
+
+	const addresses = stdout
+		.split("\n")
+		.map((line) => line.trim())
+		.filter(Boolean);
+
+	if (addresses.length !== 1) {
+		throw new Error(
+			addresses.length === 0
+				? "tailscale ip -4 returned no IPv4 address"
+				: "tailscale ip -4 returned multiple IPv4 addresses; pass --host explicitly",
+		);
+	}
+
+	return addresses[0];
+}
+
+async function parseCliOptions(argv = Bun.argv.slice(2)): Promise<CliOptions> {
+	let command: CommandName = "serve";
+	let help = false;
+	let host = config.defaultHost;
+	let port = config.defaultPort;
+	let hostSource: "default" | "explicit" = "default";
+
+	for (let index = 0; index < argv.length; index += 1) {
+		const argument = argv[index];
+
+		if (!argument) {
+			continue;
+		}
+
+		if (argument === "serve" || argument === "doctor" || argument === "token" || argument === "install-service") {
+			command = argument;
+			continue;
+		}
+
+		if (argument === "--help" || argument === "-h") {
+			help = true;
+			continue;
+		}
+
+		if (argument === "--host") {
+			const value = argv[index + 1];
+
+			if (!value) {
+				throw new Error("--host requires a value");
+			}
+
+			host = value;
+			hostSource = "explicit";
+			index += 1;
+			continue;
+		}
+
+		if (argument.startsWith("--host=")) {
+			host = argument.slice("--host=".length);
+			hostSource = "explicit";
+			continue;
+		}
+
+		if (argument === "--port") {
+			const value = argv[index + 1];
+
+			if (!value) {
+				throw new Error("--port requires a value");
+			}
+
+			port = parsePort(value);
+			index += 1;
+			continue;
+		}
+
+		if (argument.startsWith("--port=")) {
+			port = parsePort(argument.slice("--port=".length));
+			continue;
+		}
+
+		if (argument === "--public") {
+			if (hostSource === "explicit") {
+				throw new Error("Choose one host option");
+			}
+
+			host = "0.0.0.0";
+			hostSource = "explicit";
+			continue;
+		}
+
+		if (argument === "--tailscale") {
+			if (hostSource === "explicit") {
+				throw new Error("Choose one host option");
+			}
+
+			host = await getTailscaleIPv4();
+			hostSource = "explicit";
+			continue;
+		}
+
+		throw new Error(`Unknown argument: ${argument}`);
+	}
+
+	return {
+		command,
+		help,
+		host,
+		port,
+	};
+}
+
+function printHelp() {
+	console.log("Usage: shelleport [command] [options]");
+	console.log("");
+	console.log("Commands:");
+	console.log("  serve              Start the web server");
+	console.log("  doctor             Check local setup");
+	console.log("  token              Rotate the admin token");
+	console.log("  install-service    Write a launchd/systemd service");
+	console.log("");
+	console.log("Options:");
+	console.log("  --host <address>   Bind one address");
+	console.log("  --port <port>      Bind one port");
+	console.log("  --public           Bind 0.0.0.0");
+	console.log("  --tailscale        Bind the Tailscale IPv4");
+	console.log("  -h, --help         Show this help");
+}
+
+async function getReachableHosts(host: string) {
+	if (host === "127.0.0.1" || host === "::1" || host === "localhost") {
+		return [host];
+	}
+
+	if (host === "0.0.0.0" || host === "::") {
+		const hosts = ["127.0.0.1"];
+
+		try {
+			hosts.push(await getTailscaleIPv4());
+		} catch {}
+
+		return hosts;
+	}
+
+	return [host];
 }
 
 async function getProductionShellPath() {
@@ -69,8 +244,9 @@ function getContentType(pathname: string) {
 	return "application/octet-stream";
 }
 
-async function runDoctor() {
+async function runDoctor(options: CliOptions) {
 	await ensureDataDir();
+	const { getAuthStatus } = await loadAuthModule();
 	const authStatus = getAuthStatus();
 
 	const checks = [
@@ -101,13 +277,13 @@ async function runDoctor() {
 		console.log(`${check.label}: ${exitCode === 0 ? "ok" : "fail"} ${message}`);
 	}
 
-	console.log(`host: ${config.defaultHost}`);
-	console.log(`port: ${config.defaultPort}`);
+	console.log(`host: ${options.host}`);
+	console.log(`port: ${options.port}`);
 	console.log(`data_dir: ${config.dataDir}`);
 	console.log(`admin_token: ${authStatus.hasStoredTokenHash ? "stored-hash" : "uninitialized"}`);
 }
 
-async function runInstallService() {
+async function runInstallService(options: CliOptions) {
 	await ensureDataDir();
 	const command = [...getCliCommand(), "serve"];
 	const workingDirectory = usingBunRuntime
@@ -137,9 +313,9 @@ ${command.map((part) => `		<string>${part}</string>`).join("\n")}
 	<key>EnvironmentVariables</key>
 	<dict>
 		<key>PORT</key>
-		<string>${String(config.defaultPort)}</string>
+		<string>${String(options.port)}</string>
 		<key>HOST</key>
-		<string>${config.defaultHost}</string>
+		<string>${options.host}</string>
 	</dict>
 </dict>
 </plist>
@@ -162,8 +338,8 @@ Type=simple
 WorkingDirectory=${workingDirectory}
 ExecStart=${command.join(" ")}
 Restart=always
-Environment=HOST=${config.defaultHost}
-Environment=PORT=${config.defaultPort}
+Environment=HOST=${options.host}
+Environment=PORT=${options.port}
 
 [Install]
 WantedBy=default.target
@@ -176,6 +352,7 @@ WantedBy=default.target
 
 async function runToken() {
 	await ensureDataDir();
+	const { rotateAdminToken } = await loadAuthModule();
 	const token = rotateAdminToken();
 	console.log("Save this admin token now. It will not be shown again.");
 	console.log(token);
@@ -201,6 +378,7 @@ export async function createServerFetchHandler(
 			}
 
 			if (url.pathname.startsWith("/api/")) {
+				const { handleApiRequest } = await loadApiModule();
 				return await handleApiRequest(request);
 			}
 
@@ -212,6 +390,7 @@ export async function createServerFetchHandler(
 			}
 
 			if (url.pathname === "/logout") {
+				const { clearAuthCookie } = await loadAuthModule();
 				return new Response(null, {
 					status: 302,
 					headers: {
@@ -252,20 +431,22 @@ export async function createServerFetchHandler(
 	};
 }
 
-export async function runServe() {
+export async function runServe(options: CliOptions) {
 	await ensureDataDir();
+	const { ensureAuthSetup } = await loadAuthModule();
 	const authSetup = ensureAuthSetup();
 	const productionAssets = await getProductionShellPath();
 	const fetch = await createServerFetchHandler(
 		productionAssets?.clientAssetPaths ?? null,
 		productionAssets?.clientShellPath ?? null,
 	);
-	const browserHost =
-		config.defaultHost === "0.0.0.0" || config.defaultHost === "::"
-			? "localhost"
-			: config.defaultHost;
-
-	console.log(`Server starting on http://${browserHost}:${config.defaultPort}`);
+	console.log(`Server binding on ${options.host}:${options.port}`);
+	for (const host of await getReachableHosts(options.host)) {
+		console.log(`Open: http://${host}:${options.port}`);
+	}
+	if (options.host === "127.0.0.1" || options.host === "::1" || options.host === "localhost") {
+		console.log("Remote access disabled; use --host, --public, or --tailscale");
+	}
 	if (authSetup.generatedToken) {
 		console.log("");
 		console.log("Save this admin token now. It will not be shown again.");
@@ -281,8 +462,8 @@ export async function runServe() {
 				}
 			: false,
 		fetch,
-		hostname: config.defaultHost,
-		port: config.defaultPort,
+		hostname: options.host,
+		port: options.port,
 		error(error) {
 			console.error("Server error:", error);
 			return new Response("Server Error", { status: 500 });
@@ -291,15 +472,21 @@ export async function runServe() {
 }
 
 if (import.meta.main) {
-	const command = Bun.argv[2] ?? "serve";
+	const options = await parseCliOptions();
+	const { command, help } = options;
+
+	if (help) {
+		printHelp();
+		process.exit(0);
+	}
 
 	if (command === "doctor") {
-		await runDoctor();
+		await runDoctor(options);
 	} else if (command === "token") {
 		await runToken();
 	} else if (command === "install-service") {
-		await runInstallService();
+		await runInstallService(options);
 	} else {
-		await runServe();
+		await runServe(options);
 	}
 }
