@@ -1,9 +1,8 @@
 import { KeyRound, Loader2, Terminal } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { login, validateSession } from "~/client/api";
 
 export function LoginPage() {
-	const inputRef = useRef<HTMLInputElement>(null);
 	const [value, setValue] = useState("");
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
@@ -20,12 +19,6 @@ export function LoginPage() {
 				setLoading(false);
 			});
 	}, []);
-
-	useEffect(() => {
-		if (!checking) {
-			inputRef.current?.focus();
-		}
-	}, [checking]);
 
 	async function handleSubmit(event: React.FormEvent) {
 		event.preventDefault();
@@ -74,10 +67,10 @@ export function LoginPage() {
 					<div className="relative">
 						<KeyRound className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
 						<input
-							ref={inputRef}
 							type="password"
 							placeholder="Paste admin token"
 							autoComplete="current-password"
+							autoFocus
 							value={value}
 							onChange={(event) => setValue(event.target.value)}
 							className="h-10 w-full rounded-md border border-border bg-card pl-9 pr-3 text-xs text-foreground outline-none transition placeholder:text-muted-foreground focus:border-foreground/20 focus:ring-1 focus:ring-foreground/10"

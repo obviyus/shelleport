@@ -1,5 +1,5 @@
 import { ChevronRight, Loader2, X } from "lucide-react";
-import { type ComponentType, useEffect, useState } from "react";
+import { Suspense, lazy, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type {
@@ -16,17 +16,6 @@ type ImagePreview = {
 	url: string;
 };
 
-type CodeFileProps = {
-	file: {
-		contents: string;
-		lang: string;
-		name: string;
-	};
-	options: {
-		theme: string;
-	};
-};
-
 export type DraftImage = ImagePreview & {
 	file: File;
 };
@@ -38,6 +27,11 @@ type UsageSnapshot = {
 type LimitSnapshot = SessionLimit & {
 	window: string;
 };
+
+const DiffCodeFile = lazy(async () => {
+	const module = await import("@pierre/diffs/react");
+	return { default: module.File };
+});
 
 function MarkdownMessage({ text }: { text: string }) {
 	return (
@@ -530,41 +524,25 @@ function LazyCodeFile({
 	fileName: string;
 	language: string;
 }) {
-	const [CodeFile, setCodeFile] = useState<ComponentType<CodeFileProps> | null>(null);
-
-	useEffect(() => {
-		let cancelled = false;
-
-		void import("@pierre/diffs/react").then((module) => {
-			if (!cancelled) {
-				setCodeFile(() => module.File);
-			}
-		});
-
-		return () => {
-			cancelled = true;
-		};
-	}, []);
-
-	if (!CodeFile) {
-		return (
-			<pre className="overflow-x-auto px-3 py-2.5 text-[11px] leading-[1.7] whitespace-pre-wrap text-foreground/86">
-				{truncate(content, 12_000)}
-			</pre>
-		);
-	}
-
 	return (
-		<CodeFile
-			file={{
-				contents: truncate(content, 50_000),
-				lang: language,
-				name: fileName,
-			}}
-			options={{
-				theme: "github-dark",
-			}}
-		/>
+		<Suspense
+			fallback={
+				<pre className="overflow-x-auto px-3 py-2.5 text-[11px] leading-[1.7] whitespace-pre-wrap text-foreground/86">
+					{truncate(content, 12_000)}
+				</pre>
+			}
+		>
+			<DiffCodeFile
+				file={{
+					contents: truncate(content, 50_000),
+					lang: language,
+					name: fileName,
+				}}
+				options={{
+					theme: "github-dark",
+				}}
+			/>
+		</Suspense>
 	);
 }
 
