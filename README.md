@@ -47,7 +47,8 @@ Shelleport can install itself as a background service that starts automatically:
 shelleport install-service --tailscale
 ```
 
-This writes a service definition for your platform (launchd on macOS, systemd on Linux) and prints the command to activate it.
+This writes a service definition for your platform and starts it immediately.
+By default, service installs bind `0.0.0.0`. Pass `--tailscale` to bind the machine's Tailscale IPv4 instead.
 
 ### Health Check
 
@@ -103,7 +104,7 @@ shelleport token
 | Variable | Default     | Description  |
 | :------- | :---------- | :----------- |
 | `HOST`   | `127.0.0.1` | Bind address |
-| `PORT`   | `3000`      | Bind port    |
+| `PORT`   | `1206`      | Bind port    |
 
 CLI flags:
 
@@ -129,7 +130,7 @@ shelleport serve --tailscale
 If you prefer Tailscale HTTPS proxying instead, keep Shelleport on loopback and use [Tailscale Serve](https://tailscale.com/kb/1242/tailscale-serve):
 
 ```bash
-tailscale serve --bg 3000
+tailscale serve --bg 1206
 ```
 
 ## API Reference

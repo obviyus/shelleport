@@ -41,6 +41,24 @@ function parsePort(value: string) {
 	return port;
 }
 
+export function getInstallServiceHost(host: string) {
+	return host === config.defaultHost ? "0.0.0.0" : host;
+}
+
+async function runCheckedCommand(command: string[]) {
+	const process = Bun.spawn(command, {
+		stdout: "pipe",
+		stderr: "pipe",
+	});
+	const exitCode = await process.exited;
+	const stdout = await new Response(process.stdout).text();
+	const stderr = await new Response(process.stderr).text();
+
+	if (exitCode !== 0) {
+		throw new Error(stderr.trim() || stdout.trim() || `Command failed: ${command.join(" ")}`);
+	}
+}
+
 async function getTailscaleIPv4() {
 	const process = Bun.spawn(["tailscale", "ip", "-4"], {
 		stdout: "pipe",
@@ -305,6 +323,7 @@ async function runDoctor(options: CliOptions) {
 async function runInstallService(options: CliOptions) {
 	await ensureDataDir();
 	const command = [...getCliCommand(), "serve"];
+	const host = getInstallServiceHost(options.host);
 	const workingDirectory = usingBunRuntime
 		? dirname(fileURLToPath(import.meta.url))
 		: dirname(process.execPath);
@@ -334,14 +353,15 @@ ${command.map((part) => `		<string>${part}</string>`).join("\n")}
 		<key>PORT</key>
 		<string>${String(options.port)}</string>
 		<key>HOST</key>
-		<string>${options.host}</string>
+		<string>${host}</string>
 	</dict>
 </dict>
 </plist>
 `;
 		await Bun.write(plistPath, plist);
+		await runCheckedCommand(["launchctl", "load", "-w", plistPath]);
 		console.log(`Wrote ${plistPath}`);
-		console.log(`Run: launchctl load -w ${plistPath}`);
+		console.log("Installed and started dev.shelleport");
 		return;
 	}
 
@@ -357,16 +377,18 @@ Type=simple
 WorkingDirectory=${workingDirectory}
 ExecStart=${command.join(" ")}
 Restart=always
-Environment=HOST=${options.host}
+Environment=HOST=${host}
 Environment=PORT=${options.port}
 
 [Install]
 WantedBy=default.target
 `;
 	await Bun.write(servicePath, service);
+	await runCheckedCommand(["systemctl", "--user", "daemon-reload"]);
+	await runCheckedCommand(["systemctl", "--user", "enable", "--now", "shelleport.service"]);
+	await runCheckedCommand(["systemctl", "--user", "restart", "shelleport.service"]);
 	console.log(`Wrote ${servicePath}`);
-	console.log("Run: systemctl --user daemon-reload");
-	console.log("Run: systemctl --user enable --now shelleport.service");
+	console.log("Installed and started shelleport.service");
 }
 
 async function runToken() {
