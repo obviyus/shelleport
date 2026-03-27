@@ -98,6 +98,13 @@ export function controlSession(
 	});
 }
 
+export function setSessionArchived(token: string, sessionId: string, archived: boolean) {
+	return request<{ session: HostSession }>(`/api/sessions/${sessionId}/archive`, token, {
+		method: "POST",
+		body: JSON.stringify({ archived }),
+	});
+}
+
 export function respondToRequest(
 	token: string,
 	requestId: string,

@@ -4,6 +4,7 @@ import type {
 	HostSession,
 	ImportSessionPayload,
 	PendingRequest,
+	SessionArchivePayload,
 	RequestResponsePayload,
 	SessionStatusDetail,
 	SessionControlPayload,
@@ -357,6 +358,16 @@ export const sessionBroker = {
 		void consumeProviderRun(sessionId, input, "send");
 
 		return sessionStore.getSession(sessionId);
+	},
+	setSessionArchived(sessionId: string, input: SessionArchivePayload) {
+		const session = sessionStore.updateSession(sessionId, { archived: input.archived });
+
+		if (!session) {
+			throw new ApiError(404, "session_not_found", `Unknown session: ${sessionId}`);
+		}
+
+		publishSession(session);
+		return session;
 	},
 	controlSession(sessionId: string, input: SessionControlPayload) {
 		const activeRun = activeRuns.get(sessionId);

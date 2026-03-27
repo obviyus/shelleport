@@ -1,4 +1,6 @@
 import {
+	Archive,
+	ArchiveRestore,
 	Check,
 	ChevronRight,
 	CircleStop,
@@ -13,7 +15,7 @@ import {
 	X,
 } from "lucide-react";
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate, useParams } from "react-router";
 import {
 	Dialog,
 	DialogContent,
@@ -32,6 +34,7 @@ import {
 	getToken,
 	respondToRequest,
 	sendInput,
+	setSessionArchived,
 } from "~/lib/api";
 import type {
 	HostEvent,
@@ -503,6 +506,8 @@ function EmptyState({ onNew }: { onNew: () => void }) {
 
 export default function Home({ loaderData }: Route.ComponentProps) {
 	const navigate = useNavigate();
+	const location = useLocation();
+	const { sessionId: selectedId } = useParams();
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
@@ -512,7 +517,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 	const [token] = useState(() => getToken());
 	const [providers, setProviders] = useState<ProviderSummary[]>([]);
 	const [sessions, setSessions] = useState<HostSession[]>([]);
-	const [selectedId, setSelectedId] = useState<string | null>(null);
 	const [session, setSession] = useState<HostSession | null>(null);
 	const [stream, setStream] = useState<HostEvent[]>([]);
 	const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
@@ -525,6 +529,10 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 	const [initialLoading, setInitialLoading] = useState(true);
 	const [now, setNow] = useState(() => Date.now());
 	const [streamState, setStreamState] = useState<"connected" | "reconnecting">("connected");
+	const [archiveConfirmId, setArchiveConfirmId] = useState<string | null>(null);
+	const isArchivedView = location.pathname === "/archived";
+	const activeSessions = sessions.filter((candidate) => !candidate.archived);
+	const archivedSessions = sessions.filter((candidate) => candidate.archived);
 
 	// Group tool-calls with their results
 	const grouped = useMemo(() => groupStream(stream), [stream]);
@@ -607,6 +615,17 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 		return () => controller.abort();
 	}, [selectedId, token]);
 
+	useEffect(() => {
+		if (selectedId) {
+			return;
+		}
+
+		setSession(null);
+		setStream([]);
+		setPendingRequests([]);
+		setStreamState("connected");
+	}, [selectedId]);
+
 	// Auto-scroll
 	useEffect(() => {
 		if (isAtBottom.current && scrollRef.current) {
@@ -647,7 +666,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 				title: newTitle.trim() || undefined,
 			});
 			setSessions((prev) => [result.session, ...prev]);
-			setSelectedId(result.session.id);
+			navigate(`/sessions/${result.session.id}`);
 			setShowNewSession(false);
 			setNewTitle("");
 			setTimeout(() => textareaRef.current?.focus(), 100);
@@ -656,7 +675,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 		} finally {
 			setIsCreating(false);
 		}
-	}, [token, newCwd, newTitle]);
+	}, [token, newCwd, newTitle, navigate]);
 
 	const handleSend = useCallback(async () => {
 		if (!token || !selectedId || session?.status === "running" || session?.status === "retrying") {
@@ -696,6 +715,39 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 			/* ignore */
 		}
 	}, [token, selectedId]);
+
+	const handleArchive = useCallback(
+		async (sessionId: string, archived: boolean) => {
+			if (!token) {
+				return;
+			}
+
+			try {
+				const result = await setSessionArchived(token, sessionId, archived);
+				setSessions((prev) =>
+					prev.map((candidate) =>
+						candidate.id === result.session.id ? result.session : candidate,
+					),
+				);
+				setSession((prev) => (prev?.id === result.session.id ? result.session : prev));
+				setArchiveConfirmId((current) => (current === sessionId ? null : current));
+
+				if (archived) {
+					if (selectedId === sessionId) {
+						navigate("/");
+					}
+					return;
+				}
+
+				if (isArchivedView) {
+					navigate(`/sessions/${sessionId}`);
+				}
+			} catch (err) {
+				console.error("Failed to update archive state:", err);
+			}
+		},
+		[token, navigate, isArchivedView, selectedId],
+	);
 
 	const handleRespond = useCallback(
 		async (requestId: string, payload: RequestResponsePayload) => {
@@ -798,7 +850,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 						<div className="flex items-center justify-center py-8">
 							<Loader2 className="size-3.5 animate-spin text-muted-foreground" />
 						</div>
-					) : sessions.length === 0 ? (
+					) : activeSessions.length === 0 ? (
 						<div className="py-8 text-center">
 							<p className="text-[11px] text-muted-foreground">No sessions</p>
 							<button
@@ -811,13 +863,15 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 						</div>
 					) : (
 						<div className="space-y-px">
-							{sessions.map((s) => (
-								<button
+							{activeSessions.map((s) => (
+								<div
 									key={s.id}
-									type="button"
-									onClick={() => setSelectedId(s.id)}
-									title={getSidebarTitle(s)}
-									className={`group w-full rounded-md px-2.5 py-2 text-left transition ${
+									onMouseLeave={() => {
+										if (archiveConfirmId === s.id) {
+											setArchiveConfirmId(null);
+										}
+									}}
+									className={`group flex items-start gap-1 rounded-md transition ${
 										s.status === "running" || s.status === "retrying"
 											? "sidebar-session-running"
 											: ""
@@ -827,17 +881,51 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 											: "text-foreground/72 hover:bg-accent/65 hover:text-foreground"
 									}`}
 								>
-									<div className="flex items-center gap-2">
-										<StatusDot status={s.status} />
-										<span className="line-clamp-1 text-xs">{s.title}</span>
-										{s.status === "failed" && (
-											<CircleX className="ml-auto size-3 shrink-0 text-destructive/70" />
+									<button
+										type="button"
+										onClick={() => navigate(`/sessions/${s.id}`)}
+										title={getSidebarTitle(s)}
+										className="min-w-0 flex-1 px-2.5 py-2 text-left"
+									>
+										<div className="flex items-center gap-2">
+											<StatusDot status={s.status} />
+											<span className="line-clamp-1 min-w-0 flex-1 pr-1 text-xs">{s.title}</span>
+											{s.status === "failed" && (
+												<CircleX className="ml-auto size-3 shrink-0 text-destructive/70" />
+											)}
+										</div>
+										<p className="mt-0.5 ml-3.5 truncate text-[10px] text-muted-foreground/82">
+											{getSidebarMeta(s, now)}
+										</p>
+									</button>
+									<button
+										type="button"
+										onClick={() => {
+											if (archiveConfirmId === s.id) {
+												void handleArchive(s.id, true);
+												return;
+											}
+											setArchiveConfirmId(s.id);
+										}}
+										className={`mt-2 mr-2 flex size-5 shrink-0 items-center justify-center rounded border transition ${
+											archiveConfirmId === s.id
+												? "border-foreground/18 bg-accent text-foreground opacity-100"
+												: "border-transparent text-muted-foreground/0 opacity-0 group-hover:border-foreground/10 group-hover:text-muted-foreground/82 group-hover:opacity-100 hover:border-foreground/18 hover:text-foreground"
+										}`}
+										aria-label={
+											archiveConfirmId === s.id
+												? `Confirm archive ${s.title}`
+												: `Archive ${s.title}`
+										}
+										title={archiveConfirmId === s.id ? "Confirm archive" : "Archive"}
+									>
+										{archiveConfirmId === s.id ? (
+											<Check className="size-3" />
+										) : (
+											<Archive className="size-3" />
 										)}
-									</div>
-									<p className="mt-0.5 ml-3.5 truncate text-[10px] text-muted-foreground/82">
-										{getSidebarMeta(s, now)}
-									</p>
-								</button>
+									</button>
+								</div>
 							))}
 						</div>
 					)}
@@ -845,6 +933,21 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 
 				{/* Footer */}
 				<div className="shrink-0 border-t border-border px-2 py-2">
+					<button
+						type="button"
+						onClick={() => navigate("/archived")}
+						className={`mb-1 flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-[11px] transition ${
+							isArchivedView
+								? "bg-accent text-foreground"
+								: "text-muted-foreground/85 hover:bg-accent hover:text-foreground"
+						}`}
+					>
+						<Archive className="size-3" />
+						Archived
+						<span className="ml-auto text-[10px] text-muted-foreground/72">
+							{archivedSessions.length}
+						</span>
+					</button>
 					<button
 						type="button"
 						onClick={handleLogout}
@@ -860,7 +963,62 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 			{/* Main                                                           */}
 			{/* ============================================================= */}
 			<main className="flex flex-1 flex-col overflow-hidden">
-				{selectedId && session ? (
+				{isArchivedView ? (
+					<div className="flex flex-1 flex-col overflow-hidden">
+						<header className="flex h-12 shrink-0 items-center justify-between border-b border-border px-5">
+							<div>
+								<h1 className="text-xs font-medium text-foreground">Archived sessions</h1>
+								<p className="text-[10px] text-muted-foreground/78">
+									Restore a thread to move it back into the main list.
+								</p>
+							</div>
+						</header>
+						<div className="flex-1 overflow-y-auto px-5 py-4">
+							<div className="mx-auto max-w-3xl">
+								{archivedSessions.length === 0 ? (
+									<div className="flex h-full min-h-48 items-center justify-center">
+										<p className="text-xs text-muted-foreground/72">No archived sessions</p>
+									</div>
+								) : (
+									<div className="space-y-2">
+										{archivedSessions.map((archivedSession) => (
+											<div
+												key={archivedSession.id}
+												className="flex items-center justify-between gap-4 rounded-md border border-foreground/10 bg-card/90 px-3 py-3"
+											>
+												<div className="min-w-0">
+													<p className="truncate text-xs font-medium text-foreground">
+														{archivedSession.title}
+													</p>
+													<p className="mt-1 truncate text-[10px] text-muted-foreground/82">
+														{archivedSession.cwd}
+													</p>
+												</div>
+												<div className="flex shrink-0 items-center gap-2">
+													<button
+														type="button"
+														onClick={() => navigate(`/sessions/${archivedSession.id}`)}
+														className="rounded border border-foreground/10 px-3 py-1.5 text-[11px] text-muted-foreground/85 transition hover:border-foreground/18 hover:text-foreground"
+													>
+														Open
+													</button>
+													<button
+														type="button"
+														onClick={() => handleArchive(archivedSession.id, false)}
+														className="flex items-center gap-1.5 rounded bg-foreground px-3 py-1.5 text-[11px] font-medium text-background transition hover:bg-foreground/90"
+													>
+														<ArchiveRestore className="size-3" />
+														Unarchive
+													</button>
+												</div>
+											</div>
+										))}
+									</div>
+								)}
+							</div>
+						</div>
+					</div>
+				) : selectedId && session ? (
 					<>
 						{/* Header */}
 						<header className="flex h-12 shrink-0 items-center justify-between border-b border-border px-5">

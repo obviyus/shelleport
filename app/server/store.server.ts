@@ -28,6 +28,7 @@ database.exec(`
 		provider TEXT NOT NULL,
 		title TEXT NOT NULL,
 		cwd TEXT NOT NULL,
+		archived INTEGER NOT NULL DEFAULT 0,
 		status TEXT NOT NULL,
 		status_detail_json TEXT NOT NULL DEFAULT '{"message":null,"attempt":null,"nextRetryTime":null,"waitKind":null,"blockReason":null}',
 		provider_session_ref TEXT,
@@ -81,6 +82,11 @@ function ensureColumn(tableName: string, columnName: string, sql: string) {
 
 ensureColumn(
 	"host_sessions",
+	"archived",
+	"ALTER TABLE host_sessions ADD COLUMN archived INTEGER NOT NULL DEFAULT 0",
+);
+ensureColumn(
+	"host_sessions",
 	"status_detail_json",
 	`ALTER TABLE host_sessions ADD COLUMN status_detail_json TEXT NOT NULL DEFAULT '{"message":null,"attempt":null,"nextRetryTime":null,"waitKind":null,"blockReason":null}'`,
 );
@@ -105,6 +111,7 @@ type SqlSessionRow = {
 	provider: string;
 	title: string;
 	cwd: string;
+	archived: number;
 	status: string;
 	status_detail_json: string;
 	provider_session_ref: string | null;
@@ -173,6 +180,7 @@ function mapSession(row: SqlSessionRow): HostSession {
 		provider: row.provider as ProviderId,
 		title: row.title,
 		cwd: row.cwd,
+		archived: row.archived === 1,
 		status: row.status as SessionStatus,
 		statusDetail: parseStatusDetail(row.status_detail_json),
 		providerSessionRef: row.provider_session_ref,
@@ -218,8 +226,8 @@ function mapRequest(row: SqlRequestRow): PendingRequest {
 
 const insertSessionStatement = database.query(
 	`INSERT INTO host_sessions (
-		id, provider, title, cwd, status, status_detail_json, provider_session_ref, pid, imported, permission_mode, allowed_tools_json, last_event_sequence, create_time, update_time
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, provider, title, cwd, archived, status, status_detail_json, provider_session_ref, pid, imported, permission_mode, allowed_tools_json, last_event_sequence, create_time, update_time
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 );
 
 const listSessionsStatement = database.query<SqlSessionRow, []>(
@@ -232,7 +240,7 @@ const getSessionStatement = database.query<SqlSessionRow, [string]>(
 
 const updateSessionStatement = database.query(
 	`UPDATE host_sessions
-		SET status = ?, status_detail_json = ?, provider_session_ref = ?, pid = ?, title = ?, permission_mode = ?, allowed_tools_json = ?, update_time = ?
+		SET status = ?, status_detail_json = ?, provider_session_ref = ?, pid = ?, title = ?, archived = ?, permission_mode = ?, allowed_tools_json = ?, update_time = ?
 		WHERE id = ?`,
 );
 
@@ -290,6 +298,7 @@ type SessionUpdate = Partial<
 		| "providerSessionRef"
 		| "pid"
 		| "title"
+		| "archived"
 		| "permissionMode"
 		| "allowedTools"
 	>
@@ -306,6 +315,7 @@ export const sessionStore = {
 			provider: input.provider,
 			title: input.title,
 			cwd: input.cwd,
+			archived: false,
 			status: "idle",
 			statusDetail: emptyStatusDetail(),
 			providerSessionRef: input.providerSessionRef ?? null,
@@ -323,6 +333,7 @@ export const sessionStore = {
 			session.provider,
 			session.title,
 			session.cwd,
+			session.archived ? 1 : 0,
 			session.status,
 			JSON.stringify(session.statusDetail),
 			session.providerSessionRef,
@@ -377,6 +388,7 @@ export const sessionStore = {
 					: update.providerSessionRef,
 			pid: update.pid === undefined ? current.pid : update.pid,
 			title: update.title ?? current.title,
+			archived: update.archived ?? current.archived,
 			permissionMode: update.permissionMode ?? current.permissionMode,
 			allowedTools: update.allowedTools ?? current.allowedTools,
 			updateTime: createTimestamp(),
@@ -388,6 +400,7 @@ export const sessionStore = {
 			next.providerSessionRef,
 			next.pid,
 			next.title,
+			next.archived ? 1 : 0,
 			next.permissionMode,
 			JSON.stringify(next.allowedTools),
 			next.updateTime,
