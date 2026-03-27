@@ -39,15 +39,11 @@ import type {
 	PendingRequest,
 	ProviderSummary,
 	RequestResponsePayload,
+	SessionAttachment,
 	SessionStatus,
 } from "~/lib/shelleport";
 import type { Route } from "./+types/home";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-/** Client-side user message injected into the event stream */
 type ImagePreview = {
 	name: string;
 	url: string;
@@ -56,44 +52,6 @@ type ImagePreview = {
 type DraftImage = ImagePreview & {
 	file: File;
 };
-
-type UserMessage = {
-	id: string;
-	kind: "user-message";
-	text: string;
-	attachments: ImagePreview[];
-	createTime: number;
-};
-
-/** Union of server events and client-side user messages */
-type StreamEntry = HostEvent | UserMessage;
-
-function isUserMessage(entry: StreamEntry): entry is UserMessage {
-	return "kind" in entry && entry.kind === "user-message";
-}
-
-function revokeUserMessagePreviews(entries: StreamEntry[]) {
-	for (const entry of entries) {
-		if (!isUserMessage(entry)) {
-			continue;
-		}
-
-		for (const attachment of entry.attachments) {
-			URL.revokeObjectURL(attachment.url);
-		}
-	}
-}
-
-let userMsgCounter = 0;
-function createUserMessage(text: string, attachments: ImagePreview[]): UserMessage {
-	return {
-		id: `user-msg-${++userMsgCounter}`,
-		kind: "user-message",
-		text,
-		attachments,
-		createTime: Date.now(),
-	};
-}
 
 // ---------------------------------------------------------------------------
 // Loader
@@ -281,13 +239,13 @@ function StatusDot({ status }: { status: SessionStatus }) {
 // ---------------------------------------------------------------------------
 
 type ToolGroup = { type: "tool"; call: HostEvent; result: HostEvent | null };
-type PassthroughGroup = { type: "entry"; entry: StreamEntry };
+type PassthroughGroup = { type: "entry"; entry: HostEvent };
 type GroupedEntry = ToolGroup | PassthroughGroup;
 
-function groupStream(entries: StreamEntry[]): GroupedEntry[] {
+function groupStream(entries: HostEvent[]): GroupedEntry[] {
 	const resultMap = new Map<string, HostEvent>();
 	for (const e of entries) {
-		if (!isUserMessage(e) && e.kind === "tool-result" && typeof e.data.toolUseId === "string") {
+		if (e.kind === "tool-result" && typeof e.data.toolUseId === "string") {
 			resultMap.set(e.data.toolUseId, e);
 		}
 	}
@@ -296,11 +254,6 @@ function groupStream(entries: StreamEntry[]): GroupedEntry[] {
 	const grouped: GroupedEntry[] = [];
 
 	for (const entry of entries) {
-		if (isUserMessage(entry)) {
-			grouped.push({ type: "entry", entry });
-			continue;
-		}
-
 		if (entry.kind === "tool-call") {
 			const uid = entry.data.toolUseId as string | null;
 			const result = uid ? (resultMap.get(uid) ?? null) : null;
@@ -327,36 +280,47 @@ function GroupedEntryRenderer({ group }: { group: GroupedEntry }) {
 	if (group.type === "tool") {
 		return <ToolCard call={group.call} result={group.result} />;
 	}
-	const { entry } = group;
-	if (isUserMessage(entry)) {
-		return <UserMessageRenderer message={entry} />;
-	}
-	return <EventRenderer event={entry} />;
+	return <EventRenderer event={group.entry} />;
 }
 
-function UserMessageRenderer({ message }: { message: UserMessage }) {
+function UserMessageRenderer({
+	text,
+	attachments,
+}: {
+	text: string;
+	attachments: Array<ImagePreview | SessionAttachment>;
+}) {
 	return (
 		<div className="animate-event-enter my-3 flex justify-end">
-			<div className="max-w-[80%] rounded-md border border-foreground/8 bg-accent px-3 py-2">
-				{message.attachments.length > 0 && (
+			<div className="max-w-[80%] rounded-md border border-foreground/12 bg-accent/80 px-3 py-2">
+				{attachments.length > 0 && (
 					<div className="mb-2 flex flex-wrap justify-end gap-2">
-						{message.attachments.map((attachment) => (
-							<div
-								key={attachment.url}
-								className="overflow-hidden rounded-md border border-foreground/10 bg-background/70"
-							>
-								<img
-									src={attachment.url}
-									alt={attachment.name}
-									className="h-20 w-20 object-cover"
-								/>
-							</div>
+						{attachments.map((attachment) => (
+							"url" in attachment ? (
+								<div
+									key={attachment.url}
+									className="overflow-hidden rounded-md border border-foreground/10 bg-background/70"
+								>
+									<img
+										src={attachment.url}
+										alt={attachment.name}
+										className="h-20 w-20 object-cover"
+									/>
+								</div>
+							) : (
+								<div
+									key={attachment.path}
+									className="rounded-md border border-foreground/10 bg-background/70 px-2 py-1 text-[10px] text-foreground/78"
+								>
+									{attachment.name}
+								</div>
+							)
 						))}
 					</div>
 				)}
-				{message.text.length > 0 && (
-					<p className="whitespace-pre-wrap text-xs leading-[1.7] text-foreground/80">
-						{message.text}
+				{text.length > 0 && (
+					<p className="whitespace-pre-wrap text-xs leading-[1.7] text-foreground/88">
+						{text}
 					</p>
 				)}
 			</div>
@@ -374,13 +338,13 @@ function ToolCard({ call, result }: { call: HostEvent; result: HostEvent | null 
 	const pending = !result;
 
 	return (
-		<div className="animate-event-enter my-1.5 overflow-hidden rounded-md border border-border bg-card/80">
+		<div className="animate-event-enter my-1.5 overflow-hidden rounded-md border border-foreground/10 bg-card/90 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]">
 			{/* Header — always visible */}
 			<button
 				type="button"
 				onClick={() => content && setOpen((v) => !v)}
 				className={`flex w-full items-center gap-2 px-3 py-2 text-left transition ${
-					content ? "cursor-pointer hover:bg-accent/50" : "cursor-default"
+					content ? "cursor-pointer hover:bg-accent/70" : "cursor-default"
 				}`}
 			>
 				{/* Expand chevron */}
@@ -395,23 +359,23 @@ function ToolCard({ call, result }: { call: HostEvent; result: HostEvent | null 
 				)}
 
 				{/* Tool name badge */}
-				<span className="shrink-0 rounded border border-foreground/8 bg-foreground/5 px-1.5 py-px text-[10px] font-medium text-foreground/60">
+				<span className="shrink-0 rounded border border-foreground/10 bg-foreground/6 px-1.5 py-px text-[10px] font-medium text-foreground/72">
 					{toolName}
 				</span>
 
 				{/* Preview */}
-				<span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">{preview}</span>
+				<span className="min-w-0 flex-1 truncate text-[11px] text-foreground/56">{preview}</span>
 
 				{/* Status indicator */}
-				{result && !isError && <Check className="size-3 shrink-0 text-foreground/25" />}
+				{result && !isError && <Check className="size-3 shrink-0 text-foreground/40" />}
 				{isError && <X className="size-3 shrink-0 text-destructive/60" />}
-				{pending && <span className="shrink-0 text-[10px] text-muted-foreground/40">running</span>}
+				{pending && <span className="shrink-0 text-[10px] text-muted-foreground/70">running</span>}
 			</button>
 
 			{/* Expanded result */}
 			{open && content && (
 				<div className="border-t border-border">
-					<pre className="max-h-72 overflow-auto px-3 py-2.5 text-[10px] leading-[1.7] text-foreground/50">
+					<pre className="max-h-72 overflow-auto px-3 py-2.5 text-[10px] leading-[1.7] text-foreground/68">
 						{truncate(content, 8000)}
 					</pre>
 				</div>
@@ -422,6 +386,19 @@ function ToolCard({ call, result }: { call: HostEvent; result: HostEvent | null 
 
 function EventRenderer({ event }: { event: HostEvent }) {
 	if (event.kind === "text") {
+		if (event.data.role === "user") {
+			return (
+				<UserMessageRenderer
+					text={typeof event.data.text === "string" ? event.data.text : event.summary}
+					attachments={
+						Array.isArray(event.data.attachments)
+							? (event.data.attachments as SessionAttachment[])
+							: []
+					}
+				/>
+			);
+		}
+
 		return (
 			<div className="animate-event-enter py-2">
 				<p className="whitespace-pre-wrap text-xs leading-[1.8] text-foreground/85">
@@ -439,10 +416,10 @@ function EventRenderer({ event }: { event: HostEvent }) {
 					? event.data.stderr
 					: event.summary;
 		return (
-			<div className="animate-event-enter my-2 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2">
+			<div className="animate-event-enter my-2 rounded-md border border-destructive/30 bg-destructive/8 px-3 py-2">
 				<p className="text-[11px] font-medium text-destructive">{event.summary}</p>
 				{message !== event.summary && (
-					<p className="mt-1 text-[10px] text-destructive/60">{message}</p>
+					<p className="mt-1 text-[10px] text-destructive/75">{message}</p>
 				)}
 			</div>
 		);
@@ -450,10 +427,10 @@ function EventRenderer({ event }: { event: HostEvent }) {
 
 	// system / state / orphan tool-result
 	return (
-		<div className="animate-event-enter my-3 flex items-center gap-3 text-[10px] text-muted-foreground/40">
-			<div className="h-px flex-1 bg-border" />
+		<div className="animate-event-enter my-3 flex items-center gap-3 text-[10px] text-muted-foreground/72">
+			<div className="h-px flex-1 bg-foreground/10" />
 			<span className="shrink-0">{event.summary}</span>
-			<div className="h-px flex-1 bg-border" />
+			<div className="h-px flex-1 bg-foreground/10" />
 		</div>
 	);
 }
@@ -470,9 +447,9 @@ function PendingRequestBanner({
 	onRespond: (id: string, payload: RequestResponsePayload) => void;
 }) {
 	return (
-		<div className="border-t border-border bg-accent px-5 py-3">
+		<div className="border-t border-foreground/10 bg-accent/80 px-5 py-3">
 			<div className="mx-auto flex max-w-3xl items-center justify-between gap-4">
-				<span className="min-w-0 truncate text-xs text-foreground/80">{request.prompt}</span>
+				<span className="min-w-0 truncate text-xs text-foreground/88">{request.prompt}</span>
 				<div className="flex shrink-0 gap-2">
 					<button
 						type="button"
@@ -484,7 +461,7 @@ function PendingRequestBanner({
 					<button
 						type="button"
 						onClick={() => onRespond(request.id, { decision: "deny" })}
-						className="rounded border border-border px-3 py-1 text-[11px] font-medium text-muted-foreground transition hover:text-foreground"
+						className="rounded border border-border px-3 py-1 text-[11px] font-medium text-muted-foreground transition hover:border-foreground/16 hover:text-foreground"
 					>
 						Deny
 					</button>
@@ -502,11 +479,11 @@ function EmptyState({ onNew }: { onNew: () => void }) {
 	return (
 		<div className="flex flex-1 items-center justify-center">
 			<div className="text-center">
-				<div className="mx-auto mb-6 flex size-14 items-center justify-center rounded-lg border border-border bg-card">
-					<Terminal className="size-6 text-muted-foreground/40" />
+				<div className="mx-auto mb-6 flex size-14 items-center justify-center rounded-lg border border-foreground/10 bg-card shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]">
+					<Terminal className="size-6 text-muted-foreground/70" />
 				</div>
-				<p className="text-xs font-medium text-foreground/60">No session selected</p>
-				<p className="mt-1.5 text-[11px] text-muted-foreground">Create a session to start</p>
+				<p className="text-xs font-medium text-foreground/72">No session selected</p>
+				<p className="mt-1.5 text-[11px] text-muted-foreground/85">Create a session to start</p>
 				<button
 					type="button"
 					onClick={onNew}
@@ -530,7 +507,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const draftImagesRef = useRef<DraftImage[]>([]);
-	const streamRef = useRef<StreamEntry[]>([]);
 	const isAtBottom = useRef(true);
 
 	const [token] = useState(() => getToken());
@@ -538,7 +514,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 	const [sessions, setSessions] = useState<HostSession[]>([]);
 	const [selectedId, setSelectedId] = useState<string | null>(null);
 	const [session, setSession] = useState<HostSession | null>(null);
-	const [stream, setStream] = useState<StreamEntry[]>([]);
+	const [stream, setStream] = useState<HostEvent[]>([]);
 	const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
 	const [prompt, setPrompt] = useState("");
 	const [draftImages, setDraftImages] = useState<DraftImage[]>([]);
@@ -556,10 +532,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 	useEffect(() => {
 		draftImagesRef.current = draftImages;
 	}, [draftImages]);
-
-	useEffect(() => {
-		streamRef.current = stream;
-	}, [stream]);
 
 	// Auth guard
 	useEffect(() => {
@@ -589,7 +561,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 		if (!selectedId || !token) return;
 
 		setStream([]);
-		revokeUserMessagePreviews(streamRef.current);
 		setPendingRequests([]);
 		setSession(null);
 		setStreamState("connected");
@@ -610,10 +581,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 				startTransition(() => {
 					if (msg.type === "snapshot") {
 						setSession(msg.payload.session);
-						setStream((prev) => {
-							revokeUserMessagePreviews(prev);
-							return msg.payload.events;
-						});
+						setStream(msg.payload.events);
 						setPendingRequests(msg.payload.pendingRequests.filter((r) => r.status === "pending"));
 						setSessions((prev) =>
 							prev.map((s) => (s.id === msg.payload.session.id ? msg.payload.session : s)),
@@ -659,8 +627,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 			for (const image of draftImagesRef.current) {
 				URL.revokeObjectURL(image.url);
 			}
-
-			revokeUserMessagePreviews(streamRef.current);
 		};
 	}, []);
 
@@ -698,8 +664,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 		}
 		const text = prompt;
 		const images = draftImages;
-		const attachmentPreviews = images.map(({ name, url }) => ({ name, url }));
-
 		if (text.trim().length === 0 && images.length === 0) {
 			return;
 		}
@@ -710,8 +674,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 			fileInputRef.current.value = "";
 		}
 		if (textareaRef.current) textareaRef.current.style.height = "auto";
-
-		setStream((prev) => [...prev, createUserMessage(text, attachmentPreviews)]);
 
 		try {
 			await sendInput(
@@ -814,10 +776,10 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 			{/* ============================================================= */}
 			{/* Sidebar                                                        */}
 			{/* ============================================================= */}
-			<aside className="flex w-56 shrink-0 flex-col border-r border-border bg-card/50">
+			<aside className="flex w-56 shrink-0 flex-col border-r border-foreground/10 bg-card/55 backdrop-blur-sm">
 				{/* Header */}
 				<div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-4">
-					<span className="text-[11px] font-semibold uppercase tracking-[0.15em] text-foreground/60">
+					<span className="text-[11px] font-semibold uppercase tracking-[0.15em] text-foreground/72">
 						shelleport
 					</span>
 					<button
@@ -842,7 +804,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 							<button
 								type="button"
 								onClick={() => setShowNewSession(true)}
-								className="mt-2 text-[11px] text-foreground/50 transition hover:text-foreground"
+								className="mt-2 text-[11px] text-foreground/68 transition hover:text-foreground"
 							>
 								Create one
 							</button>
@@ -861,8 +823,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 											: ""
 									} ${
 										selectedId === s.id
-											? "bg-accent text-foreground"
-											: "text-foreground/60 hover:bg-accent/50 hover:text-foreground/80"
+											? "border border-foreground/10 bg-accent/90 text-foreground shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]"
+											: "text-foreground/72 hover:bg-accent/65 hover:text-foreground"
 									}`}
 								>
 									<div className="flex items-center gap-2">
@@ -872,7 +834,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 											<CircleX className="ml-auto size-3 shrink-0 text-destructive/70" />
 										)}
 									</div>
-									<p className="mt-0.5 ml-3.5 truncate text-[10px] text-muted-foreground">
+									<p className="mt-0.5 ml-3.5 truncate text-[10px] text-muted-foreground/82">
 										{getSidebarMeta(s, now)}
 									</p>
 								</button>
@@ -886,7 +848,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 					<button
 						type="button"
 						onClick={handleLogout}
-						className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-[11px] text-muted-foreground transition hover:bg-accent hover:text-foreground"
+						className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-[11px] text-muted-foreground/85 transition hover:bg-accent hover:text-foreground"
 					>
 						<LogOut className="size-3" />
 						Disconnect
@@ -905,17 +867,17 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 							<div className="min-w-0">
 								<div className="flex items-center gap-2">
 									<h1 className="truncate text-xs font-medium text-foreground">{session.title}</h1>
-									<span className="shrink-0 text-[10px] text-muted-foreground">{session.cwd}</span>
+									<span className="shrink-0 text-[10px] text-muted-foreground/78">{session.cwd}</span>
 								</div>
 							</div>
 							<div className="flex shrink-0 items-center gap-3">
 								<div className="flex items-center gap-1.5">
 									<StatusDot status={session.status} />
-									<span className="text-[10px] text-muted-foreground">
+									<span className="text-[10px] text-muted-foreground/82">
 										{formatStatus(session, now)}
 									</span>
 									{streamState === "reconnecting" && (
-										<span className="rounded border border-border px-1.5 py-px text-[9px] uppercase tracking-[0.12em] text-muted-foreground">
+										<span className="rounded border border-foreground/12 px-1.5 py-px text-[9px] uppercase tracking-[0.12em] text-muted-foreground/82">
 											Reconnecting
 										</span>
 									)}
@@ -924,7 +886,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 									<button
 										type="button"
 										onClick={handleInterrupt}
-										className="flex items-center gap-1.5 rounded border border-border px-2 py-1 text-[11px] text-muted-foreground transition hover:border-foreground/20 hover:text-foreground"
+										className="flex items-center gap-1.5 rounded border border-foreground/10 px-2 py-1 text-[11px] text-muted-foreground/82 transition hover:border-foreground/22 hover:text-foreground"
 									>
 										<CircleStop className="size-3" />
 										Stop
@@ -943,12 +905,12 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 							session.status !== "running" &&
 							session.status !== "retrying" ? (
 								<div className="flex h-full items-center justify-center">
-									<p className="text-xs text-muted-foreground/40">Send a message to start</p>
+									<p className="text-xs text-muted-foreground/72">Send a message to start</p>
 								</div>
 							) : (
 								<div className="mx-auto max-w-3xl">
 									{getStatusMessage(session) && (
-										<div className="mb-3 rounded-md border border-border bg-card px-3 py-2 text-[11px] text-muted-foreground">
+										<div className="mb-3 rounded-md border border-foreground/10 bg-card/90 px-3 py-2 text-[11px] text-muted-foreground/88">
 											{getStatusMessage(session)}
 										</div>
 									)}
@@ -977,7 +939,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 						{/* Input */}
 						<div className="shrink-0 border-t border-border px-5 py-3">
 							<div className="mx-auto max-w-3xl">
-								<div className="relative rounded-md border border-border bg-card transition-colors focus-within:border-foreground/15">
+								<div className="relative rounded-md border border-foreground/10 bg-card/92 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)] transition-colors focus-within:border-foreground/22">
 									<input
 										ref={fileInputRef}
 										type="file"
@@ -991,7 +953,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 											{draftImages.map((image, index) => (
 												<div
 													key={image.url}
-													className="relative overflow-hidden rounded-md border border-border bg-background"
+													className="relative overflow-hidden rounded-md border border-foreground/10 bg-background"
 												>
 													<img
 														src={image.url}
@@ -1012,7 +974,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 																return nextImages;
 															})
 														}
-														className="absolute top-1 right-1 flex size-5 items-center justify-center rounded-full bg-background/90 text-foreground/60 shadow-sm transition hover:text-foreground"
+														className="absolute top-1 right-1 flex size-5 items-center justify-center rounded-full bg-background/92 text-foreground/72 shadow-sm transition hover:text-foreground"
 														aria-label={`Remove ${image.name}`}
 													>
 														<X className="size-3" />
@@ -1039,14 +1001,14 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 													: "Message Claude... (Enter to send)"
 										}
 										disabled={isSessionBusy}
-										className="w-full resize-none bg-transparent px-3 py-2.5 pr-20 text-xs text-foreground outline-none placeholder:text-muted-foreground/40 disabled:cursor-not-allowed disabled:opacity-40"
+										className="w-full resize-none bg-transparent px-3 py-2.5 pr-20 text-xs text-foreground outline-none placeholder:text-muted-foreground/60 disabled:cursor-not-allowed disabled:opacity-60"
 									/>
 									{canAttachImages && (
 										<button
 											type="button"
 											onClick={() => fileInputRef.current?.click()}
 											disabled={isSessionBusy}
-											className="absolute right-10 bottom-2 flex size-7 items-center justify-center rounded border border-border bg-background text-muted-foreground transition hover:border-foreground/20 hover:text-foreground disabled:opacity-20"
+											className="absolute right-10 bottom-2 flex size-7 items-center justify-center rounded border border-foreground/10 bg-background text-muted-foreground/82 transition hover:border-foreground/22 hover:text-foreground disabled:opacity-30"
 											title="Attach images"
 										>
 											<ImagePlus className="size-3.5" />
@@ -1056,7 +1018,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 										type="button"
 										onClick={handleSend}
 										disabled={!canSend}
-										className="absolute right-2 bottom-2 flex size-7 items-center justify-center rounded bg-foreground text-background transition hover:bg-foreground/85 disabled:opacity-15"
+										className="absolute right-2 bottom-2 flex size-7 items-center justify-center rounded bg-foreground text-background shadow-[0_0_18px_oklch(1_0_0_/_0.12)] transition hover:bg-foreground/85 disabled:opacity-20"
 									>
 										<Send className="size-3.5" />
 									</button>
@@ -1082,28 +1044,28 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 					</DialogHeader>
 					<div className="space-y-4 py-1">
 						<div>
-							<label className="mb-1.5 block text-[11px] text-muted-foreground">Directory</label>
+							<label className="mb-1.5 block text-[11px] text-muted-foreground/88">Directory</label>
 							<div className="relative">
-								<FolderOpen className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+								<FolderOpen className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/82" />
 								<input
 									type="text"
 									value={newCwd}
 									onChange={(e) => setNewCwd(e.target.value)}
 									placeholder="/path/to/project"
-									className="h-9 w-full rounded-md border border-border bg-background pl-8 pr-3 text-xs text-foreground outline-none transition placeholder:text-muted-foreground/40 focus:border-foreground/15 focus:ring-1 focus:ring-foreground/10"
+									className="h-9 w-full rounded-md border border-foreground/10 bg-background pl-8 pr-3 text-xs text-foreground outline-none transition placeholder:text-muted-foreground/58 focus:border-foreground/22 focus:ring-1 focus:ring-foreground/16"
 								/>
 							</div>
 						</div>
 						<div>
-							<label className="mb-1.5 block text-[11px] text-muted-foreground">
-								Title <span className="text-muted-foreground/40">(optional)</span>
+							<label className="mb-1.5 block text-[11px] text-muted-foreground/88">
+								Title <span className="text-muted-foreground/58">(optional)</span>
 							</label>
 							<input
 								type="text"
 								value={newTitle}
 								onChange={(e) => setNewTitle(e.target.value)}
 								placeholder="My project"
-								className="h-9 w-full rounded-md border border-border bg-background px-3 text-xs text-foreground outline-none transition placeholder:text-muted-foreground/40 focus:border-foreground/15 focus:ring-1 focus:ring-foreground/10"
+								className="h-9 w-full rounded-md border border-foreground/10 bg-background px-3 text-xs text-foreground outline-none transition placeholder:text-muted-foreground/58 focus:border-foreground/22 focus:ring-1 focus:ring-foreground/16"
 							/>
 						</div>
 					</div>
@@ -1111,7 +1073,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 						<button
 							type="button"
 							onClick={() => setShowNewSession(false)}
-							className="rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground transition hover:bg-accent hover:text-foreground"
+							className="rounded-md border border-foreground/10 px-3 py-1.5 text-xs text-muted-foreground/85 transition hover:bg-accent hover:text-foreground"
 						>
 							Cancel
 						</button>
