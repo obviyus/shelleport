@@ -63,6 +63,13 @@ database.exec(`
 		create_time INTEGER NOT NULL,
 		update_time INTEGER NOT NULL
 	);
+	CREATE TABLE IF NOT EXISTS app_auth (
+		id INTEGER PRIMARY KEY CHECK (id = 1),
+		admin_token_hash TEXT,
+		session_secret TEXT NOT NULL,
+		create_time INTEGER NOT NULL,
+		update_time INTEGER NOT NULL
+	);
 `);
 
 type SqlColumnRow = {
@@ -144,6 +151,14 @@ type SqlRequestRow = {
 	prompt: string;
 	status: string;
 	data_json: string;
+	create_time: number;
+	update_time: number;
+};
+
+type SqlAuthRow = {
+	id: number;
+	admin_token_hash: string | null;
+	session_secret: string;
 	create_time: number;
 	update_time: number;
 };
@@ -280,6 +295,20 @@ const updateRequestStatement = database.query(
 	"UPDATE pending_requests SET status = ?, update_time = ?, data_json = ? WHERE id = ?",
 );
 
+const getAuthStateStatement = database.query<SqlAuthRow, []>(
+	"SELECT * FROM app_auth WHERE id = 1 LIMIT 1",
+);
+
+const insertAuthStateStatement = database.query(
+	`INSERT INTO app_auth (
+		id, admin_token_hash, session_secret, create_time, update_time
+	) VALUES (1, ?, ?, ?, ?)`,
+);
+
+const updateAuthStateStatement = database.query(
+	"UPDATE app_auth SET admin_token_hash = ?, session_secret = ?, update_time = ? WHERE id = 1",
+);
+
 export type CreateStoredSessionInput = {
 	provider: ProviderId;
 	title: string;
@@ -367,6 +396,20 @@ export const sessionStore = {
 			events: listEventsStatement.all(sessionId).map(mapEvent),
 			pendingRequests: listRequestsStatement.all(sessionId).map(mapRequest),
 		};
+	},
+	getAuthState() {
+		return getAuthStateStatement.get() ?? null;
+	},
+	saveAuthState(input: { adminTokenHash: string | null; sessionSecret: string }) {
+		const current = this.getAuthState();
+		const now = createTimestamp();
+
+		if (!current) {
+			insertAuthStateStatement.run(input.adminTokenHash, input.sessionSecret, now, now);
+			return;
+		}
+
+		updateAuthStateStatement.run(input.adminTokenHash, input.sessionSecret, now);
 	},
 	listEventsAfter(sessionId: string, sequence: number) {
 		return listEventsAfterStatement.all(sessionId, sequence).map(mapEvent);

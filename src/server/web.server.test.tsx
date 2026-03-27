@@ -69,11 +69,11 @@ afterAll(async () => {
 	delete Bun.env.SHELLEPORT_DATA_DIR;
 });
 
-function request(pathname: string, cookie?: string) {
+function request(pathname: string, authenticated = false) {
 	return new Request(`http://localhost${pathname}`, {
-		headers: cookie
+		headers: authenticated
 			? {
-					Cookie: cookie,
+					Authorization: "Bearer test-token",
 				}
 			: undefined,
 	});
@@ -92,7 +92,7 @@ describe("buildAppBootData", () => {
 	});
 
 	test("returns home route for authenticated login page", () => {
-		const boot = buildAppBootData(request("/login", "shelleport_admin=test-token"), {
+		const boot = buildAppBootData(request("/login", true), {
 			defaultCwd: "/tmp/project",
 			pathname: "/login",
 		});
@@ -103,13 +103,10 @@ describe("buildAppBootData", () => {
 	});
 
 	test("includes session detail for authenticated session route", () => {
-		const boot = buildAppBootData(
-			request(`/sessions/${sessionId}`, "shelleport_admin=test-token"),
-			{
-				defaultCwd: "/tmp/project",
-				pathname: `/sessions/${sessionId}`,
-			},
-		);
+		const boot = buildAppBootData(request(`/sessions/${sessionId}`, true), {
+			defaultCwd: "/tmp/project",
+			pathname: `/sessions/${sessionId}`,
+		});
 
 		expect(boot.authenticated).toBe(true);
 		expect(boot.route.kind).toBe("session");
@@ -122,7 +119,7 @@ describe("buildAppBootData", () => {
 	});
 
 	test("returns not-found route for missing authenticated session", () => {
-		const boot = buildAppBootData(request("/sessions/missing", "shelleport_admin=test-token"), {
+		const boot = buildAppBootData(request("/sessions/missing", true), {
 			defaultCwd: "/tmp/project",
 			pathname: "/sessions/missing",
 		});
