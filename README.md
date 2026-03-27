@@ -108,19 +108,22 @@ POST   /api/requests/:id/respond      # Allow or deny a permission request
 ### Other
 
 ```
-GET    /api/providers                  # List available providers
-GET    /api/providers/:name/sessions   # List sessions for a provider
-GET    /api/directories                # Browse host directories
+POST   /api/auth/session              # Exchange admin token for auth cookie
+GET    /api/auth/session              # Validate current auth cookie
+DELETE /api/auth/session              # Clear auth cookie
+GET    /api/providers                 # List available providers
+GET    /api/providers/:name/sessions  # List sessions for a provider
+GET    /api/directories               # Browse host directories
 ```
 
-All endpoints require `Authorization: Bearer <token>`.
+API endpoints require the auth cookie after login. Bearer auth still works for direct API callers.
 
 ## Development
 
 ```bash
-bun run dev          # Bun fullstack dev server with HTML import + HMR
-bun run build        # Ahead-of-time fullstack Bun bundle into build/server
-NODE_ENV=production bun ./build/server/server.js serve  # Run built bundle
+bun run dev          # Bun source server with hot reload
+bun run build        # Ahead-of-time client bundle
+NODE_ENV=production bun run server.ts serve  # Run from source
 bun run compile      # Build the local standalone binary
 bun run typecheck    # Type-check with tsgo
 bun run lint         # Lint with oxlint
