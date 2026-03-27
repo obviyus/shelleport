@@ -82,7 +82,12 @@ async function parseCliOptions(argv = Bun.argv.slice(2)): Promise<CliOptions> {
 			continue;
 		}
 
-		if (argument === "serve" || argument === "doctor" || argument === "token" || argument === "install-service") {
+		if (
+			argument === "serve" ||
+			argument === "doctor" ||
+			argument === "token" ||
+			argument === "install-service"
+		) {
 			command = argument;
 			continue;
 		}
