@@ -4,6 +4,17 @@ All notable changes to shelleport are documented here.
 
 ## Unreleased
 
+## 0.0.15 - 2026-03-27
+
+### Changed
+
+- Claude sessions now default to bypass permissions mode, with a first-run warning and per-session override in the launcher
+- Active Claude sessions now show their permission mode in the session header
+
+### Fixed
+
+- Stale `running`, `retrying`, and orphaned `waiting` sessions now recover to `interrupted` after a shelleport restart instead of staying wedged
+
 ## 0.0.14 - 2026-03-27
 
 ### Changed
