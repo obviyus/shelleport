@@ -280,6 +280,17 @@ export const sessionBroker = {
 		});
 
 		if (input.prompt?.trim()) {
+			const promptEvent = sessionStore.appendEvent(session.id, {
+				kind: "text",
+				summary: "User message",
+				data: {
+					role: "user",
+					text: input.prompt,
+					attachments: [],
+				},
+				rawProviderEvent: null,
+			});
+			publishEvent(promptEvent);
 			void consumeProviderRun(session.id, { prompt: input.prompt, attachments: [] }, "send");
 		}
 
@@ -330,6 +341,18 @@ export const sessionBroker = {
 				`${provider.label} does not support images`,
 			);
 		}
+
+		const promptEvent = sessionStore.appendEvent(sessionId, {
+			kind: "text",
+			summary: "User message",
+			data: {
+				role: "user",
+				text: input.prompt,
+				attachments: input.attachments,
+			},
+			rawProviderEvent: null,
+		});
+		publishEvent(promptEvent);
 
 		void consumeProviderRun(sessionId, input, "send");
 
