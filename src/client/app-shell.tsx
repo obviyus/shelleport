@@ -119,6 +119,22 @@ export function getSessionCompletionNotificationBody(session: HostSession) {
 		: "Task complete";
 }
 
+export function shouldInterruptOnCtrlC(
+	event: Pick<KeyboardEvent, "key" | "ctrlKey" | "shiftKey" | "altKey" | "metaKey">,
+	selectionText: string,
+	session: HostSession | null,
+) {
+	if (event.key !== "c" || !event.ctrlKey || event.shiftKey || event.altKey || event.metaKey) {
+		return false;
+	}
+
+	if (selectionText.length > 0) {
+		return false;
+	}
+
+	return session?.status === "running" || session?.status === "retrying";
+}
+
 function notifySessionComplete(session: HostSession) {
 	if (typeof window === "undefined" || !("Notification" in window)) {
 		return;
@@ -622,17 +638,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 
 	useEffect(() => {
 		function handleCtrlC(event: KeyboardEvent) {
-			if (event.key !== "c" || !event.ctrlKey || event.shiftKey || event.altKey || event.metaKey) {
-				return;
-			}
-
-			const selection = window.getSelection();
-
-			if (selection && selection.toString().length > 0) {
-				return;
-			}
-
-			if (!sessionView || (sessionView.status !== "running" && sessionView.status !== "retrying")) {
+			if (!shouldInterruptOnCtrlC(event, window.getSelection()?.toString() ?? "", sessionView)) {
 				return;
 			}
 

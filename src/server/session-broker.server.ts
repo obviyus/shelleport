@@ -359,15 +359,25 @@ async function consumeProviderRun(
 						message: error instanceof Error ? error.message : String(error),
 					}
 				: emptyStatusDetail();
-		const storedEvent = sessionStore.appendEvent(sessionId, {
-			kind: "error",
-			summary: "Run failed",
-			data: {
-				message: error instanceof Error ? error.message : String(error),
-				code: error instanceof ApiError ? error.code : "run_failed",
-			},
-			rawProviderEvent: null,
-		});
+		const storedEvent = sessionStore.appendEvent(
+			sessionId,
+			activeRun.abortController.signal.aborted
+				? {
+						kind: "system",
+						summary: "Session interrupted",
+						data: {},
+						rawProviderEvent: null,
+					}
+				: {
+						kind: "error",
+						summary: "Run failed",
+						data: {
+							message: error instanceof Error ? error.message : String(error),
+							code: error instanceof ApiError ? error.code : "run_failed",
+						},
+						rawProviderEvent: null,
+					},
+		);
 		publishEvent(storedEvent);
 	} finally {
 		activeRuns.delete(sessionId);

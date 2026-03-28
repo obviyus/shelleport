@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
 	getDocumentTitle,
 	getSessionCompletionNotificationBody,
+	shouldInterruptOnCtrlC,
 	shouldNotifySessionCompletion,
 } from "~/client/app-shell";
 
@@ -179,5 +180,64 @@ describe("getSessionCompletionNotificationBody", () => {
 				usage: null,
 			}),
 		).toBe("Task complete");
+	});
+});
+
+describe("shouldInterruptOnCtrlC", () => {
+	test("interrupts running sessions on plain Ctrl+C with no selection", () => {
+		expect(
+			shouldInterruptOnCtrlC(
+				{
+					key: "c",
+					ctrlKey: true,
+					shiftKey: false,
+					altKey: false,
+					metaKey: false,
+				},
+				"",
+				{
+					allowedTools: [],
+					archived: false,
+					createTime: 0,
+					cwd: "/tmp/project",
+					id: "session-1",
+					imported: false,
+					lastEventSequence: 0,
+					permissionMode: "default",
+					pid: null,
+					pinned: false,
+					provider: "claude",
+					providerSessionRef: null,
+					queuedInputCount: 0,
+					status: "running",
+					statusDetail: {
+						attempt: null,
+						blockReason: null,
+						message: null,
+						nextRetryTime: null,
+						waitKind: null,
+					},
+					title: "Build session",
+					updateTime: 0,
+					usage: null,
+				},
+			),
+		).toBe(true);
+	});
+
+	test("does not interrupt when text is selected", () => {
+		expect(
+			shouldInterruptOnCtrlC(
+				{
+					key: "c",
+					ctrlKey: true,
+					shiftKey: false,
+					altKey: false,
+					metaKey: false,
+				},
+				"copied text",
+				null,
+			),
+		).toBe(false);
 	});
 });
