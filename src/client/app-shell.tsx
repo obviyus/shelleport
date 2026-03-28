@@ -886,30 +886,30 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 
 						<div className="shrink-0 px-3 pt-3">
 							{claudeLimits.length > 0 && (
-								<div className="mb-3 rounded-md border border-foreground/10 bg-background/40 px-3 py-3">
-									<div className="mb-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/76">
+								<div className="mb-3 rounded border border-foreground/8 bg-background/30 px-3.5 py-3">
+									<div className="mb-3 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/60">
 										Claude limits
 									</div>
-									<div className="space-y-2">
+									<div className="space-y-3.5">
 										{claudeLimits.map((limit) => (
 											<div key={limit.window} className="text-[10px]">
-												<div className="flex items-center justify-between gap-2">
-													<span className="text-foreground/84">
+												<div className="mb-1.5 flex items-baseline justify-between gap-2">
+													<span className="font-medium text-foreground/90">
 														{formatSessionLimitLabel(limit.window)}
 													</span>
-													<span className="text-muted-foreground/76">
+													<span className="tabular-nums text-muted-foreground/60">
 														{formatSessionLimitUsage(limit)}
 													</span>
 												</div>
 												{getSessionLimitProgress(limit) !== null && (
-													<div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/8 ring-1 ring-white/8">
+													<div className="h-1 overflow-hidden bg-white/6">
 														<div
-															className={`h-full rounded-full transition-[width,background-color,box-shadow] duration-300 ${getSessionLimitTone(limit)}`}
+															className={`h-full transition-[width,background-color,box-shadow] duration-300 ${getSessionLimitTone(limit)}`}
 															style={{ width: `${getSessionLimitProgress(limit)}%` }}
 														/>
 													</div>
 												)}
-												<div className="text-[9px] text-muted-foreground/80">
+												<div className="mt-1.5 text-[9px] text-muted-foreground/50">
 													{formatSessionLimitReset(limit, now)}
 												</div>
 											</div>
