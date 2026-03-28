@@ -22,7 +22,7 @@ const codexCapabilities: ProviderCapabilities = {
 	hasStructuredEvents: true,
 	supportsApprovals: false,
 	supportsQuestions: false,
-	supportsImages: true,
+	supportsAttachments: true,
 	supportsFork: true,
 	supportsWorktree: true,
 	liveResume: "provider-managed",

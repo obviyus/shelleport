@@ -25,7 +25,7 @@ const claudeCapabilities: ProviderCapabilities = {
 	hasStructuredEvents: true,
 	supportsApprovals: true,
 	supportsQuestions: false,
-	supportsImages: true,
+	supportsAttachments: true,
 	supportsFork: false,
 	supportsWorktree: true,
 	liveResume: "managed-only",
@@ -131,20 +131,29 @@ function classifyClaudeBlockReason(content: string) {
 	return null;
 }
 
+function formatAttachmentLine(attachment: ProviderAdapterRunInput["attachments"][number], index: number, total: number) {
+	const isImage = attachment.contentType.startsWith("image/");
+	if (total === 1) {
+		return isImage
+			? `Use this image as context: ${attachment.path}`
+			: `Use this file as context: ${attachment.path}`;
+	}
+	const label = isImage ? "Image" : "File";
+	return `${label} ${index + 1} (${attachment.name}): ${attachment.path}`;
+}
+
 function formatClaudePrompt(prompt: string, attachments: ProviderAdapterRunInput["attachments"]) {
 	if (attachments.length === 0) {
 		return prompt;
 	}
 
-	const imageLines = attachments.map((attachment, index) =>
-		attachments.length === 1
-			? `Use this image as context: ${attachment.path}`
-			: `Image ${index + 1}: ${attachment.path}`,
+	const lines = attachments.map((attachment, index) =>
+		formatAttachmentLine(attachment, index, attachments.length),
 	);
 
 	return prompt.trim().length === 0
-		? imageLines.join("\n")
-		: `${imageLines.join("\n")}\n\n${prompt}`;
+		? lines.join("\n")
+		: `${lines.join("\n")}\n\n${prompt}`;
 }
 
 function createClaudeCommand(input: ProviderAdapterRunInput) {

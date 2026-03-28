@@ -1,4 +1,4 @@
-import { ChevronRight, Loader2, X } from "lucide-react";
+import { ChevronRight, FileIcon, Loader2, X } from "lucide-react";
 import { Suspense, lazy, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -11,13 +11,11 @@ import type {
 	SessionStatus,
 } from "~/shared/shelleport";
 
-type ImagePreview = {
+export type DraftAttachment = {
 	name: string;
 	url: string;
-};
-
-export type DraftImage = ImagePreview & {
 	file: File;
+	isImage: boolean;
 };
 
 type LimitSnapshot = SessionLimit & {
@@ -535,7 +533,7 @@ function replaceImageExtension(name: string) {
 	return name.replace(/\.[A-Za-z0-9]+$/, "") || "image";
 }
 
-export async function normalizeDraftImage(file: File): Promise<DraftImage> {
+async function normalizeImageFile(file: File): Promise<DraftAttachment> {
 	const objectUrl = URL.createObjectURL(file);
 
 	try {
@@ -577,10 +575,24 @@ export async function normalizeDraftImage(file: File): Promise<DraftImage> {
 			file: normalizedFile,
 			name: normalizedFile.name,
 			url: URL.createObjectURL(normalizedFile),
+			isImage: true,
 		};
 	} finally {
 		URL.revokeObjectURL(objectUrl);
 	}
+}
+
+export async function normalizeDraftAttachment(file: File): Promise<DraftAttachment> {
+	if (file.type.startsWith("image/")) {
+		return normalizeImageFile(file);
+	}
+
+	return {
+		file,
+		name: file.name,
+		url: "",
+		isImage: false,
+	};
 }
 
 const STATUS_STYLES: Record<SessionStatus, string> = {
@@ -1046,21 +1058,38 @@ export function PendingRequestBanner({
 	);
 }
 
-export function DraftImagePreview({
-	image,
+export function DraftAttachmentPreview({
+	attachment,
 	onRemove,
 }: {
-	image: DraftImage;
+	attachment: DraftAttachment;
 	onRemove: () => void;
 }) {
+	if (attachment.isImage) {
+		return (
+			<div className="relative overflow-hidden rounded-md border border-foreground/10 bg-background">
+				<img src={attachment.url} alt={attachment.name} className="h-20 w-20 object-cover" />
+				<button
+					type="button"
+					onClick={onRemove}
+					className="absolute top-1 right-1 flex size-8 md:size-5 items-center justify-center rounded-full bg-background/92 text-foreground/82 shadow-sm transition hover:text-foreground"
+					aria-label={`Remove ${attachment.name}`}
+				>
+					<X className="size-3" />
+				</button>
+			</div>
+		);
+	}
+
 	return (
-		<div className="relative overflow-hidden rounded-md border border-foreground/10 bg-background">
-			<img src={image.url} alt={image.name} className="h-20 w-20 object-cover" />
+		<div className="flex items-center gap-2 rounded-md border border-foreground/10 bg-background px-3 py-2">
+			<FileIcon className="size-4 shrink-0 text-muted-foreground" />
+			<span className="max-w-[160px] truncate text-xs text-foreground">{attachment.name}</span>
 			<button
 				type="button"
 				onClick={onRemove}
-				className="absolute top-1 right-1 flex size-8 md:size-5 items-center justify-center rounded-full bg-background/92 text-foreground/82 shadow-sm transition hover:text-foreground"
-				aria-label={`Remove ${image.name}`}
+				className="flex size-8 md:size-5 shrink-0 items-center justify-center rounded-full text-foreground/82 transition hover:text-foreground"
+				aria-label={`Remove ${attachment.name}`}
 			>
 				<X className="size-3" />
 			</button>
