@@ -14,6 +14,10 @@ Start, monitor, and interact with AI coding sessions on any machine. All from yo
 
 ### Install & Run
 
+Pick one path:
+
+#### 1. Local machine
+
 Install with npm:
 
 ```bash
@@ -27,13 +31,25 @@ Or download the latest binary from [Releases](https://github.com/obviyus/shellep
 shelleport serve
 ```
 
-For remote access on a VPS:
+This binds `127.0.0.1:1206`.
+
+#### 2. Remote access over Tailscale
 
 ```bash
 shelleport serve --tailscale
 ```
 
-Or expose all interfaces:
+Use this on a VPS or workstation you already reach through your tailnet.
+
+#### 3. Background service
+
+```bash
+sudo shelleport install-service --tailscale --service-user ubuntu
+```
+
+Use this when you want shelleport to survive reboots and start automatically.
+
+If you really need every interface exposed:
 
 ```bash
 shelleport serve --public
