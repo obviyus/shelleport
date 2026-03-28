@@ -114,7 +114,8 @@ html {
 		background-image:
 			radial-gradient(circle at top, oklch(1 0 0 / 0.035), transparent 34%),
 			linear-gradient(180deg, oklch(1 0 0 / 0.012), transparent 22%);
-		min-height: 100vh;
+		height: 100dvh;
+		overflow: hidden;
 		font-size: 13px;
 		letter-spacing: -0.01em;
 	}

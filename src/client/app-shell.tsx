@@ -707,7 +707,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	}
 
 	return (
-		<div className="flex h-screen overflow-hidden bg-background">
+		<div className="flex h-dvh overflow-hidden bg-background">
 			<Dialog
 				open={showsClaudeBypassWarning}
 				onOpenChange={(open) => {
