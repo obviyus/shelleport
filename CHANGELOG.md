@@ -9,6 +9,7 @@ All notable changes to shelleport are documented here.
 - Idle, interrupted, and completed sessions now show relative update times in the sidebar instead of repeating the cwd path (#13) (thanks @kesava500)
 - Session views now page older events instead of loading the full event history at once, with a load-earlier control for older messages (#14) (thanks @kesava500)
 - Session code blocks and tool results now include copy buttons in the chat transcript (#15) (thanks @kesava500)
+- Write and Edit tool cards now show the actual file content being written instead of only the result summary (#16) (thanks @kesava500)
 
 ## 0.0.22 - 2026-03-28
 

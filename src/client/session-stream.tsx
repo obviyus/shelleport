@@ -1003,11 +1003,19 @@ function getWriteContent(call: HostEvent) {
 	return content && content.length > 0 ? content : null;
 }
 
+export function getToolOutput(call: HostEvent, result: HostEvent | null) {
+	const resultOutput = readToolResultContent(result);
+
+	if (result?.data.isError) {
+		return resultOutput;
+	}
+
+	return getWriteContent(call) ?? resultOutput;
+}
+
 function ToolCard({ call, result }: { call: HostEvent; result: HostEvent | null }) {
 	const [shouldRenderCode, setShouldRenderCode] = useState(false);
-	const resultOutput = readToolResultContent(result);
-	const writeContent = getWriteContent(call);
-	const output = writeContent ?? resultOutput;
+	const output = getToolOutput(call, result);
 	const hasOutput = output.length > 0;
 	const isRunning = result === null;
 	const fileName = getHighlightedFileName(call);

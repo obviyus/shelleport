@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+	getToolOutput,
 	copyToClipboard,
 	getSidebarMeta,
 	getSessionHeaderBadges,
@@ -230,6 +231,80 @@ describe("readToolResultContent", () => {
 				createTime: 1,
 			}),
 		).toBe("bash output");
+	});
+});
+
+describe("getToolOutput", () => {
+	test("prefers Write input content for successful writes", () => {
+		expect(
+			getToolOutput(
+				{
+					id: "call-1",
+					sessionId: "session-1",
+					sequence: 1,
+					kind: "tool-call",
+					summary: "Write file",
+					data: {
+						toolName: "Write",
+						input: {
+							file_path: "/tmp/demo.ts",
+							content: "console.log('ok');",
+						},
+					},
+					rawProviderEvent: null,
+					createTime: 1,
+				},
+				{
+					id: "result-1",
+					sessionId: "session-1",
+					sequence: 2,
+					kind: "tool-result",
+					summary: "Wrote file",
+					data: {
+						content: "File written",
+						isError: false,
+					},
+					rawProviderEvent: null,
+					createTime: 2,
+				},
+			),
+		).toBe("console.log('ok');");
+	});
+
+	test("shows tool error output for failed writes", () => {
+		expect(
+			getToolOutput(
+				{
+					id: "call-1",
+					sessionId: "session-1",
+					sequence: 1,
+					kind: "tool-call",
+					summary: "Write file",
+					data: {
+						toolName: "Write",
+						input: {
+							file_path: "/tmp/demo.ts",
+							content: "console.log('ok');",
+						},
+					},
+					rawProviderEvent: null,
+					createTime: 1,
+				},
+				{
+					id: "result-1",
+					sessionId: "session-1",
+					sequence: 2,
+					kind: "tool-result",
+					summary: "Write failed",
+					data: {
+						content: "Permission denied",
+						isError: true,
+					},
+					rawProviderEvent: null,
+					createTime: 2,
+				},
+			),
+		).toBe("Permission denied");
 	});
 });
 
