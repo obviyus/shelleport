@@ -344,6 +344,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 	const [renameState, setRenameState] = useState<{ sessionId: string; title: string } | null>(null);
 	const [sidebarOpen, setSidebarOpen] = useState(false);
+	const [pendingSearchFocus, setPendingSearchFocus] = useState(false);
 	const [sessionQuery, setSessionQuery] = useState("");
 	const [hasDismissedClaudeBypassWarning, setHasDismissedClaudeBypassWarning] = useState(
 		() =>
@@ -604,6 +605,45 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			}
 		};
 	}, []);
+
+	useEffect(() => {
+		if (!sidebarOpen || !pendingSearchFocus) {
+			return;
+		}
+
+		const frame = window.requestAnimationFrame(() => {
+			focusSidebarSearch();
+			setPendingSearchFocus(false);
+		});
+
+		return () => window.cancelAnimationFrame(frame);
+	}, [pendingSearchFocus, sidebarOpen]);
+
+	useEffect(() => {
+		function handleGlobalKeyDown(event: KeyboardEvent) {
+			const mod = event.metaKey || event.ctrlKey;
+
+			if (mod && event.key === "k") {
+				event.preventDefault();
+				if (window.innerWidth < 768) {
+					setPendingSearchFocus(true);
+					setSidebarOpen(true);
+				} else {
+					focusSidebarSearch();
+				}
+
+				return;
+			}
+
+			if (event.key === "Escape" && sidebarOpen) {
+				setSidebarOpen(false);
+				return;
+			}
+		}
+
+		window.addEventListener("keydown", handleGlobalKeyDown);
+		return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+	}, [sidebarOpen]);
 
 	const handleCreateSession = useCallback(
 		async (cwd: string, title: string, permissionMode: PermissionMode) => {
@@ -889,6 +929,19 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		window.location.assign("/logout");
 	}
 
+	function focusSidebarSearch() {
+		const inputs = document.querySelectorAll<HTMLInputElement>('input[data-sidebar-search="true"]');
+
+		for (const input of inputs) {
+			if (input.offsetParent !== null) {
+				input.focus();
+				return;
+			}
+		}
+
+		inputs[0]?.focus();
+	}
+
 	return (
 		<div className="flex h-screen overflow-hidden bg-background">
 			<Dialog
@@ -951,6 +1004,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 								<div className="relative">
 									<Search className="pointer-events-none absolute top-1/2 left-2.5 size-3 -translate-y-1/2 text-muted-foreground/70" />
 									<input
+										data-sidebar-search="true"
 										value={sessionQuery}
 										onChange={(event) => setSessionQuery(event.target.value)}
 										placeholder="Search chats"
@@ -991,6 +1045,12 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 						</div>
 
 						<div className="shrink-0 px-3 pt-3">
+							<div className="mb-3 hidden items-center justify-center gap-3 text-[9px] text-muted-foreground/70 md:flex">
+								<kbd className="rounded border border-foreground/14 bg-background/60 px-1.5 py-0.5 font-mono text-[8px] text-muted-foreground/80">
+									Ctrl/⌘K
+								</kbd>
+								search
+							</div>
 							<SidebarLimitsPanel limits={claudeLimits} />
 						</div>
 						<div className="shrink-0 border-t border-border px-3 py-3">

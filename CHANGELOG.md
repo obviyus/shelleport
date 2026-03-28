@@ -14,6 +14,7 @@ All notable changes to shelleport are documented here.
 ### Added
 
 - Archived sessions can now be deleted with full cleanup of stored events, pending requests, queued inputs, and upload files (#8) (thanks @kesava500)
+- Session search now has a global `Ctrl+K` / `⌘K` shortcut, with mobile focus opening the sidebar first (#11) (thanks @kesava500)
 
 ## 0.0.22 - 2026-03-28
 
