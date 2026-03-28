@@ -59,6 +59,31 @@ describe("normalizeClaudeEvent", () => {
 		});
 	});
 
+	test("maps thinking content blocks", () => {
+		const events = normalizeClaudeEvent({
+			type: "assistant",
+			message: {
+				content: [
+					{
+						type: "thinking",
+						thinking: "compare the last two events",
+					},
+				],
+			},
+		});
+
+		expect(events).toEqual([
+			expect.objectContaining({
+				type: "host-event",
+				kind: "text",
+				data: expect.objectContaining({
+					role: "thinking",
+					text: "compare the last two events",
+				}),
+			}),
+		]);
+	});
+
 	test("maps permission denials into approval requests", () => {
 		const events = normalizeClaudeEvent({
 			type: "result",
@@ -306,6 +331,82 @@ describe("normalizeClaudeEvent", () => {
 				partial: true,
 			},
 		});
+	});
+
+	test("buffers thinking deltas until the block stops", () => {
+		const state = new Map();
+
+		expect(
+			normalizeClaudeStreamEvent(
+				{
+					type: "stream_event",
+					event: {
+						type: "content_block_start",
+						index: 1,
+						content_block: {
+							type: "thinking",
+						},
+					},
+				},
+				state,
+			),
+		).toEqual([]);
+
+		expect(
+			normalizeClaudeStreamEvent(
+				{
+					type: "stream_event",
+					event: {
+						type: "content_block_delta",
+						index: 1,
+						delta: {
+							type: "thinking_delta",
+							thinking: "first pass",
+						},
+					},
+				},
+				state,
+			),
+		).toEqual([]);
+
+		expect(
+			normalizeClaudeStreamEvent(
+				{
+					type: "stream_event",
+					event: {
+						type: "content_block_delta",
+						index: 1,
+						delta: {
+							type: "thinking_delta",
+							thinking: " then verify",
+						},
+					},
+				},
+				state,
+			),
+		).toEqual([]);
+
+		expect(
+			normalizeClaudeStreamEvent(
+				{
+					type: "stream_event",
+					event: {
+						type: "content_block_stop",
+						index: 1,
+					},
+				},
+				state,
+			),
+		).toEqual([
+			expect.objectContaining({
+				type: "host-event",
+				kind: "text",
+				data: expect.objectContaining({
+					role: "thinking",
+					text: "first pass then verify",
+				}),
+			}),
+		]);
 	});
 });
 

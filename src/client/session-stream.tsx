@@ -968,7 +968,12 @@ export function streamToMarkdown(entries: HostEvent[]) {
 		const entry = group.entry;
 
 		if (entry.kind === "text") {
-			const role = entry.data.role === "user" ? "User" : "Assistant";
+			const role =
+				entry.data.role === "user"
+					? "User"
+					: entry.data.role === "thinking"
+						? "Thinking"
+						: "Assistant";
 			const text = readString(entry.data.text);
 
 			if (text.length > 0) {

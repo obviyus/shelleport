@@ -399,15 +399,21 @@ function tryParsePartialJsonRecord(text: string) {
 	}
 }
 
-type ClaudeStreamToolUseState = {
-	id: string | null;
-	inputJson: string;
-	name: string;
-};
+type ClaudeStreamContentState =
+	| {
+			type: "thinking";
+			text: string;
+	  }
+	| {
+			type: "tool-use";
+			id: string | null;
+			inputJson: string;
+			name: string;
+	  };
 
 export function normalizeClaudeStreamEvent(
 	rawEvent: Record<string, unknown>,
-	toolUseStateByIndex?: Map<number, ClaudeStreamToolUseState>,
+	contentStateByIndex?: Map<number, ClaudeStreamContentState>,
 ): ProviderAdapterEvent[] {
 	if (rawEvent.type !== "stream_event") {
 		return [];
@@ -429,11 +435,10 @@ export function normalizeClaudeStreamEvent(
 				: null;
 		const index = typeof event.index === "number" ? event.index : null;
 
-		if (contentBlock?.type === "thinking" && index !== null && toolUseStateByIndex) {
-			toolUseStateByIndex.set(index, {
-				id: null,
-				inputJson: "",
-				name: "__thinking__",
+		if (contentBlock?.type === "thinking" && index !== null && contentStateByIndex) {
+			contentStateByIndex.set(index, {
+				type: "thinking",
+				text: "",
 			});
 			return [];
 		}
@@ -442,15 +447,16 @@ export function normalizeClaudeStreamEvent(
 			contentBlock?.type === "tool_use" &&
 			typeof contentBlock.name === "string" &&
 			index !== null &&
-			toolUseStateByIndex
+			contentStateByIndex
 		) {
 			const initialInput = getToolInputRecord(contentBlock.input);
-			const state: ClaudeStreamToolUseState = {
+			const state: ClaudeStreamContentState = {
+				type: "tool-use",
 				id: typeof contentBlock.id === "string" ? contentBlock.id : null,
 				inputJson: Object.keys(initialInput).length === 0 ? "" : JSON.stringify(initialInput),
 				name: contentBlock.name,
 			};
-			toolUseStateByIndex.set(index, state);
+			contentStateByIndex.set(index, state);
 
 			return [
 				{
@@ -473,10 +479,10 @@ export function normalizeClaudeStreamEvent(
 
 	if (event.type === "content_block_stop") {
 		if (typeof event.index === "number") {
-			const stoppedState = toolUseStateByIndex?.get(event.index);
+			const stoppedState = contentStateByIndex?.get(event.index);
 
-			if (stoppedState?.name === "__thinking__" && stoppedState.inputJson.length > 0) {
-				toolUseStateByIndex?.delete(event.index);
+			if (stoppedState?.type === "thinking" && stoppedState.text.length > 0) {
+				contentStateByIndex?.delete(event.index);
 				return [
 					{
 						type: "host-event",
@@ -484,14 +490,14 @@ export function normalizeClaudeStreamEvent(
 						summary: "Thinking",
 						data: {
 							role: "thinking",
-							text: stoppedState.inputJson,
+							text: stoppedState.text,
 						},
 						rawProviderEvent: rawEvent,
 					},
 				];
 			}
 
-			toolUseStateByIndex?.delete(event.index);
+			contentStateByIndex?.delete(event.index);
 		}
 
 		return [];
@@ -515,11 +521,11 @@ export function normalizeClaudeStreamEvent(
 		typeof delta.thinking === "string" &&
 		delta.thinking.length > 0
 	) {
-		const thinkingState =
-			typeof event.index === "number" ? toolUseStateByIndex?.get(event.index) : null;
+		const contentState =
+			typeof event.index === "number" ? contentStateByIndex?.get(event.index) : null;
 
-		if (thinkingState?.name === "__thinking__") {
-			thinkingState.inputJson += delta.thinking;
+		if (contentState?.type === "thinking") {
+			contentState.text += delta.thinking;
 		}
 
 		return [];
@@ -545,11 +551,11 @@ export function normalizeClaudeStreamEvent(
 		delta.type === "input_json_delta" &&
 		typeof delta.partial_json === "string" &&
 		typeof event.index === "number" &&
-		toolUseStateByIndex?.has(event.index)
+		contentStateByIndex?.has(event.index)
 	) {
-		const state = toolUseStateByIndex.get(event.index);
+		const state = contentStateByIndex.get(event.index);
 
-		if (!state) {
+		if (!state || state.type !== "tool-use") {
 			return [];
 		}
 
@@ -754,7 +760,7 @@ async function* streamClaudeProcess(
 	let sawAssistantTextDelta = false;
 	let sawThinkingBlock = false;
 	const partialToolUseIds = new Set<string>();
-	const toolUseStateByIndex = new Map<number, ClaudeStreamToolUseState>();
+	const contentStateByIndex = new Map<number, ClaudeStreamContentState>();
 
 	try {
 		while (true) {
@@ -778,7 +784,7 @@ async function* streamClaudeProcess(
 				const rawEvent = JSON.parse(trimmed) as Record<string, unknown>;
 
 				if (rawEvent.type === "stream_event") {
-					const partialEvents = normalizeClaudeStreamEvent(rawEvent, toolUseStateByIndex);
+					const partialEvents = normalizeClaudeStreamEvent(rawEvent, contentStateByIndex);
 
 					if (partialEvents.length > 0) {
 						for (const event of partialEvents) {
@@ -853,7 +859,7 @@ async function* streamClaudeProcess(
 			const rawEvent = JSON.parse(buffer.trim()) as Record<string, unknown>;
 
 			if (rawEvent.type === "stream_event") {
-				const partialEvents = normalizeClaudeStreamEvent(rawEvent, toolUseStateByIndex);
+				const partialEvents = normalizeClaudeStreamEvent(rawEvent, contentStateByIndex);
 
 				if (partialEvents.length > 0) {
 					for (const event of partialEvents) {

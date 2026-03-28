@@ -144,6 +144,46 @@ describe("groupStream", () => {
 			entries: [{ id: "text-1" }],
 		});
 	});
+
+	test("drops consecutive duplicate thinking events", () => {
+		const grouped = groupStream([
+			{
+				id: "thinking-1",
+				sessionId: "session-1",
+				sequence: 1,
+				kind: "text",
+				summary: "Thinking",
+				data: {
+					role: "thinking",
+					text: "step through the diff",
+				},
+				rawProviderEvent: null,
+				createTime: 1,
+			},
+			{
+				id: "thinking-2",
+				sessionId: "session-1",
+				sequence: 2,
+				kind: "text",
+				summary: "Thinking",
+				data: {
+					role: "thinking",
+					text: "step through the diff",
+				},
+				rawProviderEvent: null,
+				createTime: 2,
+			},
+		]);
+
+		expect(grouped).toEqual([
+			{
+				type: "single",
+				entry: expect.objectContaining({
+					id: "thinking-1",
+				}),
+			},
+		]);
+	});
 });
 
 describe("getSidebarMeta", () => {
@@ -313,6 +353,26 @@ describe("streamToMarkdown", () => {
 				"```",
 			].join("\n"),
 		);
+	});
+
+	test("labels thinking blocks separately in markdown", () => {
+		expect(
+			streamToMarkdown([
+				{
+					id: "thinking-1",
+					sessionId: "session-1",
+					sequence: 1,
+					kind: "text",
+					summary: "Thinking",
+					data: {
+						role: "thinking",
+						text: "Need to inspect the parser first.",
+					},
+					rawProviderEvent: null,
+					createTime: 1,
+				},
+			]),
+		).toBe("## Thinking\n\nNeed to inspect the parser first.");
 	});
 });
 
