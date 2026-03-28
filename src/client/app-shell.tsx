@@ -30,6 +30,7 @@ import {
 import type { AppBootData } from "~/client/boot";
 import { useNow } from "~/client/use-now";
 import { SessionLauncher } from "~/client/components/session-launcher";
+import { SessionTranscript } from "~/client/components/session-transcript";
 import { Sheet, SheetContent, SheetTitle } from "~/client/components/ui/sheet";
 import { matchAppRoute } from "~/client/routes";
 import {
@@ -80,9 +81,7 @@ import {
 	getStatusMessage,
 	groupStream,
 	orderSessionLimits,
-	GroupedEntryRenderer,
 	normalizeDraftAttachment,
-	PendingRequestBanner,
 	StatusDot,
 	copyToClipboard,
 	streamToMarkdown,
@@ -372,7 +371,6 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const renderRoute =
 		typeof window === "undefined" ? route : matchAppRoute(window.location.pathname);
 	const { navigate } = useRouter();
-	const scrollRef = useRef<HTMLDivElement>(null);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const draftAttachmentsRef = useRef<DraftAttachment[]>([]);
@@ -380,7 +378,6 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const promptHistory = useRef<string[]>(readPromptHistory());
 	const historyIndex = useRef(-1);
 	const savedDraft = useRef("");
-	const isAtBottom = useRef(true);
 	const selectedId = renderRoute.kind === "session" ? renderRoute.params.sessionId : null;
 	const isSessionRoute = selectedId !== null;
 	const isArchivedView = renderRoute.kind === "archived";
@@ -392,7 +389,6 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const [session, setSession] = useState<HostSession | null>(initialDetail?.session ?? null);
 	const [stream, setStream] = useState<HostEvent[]>(initialDetail?.events ?? []);
 	const [totalEvents, setTotalEvents] = useState<number>(initialDetail?.totalEvents ?? 0);
-	const [loadingEarlier, setLoadingEarlier] = useState(false);
 	const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>(
 		initialDetail?.pendingRequests.filter((request) => request.status === "pending") ?? [],
 	);
@@ -560,7 +556,6 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		previousSessionStatus.current = null;
 		setStream([]);
 		setTotalEvents(0);
-		setLoadingEarlier(false);
 		setPendingRequests([]);
 		setQueuedInputs([]);
 		setQueuedInputEdit(null);
@@ -670,19 +665,12 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		setSession(null);
 		setStream([]);
 		setTotalEvents(0);
-		setLoadingEarlier(false);
 		setPendingRequests([]);
 		setQueuedInputs([]);
 		setQueuedInputEdit(null);
 		setBusyQueuedInputId(null);
 		setStreamState("connected");
 	}, [selectedId]);
-
-	useEffect(() => {
-		if (isAtBottom.current && scrollRef.current) {
-			scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-		}
-	}, [stream]);
 
 	useEffect(() => {
 		document.title = getDocumentTitle(sessionView);
@@ -822,34 +810,6 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		},
 		[isArchivedView, navigate, refreshSessions, selectedId, sessionQuery],
 	);
-
-	const handleLoadEarlier = useCallback(async () => {
-		if (!selectedId || loadingEarlier || stream.length === 0) {
-			return;
-		}
-
-		const firstSequence = stream[0].sequence;
-		setLoadingEarlier(true);
-
-		try {
-			const detail = await fetchSessionDetail(selectedId, { before: firstSequence });
-			const scrollElement = scrollRef.current;
-			const previousScrollHeight = scrollElement?.scrollHeight ?? 0;
-
-			setStream((previous) => [...detail.events, ...previous]);
-			setTotalEvents(detail.totalEvents);
-
-			requestAnimationFrame(() => {
-				if (scrollElement) {
-					scrollElement.scrollTop = scrollElement.scrollHeight - previousScrollHeight;
-				}
-			});
-		} catch (error) {
-			console.error("Failed to load earlier events:", error);
-		} finally {
-			setLoadingEarlier(false);
-		}
-	}, [loadingEarlier, selectedId, stream]);
 
 	const handleCopyConversation = useCallback(() => {
 		void copyToClipboard(streamToMarkdown(stream)).then(() => {
@@ -996,16 +956,6 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const queuedInputCount = queuedInputs.length;
 	const canSend = !!selectedId && (prompt.trim().length > 0 || draftAttachments.length > 0);
 	const permissionModeLabel = sessionView ? formatPermissionModeLabel(sessionView) : null;
-
-	function handleScroll() {
-		const element = scrollRef.current;
-
-		if (!element) {
-			return;
-		}
-
-		isAtBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 60;
-	}
 
 	function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
 		if (event.key === "Enter" && !event.shiftKey) {
@@ -1521,75 +1471,33 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 							</div>
 						</header>
 
-						{shouldShowReconnectBanner(isSessionPending, streamState) && (
-							<div className="shrink-0 border-b border-amber-500/20 bg-amber-500/10 px-3 md:px-6 py-2 text-center text-[11px] text-amber-200/90">
-								<Loader2 className="mr-1.5 inline size-3 animate-spin align-[-2px]" />
-								Reconnecting to session stream…
-							</div>
-						)}
-
-						<div
-							ref={scrollRef}
-							onScroll={handleScroll}
-							className="flex-1 overflow-y-auto px-3 md:px-6 py-4 md:py-6"
-						>
-							{isSessionPending ? (
-								<div className="flex h-full items-center justify-center">
-									<Loader2 className="size-4 animate-spin text-muted-foreground/80" />
-								</div>
-							) : sessionView &&
-							  grouped.length === 0 &&
-							  sessionView.status !== "running" &&
-							  sessionView.status !== "retrying" ? (
-								<div className="flex h-full items-center justify-center">
-									<p className="text-xs text-muted-foreground/80">Send a message to start</p>
-								</div>
-							) : sessionView ? (
-								<div className="mx-auto max-w-[70rem]">
-									{totalEvents > stream.length && (
-										<div className="mb-4 flex justify-center">
-											<button
-												type="button"
-												onClick={() => void handleLoadEarlier()}
-												disabled={loadingEarlier}
-												className="flex items-center gap-1.5 rounded-md border border-foreground/10 bg-card/90 px-3 py-1.5 text-[11px] text-muted-foreground/88 transition hover:border-foreground/18 hover:text-foreground disabled:opacity-40"
-											>
-												{loadingEarlier ? <Loader2 className="size-3 animate-spin" /> : null}
-												Load earlier messages
-											</button>
-										</div>
-									)}
-									{getStatusMessage(sessionView) && (
-										<div className="mb-5 rounded-lg border border-foreground/10 bg-card/90 px-4 py-3 text-[11px] text-muted-foreground/88">
-											{getStatusMessage(sessionView)}
-										</div>
-									)}
-									{grouped.map((group) => (
-										<GroupedEntryRenderer
-											key={
-												group.type === "tool"
-													? group.call.id
-													: group.type === "assistant-text-run"
-														? (group.entries[0]?.id ?? "assistant-text-run")
-														: group.entry.id
-											}
-											group={group}
-										/>
-									))}
-									{(sessionView.status === "running" || sessionView.status === "retrying") && (
-										<div className="animate-thinking mt-1 flex gap-1 py-2">
-											<span className="size-1 rounded-full bg-foreground" />
-											<span className="size-1 rounded-full bg-foreground" />
-											<span className="size-1 rounded-full bg-foreground" />
-										</div>
-									)}
-								</div>
-							) : null}
-						</div>
-
-						{sessionView && pendingRequests.length > 0 && (
-							<PendingRequestBanner request={pendingRequests[0]} onRespond={handleRespond} />
-						)}
+						<SessionTranscript
+							firstSequence={stream[0]?.sequence ?? null}
+							grouped={grouped}
+							hasEarlier={totalEvents > stream.length}
+							isRunning={sessionView?.status === "running" || sessionView?.status === "retrying"}
+							isSessionPending={isSessionPending}
+							loadEarlier={
+								selectedId
+									? async (before) => {
+											const detail = await fetchSessionDetail(selectedId, { before });
+											return {
+												events: detail.events,
+												totalEvents: detail.totalEvents,
+											};
+										}
+									: null
+							}
+							onPrependEarlier={(page) => {
+								setStream((previous) => [...page.events, ...previous]);
+								setTotalEvents(page.totalEvents);
+							}}
+							onRespond={handleRespond}
+							pendingRequest={pendingRequests[0] ?? null}
+							session={sessionView}
+							showReconnectBanner={shouldShowReconnectBanner(isSessionPending, streamState)}
+							statusMessage={sessionView ? getStatusMessage(sessionView) : null}
+						/>
 
 						<div className="shrink-0 border-t border-border px-3 md:px-6 py-3 md:py-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:pb-4">
 							<div className="mx-auto max-w-[70rem]">
