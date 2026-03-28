@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { getSessionHeaderBadges, groupStream, readToolResultContent } from "~/client/session-stream";
+import {
+	getSessionHeaderBadges,
+	groupStream,
+	readToolResultContent,
+} from "~/client/session-stream";
 
 describe("getSessionHeaderBadges", () => {
 	test("puts the normalized model badge before usage badges", () => {
