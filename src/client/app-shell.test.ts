@@ -4,6 +4,7 @@ import {
 	getNextPromptHistoryState,
 	getPreviousPromptHistoryState,
 	getSessionCompletionNotificationBody,
+	getSessionListEmptyState,
 	pushPromptHistory,
 	shouldShowReconnectBanner,
 	shouldInterruptOnCtrlC,
@@ -253,6 +254,22 @@ describe("shouldShowReconnectBanner", () => {
 
 	test("hides the banner while the session is still pending", () => {
 		expect(shouldShowReconnectBanner(true, "reconnecting")).toBe(false);
+	});
+});
+
+describe("getSessionListEmptyState", () => {
+	test("uses a no-results message for filtered empty lists", () => {
+		expect(getSessionListEmptyState("agent")).toEqual({
+			actionLabel: null,
+			message: 'No results for "agent"',
+		});
+	});
+
+	test("uses the generic empty state when no search is active", () => {
+		expect(getSessionListEmptyState("")).toEqual({
+			actionLabel: "Create one",
+			message: "No sessions",
+		});
 	});
 });
 

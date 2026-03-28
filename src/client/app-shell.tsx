@@ -28,6 +28,7 @@ import {
 	useState,
 } from "react";
 import type { AppBootData } from "~/client/boot";
+import { useNow } from "~/client/use-now";
 import { SessionLauncher } from "~/client/components/session-launcher";
 import { Sheet, SheetContent, SheetTitle } from "~/client/components/ui/sheet";
 import { matchAppRoute } from "~/client/routes";
@@ -203,6 +204,70 @@ function getSessionLimitTone(limit: SessionLimit) {
 	return "bg-white shadow-[0_0_18px_oklch(1_0_0_/_0.26)]";
 }
 
+function SidebarSessionMeta({ session }: { session: HostSession }) {
+	const now = useNow();
+
+	return (
+		<p className="mt-0.5 ml-3.5 truncate text-[10px] text-muted-foreground/86">
+			{getSidebarMeta(session, now)}
+		</p>
+	);
+}
+
+function SidebarLimitsPanel({ limits }: { limits: SessionLimit[] }) {
+	const now = useNow();
+
+	if (limits.length === 0) {
+		return null;
+	}
+
+	return (
+		<div className="mb-3 rounded border border-foreground/8 bg-background/30 px-3.5 py-3">
+			<div className="mb-3 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/60">
+				Claude limits
+			</div>
+			<div className="space-y-3.5">
+				{limits.map((limit) => (
+					<div key={limit.window ?? "unknown"} className="text-[10px]">
+						<div className="mb-1.5 flex items-baseline justify-between gap-2">
+							<span className="font-medium text-foreground/90">
+								{formatSessionLimitLabel(limit.window ?? "")}
+							</span>
+							<span className="tabular-nums text-muted-foreground/60">
+								{formatSessionLimitUsage(limit)}
+							</span>
+						</div>
+						{getSessionLimitProgress(limit) !== null && (
+							<div className="h-1 overflow-hidden bg-white/6">
+								<div
+									className={`h-full transition-[width,background-color,box-shadow] duration-300 ${getSessionLimitTone(limit)}`}
+									style={{ width: `${getSessionLimitProgress(limit)}%` }}
+								/>
+							</div>
+						)}
+						<div className="mt-1.5 text-[9px] text-muted-foreground/50">
+							{formatSessionLimitReset(limit, now)}
+						</div>
+					</div>
+				))}
+			</div>
+		</div>
+	);
+}
+
+function SessionStatusBadge({ session }: { session: HostSession }) {
+	const now = useNow();
+
+	return (
+		<div className="flex items-center gap-1.5 rounded border border-foreground/12 px-2 py-1">
+			<StatusDot status={session.status} />
+			<span className="hidden sm:inline text-[10px] text-muted-foreground/80">
+				{formatStatus(session, now)}
+			</span>
+		</div>
+	);
+}
+
 const PROMPT_HISTORY_KEY = "shelleport.prompt-history";
 const PROMPT_HISTORY_MAX = 50;
 
@@ -296,6 +361,12 @@ export function getDocumentTitle(session: HostSession | null) {
 	return `${statusIcon}${session.title} — shelleport`;
 }
 
+export function getSessionListEmptyState(sessionQuery: string) {
+	return sessionQuery.trim().length > 0
+		? { actionLabel: null, message: `No results for "${sessionQuery}"` }
+		: { actionLabel: "Create one", message: "No sessions" };
+}
+
 export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated: true }> }) {
 	const route = useCurrentRoute();
 	const renderRoute =
@@ -332,7 +403,6 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const [draftAttachments, setDraftAttachmentsState] = useState<DraftAttachment[]>([]);
 	const [isCreating, setIsCreating] = useState(false);
 	const [initialLoading, setInitialLoading] = useState(false);
-	const [now, setNow] = useState(() => Date.now());
 	const [streamState, setStreamState] = useState<"connected" | "reconnecting">("connected");
 	const [archiveConfirmId, setArchiveConfirmId] = useState<string | null>(null);
 	const [copiedConversation, setCopiedConversation] = useState(false);
@@ -621,11 +691,6 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			document.title = "shelleport";
 		};
 	}, [sessionView?.id, sessionView?.status, sessionView?.title]);
-
-	useEffect(() => {
-		const timer = setInterval(() => setNow(Date.now()), 1000);
-		return () => clearInterval(timer);
-	}, []);
 
 	useEffect(() => {
 		return () => {
@@ -1071,19 +1136,27 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 									<Loader2 className="size-3.5 animate-spin text-muted-foreground" />
 								</div>
 							) : activeSessions.length === 0 ? (
-								<div className="py-8 text-center">
-									<p className="text-[11px] text-muted-foreground">No sessions</p>
-									<button
-										type="button"
-										onClick={() => {
-											navigate("/");
-											setSidebarOpen(false);
-										}}
-										className="mt-2 text-[11px] text-foreground/68 transition hover:text-foreground"
-									>
-										Create one
-									</button>
-								</div>
+								(() => {
+									const emptyState = getSessionListEmptyState(sessionQuery);
+
+									return (
+										<div className="py-8 text-center">
+											<p className="text-[11px] text-muted-foreground">{emptyState.message}</p>
+											{emptyState.actionLabel && (
+												<button
+													type="button"
+													onClick={() => {
+														navigate("/");
+														setSidebarOpen(false);
+													}}
+													className="mt-2 text-[11px] text-foreground/68 transition hover:text-foreground"
+												>
+													{emptyState.actionLabel}
+												</button>
+											)}
+										</div>
+									);
+								})()
 							) : (
 								<div className="space-y-1">
 									{activeSessions.map((candidate) => (
@@ -1125,9 +1198,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 														<CircleX className="ml-auto size-3 shrink-0 text-destructive/70" />
 													)}
 												</div>
-												<p className="mt-0.5 ml-3.5 truncate text-[10px] text-muted-foreground/86">
-													{getSidebarMeta(candidate, now)}
-												</p>
+												<SidebarSessionMeta session={candidate} />
 											</button>
 											<button
 												type="button"
@@ -1179,38 +1250,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 						</div>
 
 						<div className="shrink-0 px-3 pt-3">
-							{claudeLimits.length > 0 && (
-								<div className="mb-3 rounded border border-foreground/8 bg-background/30 px-3.5 py-3">
-									<div className="mb-3 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/60">
-										Claude limits
-									</div>
-									<div className="space-y-3.5">
-										{claudeLimits.map((limit) => (
-											<div key={limit.window} className="text-[10px]">
-												<div className="mb-1.5 flex items-baseline justify-between gap-2">
-													<span className="font-medium text-foreground/90">
-														{formatSessionLimitLabel(limit.window)}
-													</span>
-													<span className="tabular-nums text-muted-foreground/60">
-														{formatSessionLimitUsage(limit)}
-													</span>
-												</div>
-												{getSessionLimitProgress(limit) !== null && (
-													<div className="h-1 overflow-hidden bg-white/6">
-														<div
-															className={`h-full transition-[width,background-color,box-shadow] duration-300 ${getSessionLimitTone(limit)}`}
-															style={{ width: `${getSessionLimitProgress(limit)}%` }}
-														/>
-													</div>
-												)}
-												<div className="mt-1.5 text-[9px] text-muted-foreground/50">
-													{formatSessionLimitReset(limit, now)}
-												</div>
-											</div>
-										))}
-									</div>
-								</div>
-							)}
+							<SidebarLimitsPanel limits={claudeLimits} />
 						</div>
 						<div className="shrink-0 border-t border-border px-3 py-3">
 							<button
@@ -1414,14 +1454,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 									)}
 								</div>
 								<div className="flex shrink-0 items-center gap-1.5">
-									{sessionView && (
-										<div className="flex items-center gap-1.5 rounded border border-foreground/12 px-2 py-1">
-											<StatusDot status={sessionView.status} />
-											<span className="hidden sm:inline text-[10px] text-muted-foreground/80">
-												{formatStatus(sessionView, now)}
-											</span>
-										</div>
-									)}
+									{sessionView && <SessionStatusBadge session={sessionView} />}
 
 									{permissionModeLabel && (
 										<span className="hidden rounded border border-foreground/12 px-2 py-1 text-[9px] uppercase tracking-[0.08em] text-muted-foreground/80 md:inline-flex">

@@ -22,7 +22,11 @@ All notable changes to shelleport are documented here.
 
 ### Fixed
 
+- Rate limit updates no longer render as inline chat events now that those provider limit updates already live in the sidebar limits panel
+- Session list search now shows a specific no-results state instead of the generic empty-workspace message
+- Browser chat selection no longer risks clearing every second because time-based sidebar/header labels own their own local clock updates
 - Claude streamed thinking/tool deltas now only suppress duplicate assistant events for the current response instead of leaking into later assistant messages
+- Bun tests now preload an isolated `SHELLEPORT_DATA_DIR` so import-time store initialization cannot write fixture data into a real install
 
 ## 0.0.22 - 2026-03-28
 

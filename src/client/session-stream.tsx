@@ -846,6 +846,10 @@ function isThinkingEvent(event: HostEvent) {
 	return event.kind === "text" && event.data.role === "thinking";
 }
 
+function isRateLimitSystemEvent(event: HostEvent) {
+	return event.kind === "system" && event.summary === "Rate limit update";
+}
+
 export function groupStream(entries: HostEvent[]): GroupedEntry[] {
 	const grouped: GroupedEntry[] = [];
 	const consumedResultIndexes = new Set<number>();
@@ -927,6 +931,10 @@ export function groupStream(entries: HostEvent[]): GroupedEntry[] {
 			) {
 				continue;
 			}
+		}
+
+		if (isRateLimitSystemEvent(entry)) {
+			continue;
 		}
 
 		grouped.push({ entry, type: "single" });
