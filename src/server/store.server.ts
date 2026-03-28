@@ -880,7 +880,10 @@ export const sessionStore = {
 
 		return request;
 	},
-	enqueueSessionInput(sessionId: string, input: { prompt: string; attachments: SessionAttachment[] }) {
+	enqueueSessionInput(
+		sessionId: string,
+		input: { prompt: string; attachments: SessionAttachment[] },
+	) {
 		insertQueuedInputStatement.run(
 			createId(),
 			sessionId,
