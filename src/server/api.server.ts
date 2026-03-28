@@ -166,9 +166,9 @@ function validateSessionInput(payload: SessionInputPayload) {
 			typeof attachment.path !== "string" ||
 			attachment.path.trim().length === 0 ||
 			typeof attachment.contentType !== "string" ||
-			!attachment.contentType.startsWith("image/")
+			attachment.contentType.trim().length === 0
 		) {
-			throw new ApiError(400, "invalid_attachments", "attachments must be valid image files");
+			throw new ApiError(400, "invalid_attachments", "attachments must be valid files");
 		}
 	}
 }
@@ -189,10 +189,12 @@ async function readSessionInput(request: Request, sessionId: string): Promise<Se
 		throw new ApiError(404, "session_not_found", "Session not found");
 	}
 
+	const attachmentEntries = formData.getAll("attachments");
+	const imageEntries = formData.getAll("images");
 	const attachments = await storeSessionAttachments(
 		sessionId,
 		session.cwd,
-		formData.getAll("images"),
+		attachmentEntries.length > 0 ? attachmentEntries : imageEntries,
 	);
 	return {
 		prompt: typeof prompt === "string" ? prompt : "",

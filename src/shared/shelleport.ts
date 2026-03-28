@@ -18,7 +18,7 @@ export type ProviderCapabilities = {
 	hasStructuredEvents: boolean;
 	supportsApprovals: boolean;
 	supportsQuestions: boolean;
-	supportsImages: boolean;
+	supportsAttachments: boolean;
 	supportsFork: boolean;
 	supportsWorktree: boolean;
 	liveResume: "none" | "managed-only" | "provider-managed";

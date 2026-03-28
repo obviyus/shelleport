@@ -4,7 +4,7 @@ import {
 	Check,
 	CircleStop,
 	CircleX,
-	ImagePlus,
+	Paperclip,
 	Loader2,
 	LogOut,
 	Menu,
@@ -64,8 +64,8 @@ import type {
 } from "~/shared/shelleport";
 import { useCurrentRoute, useRouter } from "~/client/router";
 import {
-	type DraftImage,
-	DraftImagePreview,
+	type DraftAttachment,
+	DraftAttachmentPreview,
 	formatStatus,
 	formatSessionLimitLabel,
 	formatSessionLimitReset,
@@ -77,7 +77,7 @@ import {
 	groupStream,
 	orderSessionLimits,
 	GroupedEntryRenderer,
-	normalizeDraftImage,
+	normalizeDraftAttachment,
 	PendingRequestBanner,
 	StatusDot,
 } from "~/client/session-stream";
@@ -135,7 +135,7 @@ function formatQueuedAttachmentLabel(queuedInput: QueuedSessionInput) {
 		return null;
 	}
 
-	return `${count} image${count === 1 ? "" : "s"}`;
+	return `${count} attachment${count === 1 ? "" : "s"}`;
 }
 
 export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated: true }> }) {
@@ -146,7 +146,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
-	const draftImagesRef = useRef<DraftImage[]>([]);
+	const draftAttachmentsRef = useRef<DraftAttachment[]>([]);
 	const isAtBottom = useRef(true);
 	const selectedId = renderRoute.kind === "session" ? renderRoute.params.sessionId : null;
 	const isSessionRoute = selectedId !== null;
@@ -165,7 +165,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		initialDetail?.queuedInputs ?? [],
 	);
 	const [prompt, setPrompt] = useState("");
-	const [draftImages, setDraftImagesState] = useState<DraftImage[]>([]);
+	const [draftAttachments, setDraftAttachmentsState] = useState<DraftAttachment[]>([]);
 	const [isCreating, setIsCreating] = useState(false);
 	const [initialLoading, setInitialLoading] = useState(false);
 	const [now, setNow] = useState(() => Date.now());
@@ -238,11 +238,11 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const editingQueuedInputId = queuedInputEdit?.id ?? null;
 	const queuedInputDraft = queuedInputEdit?.prompt ?? "";
 
-	function setDraftImages(updater: DraftImage[] | ((previous: DraftImage[]) => DraftImage[])) {
-		setDraftImagesState((previous) => {
-			const nextDraftImages = typeof updater === "function" ? updater(previous) : updater;
-			draftImagesRef.current = nextDraftImages;
-			return nextDraftImages;
+	function setDraftAttachments(updater: DraftAttachment[] | ((previous: DraftAttachment[]) => DraftAttachment[])) {
+		setDraftAttachmentsState((previous) => {
+			const nextDraftAttachments = typeof updater === "function" ? updater(previous) : updater;
+			draftAttachmentsRef.current = nextDraftAttachments;
+			return nextDraftAttachments;
 		});
 	}
 
@@ -320,9 +320,11 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		setQueuedInputEdit(null);
 		setBusyQueuedInputId(null);
 		setStreamState("connected");
-		setDraftImages((previous) => {
-			for (const image of previous) {
-				URL.revokeObjectURL(image.url);
+		setDraftAttachments((previous) => {
+			for (const attachment of previous) {
+				if (attachment.isImage) {
+					URL.revokeObjectURL(attachment.url);
+				}
 			}
 
 			return [];
@@ -425,8 +427,10 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 
 	useEffect(() => {
 		return () => {
-			for (const image of draftImagesRef.current) {
-				URL.revokeObjectURL(image.url);
+			for (const attachment of draftAttachmentsRef.current) {
+				if (attachment.isImage) {
+					URL.revokeObjectURL(attachment.url);
+				}
 			}
 		};
 	}, []);
@@ -472,15 +476,15 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		}
 
 		const nextPrompt = prompt;
-		const nextDraftImages = draftImages;
-		const nextImages = nextDraftImages.map((image) => image.file);
+		const nextDraftAttachments = draftAttachments;
+		const nextFiles = nextDraftAttachments.map((a) => a.file);
 
-		if (nextPrompt.trim().length === 0 && nextImages.length === 0) {
+		if (nextPrompt.trim().length === 0 && nextFiles.length === 0) {
 			return;
 		}
 
 		setPrompt("");
-		setDraftImages([]);
+		setDraftAttachments([]);
 
 		if (fileInputRef.current) {
 			fileInputRef.current.value = "";
@@ -491,12 +495,12 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		}
 
 		try {
-			await sendInput(selectedId, nextPrompt, nextImages);
+			await sendInput(selectedId, nextPrompt, nextFiles);
 		} catch {
 			setPrompt(nextPrompt);
-			setDraftImages(nextDraftImages);
+			setDraftAttachments(nextDraftAttachments);
 		}
-	}, [draftImages, prompt, selectedId]);
+	}, [draftAttachments, prompt, selectedId]);
 
 	const handleInterrupt = useCallback(async () => {
 		if (!selectedId) {
@@ -627,22 +631,20 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		}
 	}, [isRenaming, refreshSessions, renameDraft, session, sessionQuery]);
 
-	const addDraftImages = useCallback(async (files: File[]) => {
-		const normalizedImages = await Promise.all(files.map(normalizeDraftImage));
-		setDraftImages((previous) => [...previous, ...normalizedImages]);
+	const addDraftAttachments = useCallback(async (files: File[]) => {
+		const normalized = await Promise.all(files.map(normalizeDraftAttachment));
+		setDraftAttachments((previous) => [...previous, ...normalized]);
 	}, []);
 
-	const handleImageSelect = useCallback(
+	const handleFileSelect = useCallback(
 		(event: React.ChangeEvent<HTMLInputElement>) => {
-			const files = Array.from(event.target.files ?? []).filter((file) =>
-				file.type.startsWith("image/"),
-			);
+			const files = Array.from(event.target.files ?? []);
 
 			if (files.length > 0) {
-				void addDraftImages(files);
+				void addDraftAttachments(files);
 			}
 		},
-		[addDraftImages],
+		[addDraftAttachments],
 	);
 
 	const handlePaste = useCallback(
@@ -657,21 +659,21 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			}
 
 			event.preventDefault();
-			void addDraftImages(files);
+			void addDraftAttachments(files);
 		},
-		[addDraftImages],
+		[addDraftAttachments],
 	);
 
 	const sessionProvider = sessionView
 		? providers.find((provider) => provider.id === sessionView.provider)
 		: null;
-	const canAttachImages = sessionProvider?.capabilities.supportsImages === true;
+	const canAttach = sessionProvider?.capabilities.supportsAttachments === true;
 	const isSessionBusy =
 		sessionView?.status === "running" ||
 		sessionView?.status === "retrying" ||
 		sessionView?.status === "waiting";
 	const queuedInputCount = queuedInputs.length;
-	const canSend = !!selectedId && (prompt.trim().length > 0 || draftImages.length > 0);
+	const canSend = !!selectedId && (prompt.trim().length > 0 || draftAttachments.length > 0);
 	const permissionModeLabel = sessionView ? formatPermissionModeLabel(sessionView) : null;
 
 	function handleScroll() {
@@ -1237,27 +1239,26 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											<input
 												ref={fileInputRef}
 												type="file"
-												accept="image/*"
 												multiple
-												onChange={handleImageSelect}
+												onChange={handleFileSelect}
 												className="hidden"
 											/>
-											{draftImages.length > 0 && (
-												<div className="flex flex-wrap gap-2 border-b border-border px-4 py-3">
-													{draftImages.map((image, index) => (
-														<DraftImagePreview
-															key={image.url}
-															image={image}
+											{draftAttachments.length > 0 && (
+												<div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
+													{draftAttachments.map((attachment, index) => (
+														<DraftAttachmentPreview
+															key={attachment.isImage ? attachment.url : `${attachment.name}-${index}`}
+															attachment={attachment}
 															onRemove={() =>
-																setDraftImages((previous) => {
-																	const nextImages = [...previous];
-																	const [removedImage] = nextImages.splice(index, 1);
+																setDraftAttachments((previous) => {
+																	const next = [...previous];
+																	const [removed] = next.splice(index, 1);
 
-																	if (removedImage) {
-																		URL.revokeObjectURL(removedImage.url);
+																	if (removed?.isImage) {
+																		URL.revokeObjectURL(removed.url);
 																	}
 
-																	return nextImages;
+																	return next;
 																})
 															}
 														/>
@@ -1376,20 +1377,20 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 													placeholder={
 														isSessionBusy
 															? "Claude is working... press Enter to queue"
-															: canAttachImages
-																? "Message Claude... paste images or attach files"
+															: canAttach
+																? "Message Claude... attach files or paste images"
 																: "Message Claude... (Enter to send)"
 													}
 													className="min-h-[36px] md:min-h-[28px] flex-1 resize-none bg-transparent px-2 py-1.5 text-xs leading-[1.6] text-foreground outline-none placeholder:text-muted-foreground/80"
 												/>
-												{canAttachImages && (
+												{canAttach && (
 													<button
 														type="button"
 														onClick={() => fileInputRef.current?.click()}
 														className="flex size-9 md:size-7 shrink-0 items-center justify-center rounded border border-foreground/10 bg-background text-muted-foreground/86 transition hover:border-foreground/22 hover:text-foreground"
-														title="Attach images"
+														title="Attach files"
 													>
-														<ImagePlus className="size-3.5" />
+														<Paperclip className="size-3.5" />
 													</button>
 												)}
 												<button

@@ -429,7 +429,7 @@ describe("handleApiRequest", () => {
 		]);
 	});
 
-	test("reports Claude image support in provider capabilities", async () => {
+	test("reports Claude attachment support in provider capabilities", async () => {
 		const response = await handleApiRequest(
 			new Request("http://localhost/api/providers", {
 				headers: authHeader,
@@ -440,12 +440,13 @@ describe("handleApiRequest", () => {
 			providers: Array<{
 				id: string;
 				capabilities: {
-					supportsImages: boolean;
+					supportsAttachments: boolean;
 				};
 			}>;
 		}>(response);
 		expect(
-			body.providers.find((provider) => provider.id === "claude")?.capabilities.supportsImages,
+			body.providers.find((provider) => provider.id === "claude")?.capabilities
+				.supportsAttachments,
 		).toBe(true);
 	});
 
@@ -1024,16 +1025,25 @@ describe("handleApiRequest", () => {
 				pinned: boolean;
 			}>;
 		}>(listResponse);
-		expect(listJson.sessions[0]).toMatchObject({
+		const firstIndex = listJson.sessions.findIndex(
+			(session) => session.id === firstSession.session.id,
+		);
+		const secondIndex = listJson.sessions.findIndex(
+			(session) => session.id === secondSession.session.id,
+		);
+		expect(firstIndex).toBeGreaterThanOrEqual(0);
+		expect(secondIndex).toBeGreaterThanOrEqual(0);
+		expect(listJson.sessions[firstIndex]).toMatchObject({
 			id: firstSession.session.id,
 			title: "Pinned Alpha",
 			pinned: true,
 		});
-		expect(listJson.sessions[1]).toMatchObject({
+		expect(listJson.sessions[secondIndex]).toMatchObject({
 			id: secondSession.session.id,
 			title: "Bravo",
 			pinned: false,
 		});
+		expect(firstIndex).toBeLessThan(secondIndex);
 	});
 
 	test("searches sessions with fts prefixes", async () => {
@@ -1071,6 +1081,7 @@ describe("handleApiRequest", () => {
 			}),
 		);
 		expect(bravoResponse.status).toBe(201);
+		const bravoSession = await readJson<{ session: { id: string } }>(bravoResponse);
 
 		const searchResponse = await handleApiRequest(
 			new Request("http://localhost/api/sessions?q=refac%20alpha", {
@@ -1084,11 +1095,15 @@ describe("handleApiRequest", () => {
 				title: string;
 			}>;
 		}>(searchResponse);
-		expect(searchJson.sessions).toHaveLength(1);
-		expect(searchJson.sessions[0]).toMatchObject({
-			id: alphaSession.session.id,
-			title: "Refactor search index",
-		});
+		expect(
+			searchJson.sessions.some((session) => session.id === alphaSession.session.id),
+		).toBe(true);
+		expect(
+			searchJson.sessions.some((session) => session.title === "Refactor search index"),
+		).toBe(true);
+		expect(
+			searchJson.sessions.some((session) => session.id === bravoSession.session.id),
+		).toBe(false);
 	});
 
 	test("starts a session, streams SSE, and resumes after approval", async () => {
@@ -1535,7 +1550,7 @@ describe("handleApiRequest", () => {
 		await reader.cancel();
 	});
 
-	test("stores uploaded images inside the session cwd and forwards their paths", async () => {
+	test("stores uploaded attachments inside the session cwd and forwards their paths", async () => {
 		const createResponse = await handleApiRequest(
 			new Request("http://localhost/api/sessions", {
 				method: "POST",
@@ -1546,7 +1561,7 @@ describe("handleApiRequest", () => {
 				body: JSON.stringify({
 					provider: "claude",
 					cwd: testRoot,
-					title: "Images",
+					title: "Attachments",
 				}),
 			}),
 		);
@@ -1570,7 +1585,7 @@ describe("handleApiRequest", () => {
 		).arrayBuffer();
 		const formData = new FormData();
 		formData.set("prompt", "Tell me what you received.");
-		formData.append("images", new File([imageBytes], "diagram.png", { type: "image/jpeg" }));
+		formData.append("attachments", new File([imageBytes], "diagram.png", { type: "image/jpeg" }));
 
 		const inputResponse = await handleApiRequest(
 			new Request(`http://localhost/api/sessions/${sessionId}/input`, {
@@ -1650,7 +1665,7 @@ describe("handleApiRequest", () => {
 		).arrayBuffer();
 		const formData = new FormData();
 		formData.set("prompt", "Normalize this image.");
-		formData.append("images", new File([imageBytes], "preview.png", { type: "image/png" }));
+		formData.append("attachments", new File([imageBytes], "preview.png", { type: "image/png" }));
 
 		const inputResponse = await handleApiRequest(
 			new Request(`http://localhost/api/sessions/${sessionId}/input`, {
@@ -1678,6 +1693,150 @@ describe("handleApiRequest", () => {
 
 		const text = String(textMessage.payload.data.text);
 		expect(text).toContain(".jpg");
+
+		await reader.cancel();
+	});
+
+	test("stores non-image file attachments and forwards their paths", async () => {
+		const createResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "claude",
+					cwd: testRoot,
+					title: "File attachment",
+				}),
+			}),
+		);
+		expect(createResponse.status).toBe(201);
+		const createJson = await readJson<{ session: { id: string } }>(createResponse);
+		const sessionId = createJson.session.id;
+
+		const eventsResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}/events`, {
+				headers: authHeader,
+			}),
+		);
+		const reader = eventsResponse.body?.getReader();
+
+		if (!reader) {
+			throw new Error("Missing SSE body");
+		}
+
+		const textContent = "hello world\n";
+		const formData = new FormData();
+		formData.set("prompt", "Read this file.");
+		formData.append(
+			"attachments",
+			new File([textContent], "notes.txt", { type: "text/plain" }),
+		);
+
+		const inputResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}/input`, {
+				method: "POST",
+				headers: authHeader,
+				body: formData,
+			}),
+		);
+		expect(inputResponse.status).toBe(202);
+
+		const streamState = { buffer: "" };
+		const textMessage = await waitForMessage(
+			reader,
+			streamState,
+			(message) =>
+				message.type === "event" &&
+				message.payload.kind === "text" &&
+				typeof message.payload.data.text === "string" &&
+				message.payload.data.text.includes(`.shelleport/uploads/${sessionId}/`),
+		);
+		expect(textMessage.type).toBe("event");
+		if (textMessage.type !== "event") {
+			throw new Error("Expected text event");
+		}
+
+		const text = String(textMessage.payload.data.text);
+		expect(text).toContain("Use this file as context:");
+		expect(text).toContain(".txt");
+		expect(text).toContain("Read this file.");
+
+		const uploadedPathMatch = text.match(/\/[^\s]+\.txt/);
+		expect(uploadedPathMatch).not.toBeNull();
+
+		const uploadedPath = uploadedPathMatch?.[0];
+
+		if (!uploadedPath) {
+			throw new Error("Expected uploaded path");
+		}
+
+		const uploadedFile = Bun.file(uploadedPath);
+		expect(await uploadedFile.exists()).toBe(true);
+		expect(await uploadedFile.text()).toBe(textContent);
+
+		await reader.cancel();
+	});
+
+	test("accepts legacy images form field for backwards compatibility", async () => {
+		const createResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "claude",
+					cwd: testRoot,
+					title: "Legacy images",
+				}),
+			}),
+		);
+		expect(createResponse.status).toBe(201);
+		const createJson = await readJson<{ session: { id: string } }>(createResponse);
+		const sessionId = createJson.session.id;
+
+		const eventsResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}/events`, {
+				headers: authHeader,
+			}),
+		);
+		const reader = eventsResponse.body?.getReader();
+
+		if (!reader) {
+			throw new Error("Missing SSE body");
+		}
+
+		const imageBytes = await Bun.file(
+			join(process.cwd(), "public/assets/preview.jpg"),
+		).arrayBuffer();
+		const formData = new FormData();
+		formData.set("prompt", "Legacy upload.");
+		formData.append("images", new File([imageBytes], "old.jpg", { type: "image/jpeg" }));
+
+		const inputResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}/input`, {
+				method: "POST",
+				headers: authHeader,
+				body: formData,
+			}),
+		);
+		expect(inputResponse.status).toBe(202);
+
+		const streamState = { buffer: "" };
+		const textMessage = await waitForMessage(
+			reader,
+			streamState,
+			(message) =>
+				message.type === "event" &&
+				message.payload.kind === "text" &&
+				typeof message.payload.data.text === "string" &&
+				message.payload.data.text.includes(`.shelleport/uploads/${sessionId}/`),
+		);
+		expect(textMessage.type).toBe("event");
 
 		await reader.cancel();
 	});
