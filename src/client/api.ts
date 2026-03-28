@@ -94,8 +94,15 @@ export function fetchDirectory(path: string) {
 	return request<DirectoryListing>(`/api/directories?${params.toString()}`);
 }
 
-export function fetchSessionDetail(sessionId: string) {
-	return request<SessionDetail>(`/api/sessions/${sessionId}`);
+export function fetchSessionDetail(sessionId: string, options?: { before?: number }) {
+	const params = new URLSearchParams();
+
+	if (options?.before !== undefined) {
+		params.set("before", String(options.before));
+	}
+
+	const suffix = params.size > 0 ? `?${params.toString()}` : "";
+	return request<SessionDetail>(`/api/sessions/${sessionId}${suffix}`);
 }
 
 export function createSession(input: CreateSessionInput) {
