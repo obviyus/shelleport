@@ -82,6 +82,37 @@ import {
 	StatusDot,
 } from "~/client/session-stream";
 
+function requestNotificationPermission() {
+	if (typeof window === "undefined" || !("Notification" in window)) {
+		return;
+	}
+
+	if (Notification.permission === "default") {
+		void Notification.requestPermission();
+	}
+}
+
+function notifySessionComplete(session: HostSession) {
+	if (typeof window === "undefined" || !("Notification" in window)) {
+		return;
+	}
+
+	if (Notification.permission !== "granted" || document.hasFocus()) {
+		return;
+	}
+
+	const body =
+		session.status === "failed"
+			? `Failed: ${session.statusDetail.message ?? "unknown error"}`
+			: "Task complete";
+
+	new Notification(session.title, { body, tag: `shelleport-${session.id}` });
+}
+
+function isActiveStatus(status: string) {
+	return status === "running" || status === "retrying";
+}
+
 function orderSessions(nextSessions: HostSession[]) {
 	return [...nextSessions].sort((left, right) => {
 		if (left.archived !== right.archived) {
@@ -148,6 +179,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const draftAttachmentsRef = useRef<DraftAttachment[]>([]);
 	const isAtBottom = useRef(true);
+	const previousSessionStatus = useRef<string | null>(null);
 	const selectedId = renderRoute.kind === "session" ? renderRoute.params.sessionId : null;
 	const isSessionRoute = selectedId !== null;
 	const isArchivedView = renderRoute.kind === "archived";
@@ -322,6 +354,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		}
 
 		setSession(selectedSession);
+		previousSessionStatus.current = null;
 		setStream([]);
 		setPendingRequests([]);
 		setQueuedInputs([]);
@@ -351,6 +384,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			(message) => {
 				startTransition(() => {
 					if (message.type === "snapshot") {
+						previousSessionStatus.current = message.payload.session.status;
 						setSession(message.payload.session);
 						setStream(message.payload.events);
 						setPendingRequests(
@@ -362,6 +396,18 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 					}
 
 					if (message.type === "session") {
+						const prevStatus = previousSessionStatus.current;
+						previousSessionStatus.current = message.payload.status;
+
+						if (
+							prevStatus !== null &&
+							isActiveStatus(prevStatus) &&
+							!isActiveStatus(message.payload.status) &&
+							message.payload.status !== "waiting"
+						) {
+							notifySessionComplete(message.payload);
+						}
+
 						setSession(message.payload);
 						replaceSession(message.payload);
 						return;
@@ -487,6 +533,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			return;
 		}
 
+		requestNotificationPermission();
 		setPrompt("");
 		setDraftAttachments([]);
 
