@@ -147,19 +147,8 @@ function formatClaudePrompt(prompt: string, attachments: ProviderAdapterRunInput
 		: `${imageLines.join("\n")}\n\n${prompt}`;
 }
 
-function createClaudeCommand(input: ProviderAdapterRunInput) {
-	const { session } = input;
-	const command = [
-		getClaudeBin(),
-		"-p",
-		"--verbose",
-		"--include-partial-messages",
-		"--output-format",
-		"stream-json",
-		...(shouldUseClaudeBareMode() ? ["--bare"] : []),
-		"--permission-mode",
-		session.permissionMode,
-	];
+function appendClaudeSessionOptions(command: string[], session: HostSession) {
+	command.push("--permission-mode", session.permissionMode);
 
 	for (const toolRule of session.allowedTools) {
 		command.push("--allowedTools", toolRule);
@@ -169,9 +158,52 @@ function createClaudeCommand(input: ProviderAdapterRunInput) {
 		command.push("-r", session.providerSessionRef);
 	}
 
-	command.push(formatClaudePrompt(input.prompt, input.attachments));
-
 	return command;
+}
+
+function createClaudeCommand(input: ProviderAdapterRunInput) {
+	const command = appendClaudeSessionOptions(
+		[
+			getClaudeBin(),
+			"-p",
+			"--verbose",
+			"--include-partial-messages",
+			"--output-format",
+			"stream-json",
+			...(shouldUseClaudeBareMode() ? ["--bare"] : []),
+		],
+		input.session,
+	);
+	command.push(formatClaudePrompt(input.prompt, input.attachments));
+	return command;
+}
+
+function createPersistentClaudeCommand(session: HostSession) {
+	return appendClaudeSessionOptions(
+		[
+			getClaudeBin(),
+			"-p",
+			"--verbose",
+			"--include-partial-messages",
+			"--input-format",
+			"stream-json",
+			"--output-format",
+			"stream-json",
+			"--replay-user-messages",
+			"--bare",
+		],
+		session,
+	);
+}
+
+function createClaudeInputMessage(input: ProviderAdapterRunInput) {
+	return JSON.stringify({
+		type: "user",
+		message: {
+			role: "user",
+			content: formatClaudePrompt(input.prompt, input.attachments),
+		},
+	});
 }
 
 function getMessageContent(rawEvent: Record<string, unknown>) {
@@ -672,7 +704,73 @@ export function normalizeClaudeEvent(rawEvent: Record<string, unknown>): Provide
 	];
 }
 
-async function* streamClaudeProcess(
+type ClaudeTurnState = {
+	sawAssistantTextDelta: boolean;
+	partialToolUseIds: Set<string>;
+	toolUseStateByIndex: Map<number, ClaudeStreamToolUseState>;
+};
+
+function createClaudeTurnState(): ClaudeTurnState {
+	return {
+		sawAssistantTextDelta: false,
+		partialToolUseIds: new Set<string>(),
+		toolUseStateByIndex: new Map<number, ClaudeStreamToolUseState>(),
+	};
+}
+
+function normalizeClaudeRawEvent(rawEvent: Record<string, unknown>, state: ClaudeTurnState) {
+	if (rawEvent.type === "stream_event") {
+		const partialEvents = normalizeClaudeStreamEvent(rawEvent, state.toolUseStateByIndex);
+
+		for (const event of partialEvents) {
+			if (event.type !== "host-event") {
+				continue;
+			}
+
+			if (event.kind === "text") {
+				state.sawAssistantTextDelta = true;
+			}
+
+			if (event.kind === "tool-call" && typeof event.data.toolUseId === "string") {
+				state.partialToolUseIds.add(event.data.toolUseId);
+			}
+		}
+
+		return partialEvents;
+	}
+
+	const normalizedEvents = normalizeClaudeEvent(rawEvent).filter((event) => {
+		if (
+			state.sawAssistantTextDelta &&
+			rawEvent.type === "assistant" &&
+			event.type === "host-event" &&
+			event.kind === "text" &&
+			event.data.role === "assistant"
+		) {
+			return false;
+		}
+
+		if (
+			rawEvent.type === "assistant" &&
+			event.type === "host-event" &&
+			event.kind === "tool-call" &&
+			typeof event.data.toolUseId === "string" &&
+			state.partialToolUseIds.has(event.data.toolUseId)
+		) {
+			return false;
+		}
+
+		return true;
+	});
+
+	if (rawEvent.type === "assistant") {
+		state.sawAssistantTextDelta = false;
+	}
+
+	return normalizedEvents;
+}
+
+async function* streamSingleClaudeProcess(
 	runInput: ProviderAdapterRunInput,
 ): AsyncGenerator<ProviderAdapterEvent> {
 	const subprocess = Bun.spawn(createClaudeCommand(runInput), {
@@ -684,16 +782,12 @@ async function* streamClaudeProcess(
 	});
 	const stdoutReader = subprocess.stdout.getReader();
 	const stderrReader = subprocess.stderr.getReader();
-
+	const state = createClaudeTurnState();
 	let buffer = "";
-	let sawAssistantTextDelta = false;
-	const partialToolUseIds = new Set<string>();
-	const toolUseStateByIndex = new Map<number, ClaudeStreamToolUseState>();
 
 	try {
 		while (true) {
 			const { done, value } = await stdoutReader.read();
-
 			if (done) {
 				break;
 			}
@@ -704,68 +798,12 @@ async function* streamClaudeProcess(
 
 			for (const line of lines) {
 				const trimmed = line.trim();
-
 				if (trimmed.length === 0) {
 					continue;
 				}
 
 				const rawEvent = JSON.parse(trimmed) as Record<string, unknown>;
-
-				if (rawEvent.type === "stream_event") {
-					const partialEvents = normalizeClaudeStreamEvent(rawEvent, toolUseStateByIndex);
-
-					if (partialEvents.length > 0) {
-						for (const event of partialEvents) {
-							if (event.type !== "host-event") {
-								continue;
-							}
-
-							if (event.kind === "text") {
-								sawAssistantTextDelta = true;
-							}
-
-							if (event.kind === "tool-call" && typeof event.data.toolUseId === "string") {
-								partialToolUseIds.add(event.data.toolUseId);
-							}
-						}
-
-						for (const event of partialEvents) {
-							yield event;
-						}
-					}
-
-					continue;
-				}
-
-				const normalizedEvents = normalizeClaudeEvent(rawEvent).filter((event) => {
-					if (
-						sawAssistantTextDelta &&
-						rawEvent.type === "assistant" &&
-						event.type === "host-event" &&
-						event.kind === "text" &&
-						event.data.role === "assistant"
-					) {
-						return false;
-					}
-
-					if (
-						rawEvent.type === "assistant" &&
-						event.type === "host-event" &&
-						event.kind === "tool-call" &&
-						typeof event.data.toolUseId === "string" &&
-						partialToolUseIds.has(event.data.toolUseId)
-					) {
-						return false;
-					}
-
-					return true;
-				});
-
-				if (rawEvent.type === "assistant") {
-					sawAssistantTextDelta = false;
-				}
-
-				for (const event of normalizedEvents) {
+				for (const event of normalizeClaudeRawEvent(rawEvent, state)) {
 					yield event;
 				}
 			}
@@ -773,78 +811,21 @@ async function* streamClaudeProcess(
 
 		if (buffer.trim().length > 0) {
 			const rawEvent = JSON.parse(buffer.trim()) as Record<string, unknown>;
-
-			if (rawEvent.type === "stream_event") {
-				const partialEvents = normalizeClaudeStreamEvent(rawEvent, toolUseStateByIndex);
-
-				if (partialEvents.length > 0) {
-					for (const event of partialEvents) {
-						if (event.type !== "host-event") {
-							continue;
-						}
-
-						if (event.kind === "text") {
-							sawAssistantTextDelta = true;
-						}
-
-						if (event.kind === "tool-call" && typeof event.data.toolUseId === "string") {
-							partialToolUseIds.add(event.data.toolUseId);
-						}
-					}
-				}
-
-				for (const event of partialEvents) {
-					yield event;
-				}
-			} else {
-				const normalizedEvents = normalizeClaudeEvent(rawEvent).filter((event) => {
-					if (
-						sawAssistantTextDelta &&
-						rawEvent.type === "assistant" &&
-						event.type === "host-event" &&
-						event.kind === "text" &&
-						event.data.role === "assistant"
-					) {
-						return false;
-					}
-
-					if (
-						rawEvent.type === "assistant" &&
-						event.type === "host-event" &&
-						event.kind === "tool-call" &&
-						typeof event.data.toolUseId === "string" &&
-						partialToolUseIds.has(event.data.toolUseId)
-					) {
-						return false;
-					}
-
-					return true;
-				});
-
-				if (rawEvent.type === "assistant") {
-					sawAssistantTextDelta = false;
-				}
-
-				for (const event of normalizedEvents) {
-					yield event;
-				}
+			for (const event of normalizeClaudeRawEvent(rawEvent, state)) {
+				yield event;
 			}
 		}
 
 		const stderrChunks: Uint8Array[] = [];
-
 		while (true) {
 			const { done, value } = await stderrReader.read();
-
 			if (done) {
 				break;
 			}
-
 			stderrChunks.push(value);
 		}
 
 		const exitCode = await subprocess.exited;
-
 		if (exitCode !== 0) {
 			yield {
 				type: "host-event",
@@ -861,6 +842,229 @@ async function* streamClaudeProcess(
 		stdoutReader.releaseLock();
 		stderrReader.releaseLock();
 	}
+}
+
+type ClaudePersistentTurn = {
+	state: ClaudeTurnState;
+	items: Array<ProviderAdapterEvent | null>;
+	resolvers: Array<(item: ProviderAdapterEvent | null) => void>;
+};
+
+class ClaudePersistentProcess {
+	#subprocess: ReturnType<typeof Bun.spawn> | null = null;
+	#stdoutReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+	#stderrReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+	#buffer = "";
+	#currentTurn: ClaudePersistentTurn | null = null;
+	#idleTimer: ReturnType<typeof setTimeout> | null = null;
+	#configKey: string | null = null;
+	#closed = false;
+
+	constructor(private readonly sessionId: string) {}
+
+	matches(session: HostSession) {
+		return (
+			this.#configKey ===
+			JSON.stringify({
+				cwd: session.cwd,
+				providerSessionRef: session.providerSessionRef,
+				permissionMode: session.permissionMode,
+				allowedTools: session.allowedTools,
+			})
+		);
+	}
+
+	async *runTurn(runInput: ProviderAdapterRunInput): AsyncGenerator<ProviderAdapterEvent> {
+		await this.#ensureStarted(runInput.session);
+		this.#clearIdleTimer();
+
+		if (!this.#subprocess?.stdin) {
+			throw new Error("Claude persistent stdin unavailable");
+		}
+
+		const turn: ClaudePersistentTurn = {
+			state: createClaudeTurnState(),
+			items: [],
+			resolvers: [],
+		};
+		this.#currentTurn = turn;
+		this.#subprocess.stdin.write(`${createClaudeInputMessage(runInput)}\n`);
+
+		const abortListener = () => this.close();
+		runInput.signal.addEventListener("abort", abortListener, { once: true });
+
+		try {
+			while (true) {
+				const item = await this.#nextTurnItem(turn);
+				if (item === null) {
+					break;
+				}
+				yield item;
+			}
+		} finally {
+			runInput.signal.removeEventListener("abort", abortListener);
+			if (this.#currentTurn === turn) {
+				this.#currentTurn = null;
+				this.#scheduleIdleClose();
+			}
+		}
+	}
+
+	close() {
+		if (this.#closed) {
+			return;
+		}
+		this.#closed = true;
+		this.#clearIdleTimer();
+		this.#subprocess?.kill();
+		this.#stdoutReader?.cancel().catch(() => {});
+		this.#stderrReader?.cancel().catch(() => {});
+		this.#finishTurn();
+		persistentClaudeProcesses.delete(this.sessionId);
+	}
+
+	async #ensureStarted(session: HostSession) {
+		const nextConfigKey = JSON.stringify({
+			cwd: session.cwd,
+			providerSessionRef: session.providerSessionRef,
+			permissionMode: session.permissionMode,
+			allowedTools: session.allowedTools,
+		});
+
+		if (this.#subprocess && this.#configKey === nextConfigKey && !this.#closed) {
+			return;
+		}
+
+		this.close();
+		this.#closed = false;
+		this.#configKey = nextConfigKey;
+		this.#subprocess = Bun.spawn(createPersistentClaudeCommand(session), {
+			cwd: session.cwd,
+			stdin: "pipe",
+			stdout: "pipe",
+			stderr: "pipe",
+			env: Bun.env,
+		});
+		this.#stdoutReader = this.#subprocess.stdout.getReader();
+		this.#stderrReader = this.#subprocess.stderr.getReader();
+		void this.#pumpStdout();
+		void this.#watchExit();
+	}
+
+	async #pumpStdout() {
+		const reader = this.#stdoutReader;
+		if (!reader) {
+			return;
+		}
+
+		while (true) {
+			const { done, value } = await reader.read();
+			if (done) {
+				break;
+			}
+			this.#buffer += decoder.decode(value);
+			const lines = this.#buffer.split("\n");
+			this.#buffer = lines.pop() ?? "";
+
+			for (const line of lines) {
+				this.#handleLine(line);
+			}
+		}
+	}
+
+	async #watchExit() {
+		const subprocess = this.#subprocess;
+		if (!subprocess) {
+			return;
+		}
+		const exitCode = await subprocess.exited;
+		if (exitCode !== 0 && this.#currentTurn) {
+			this.#pushTurnItem({
+				type: "host-event",
+				kind: "error",
+				summary: "Claude CLI error",
+				data: { exitCode },
+				rawProviderEvent: null,
+			});
+		}
+		this.#finishTurn();
+	}
+
+	#handleLine(line: string) {
+		const trimmed = line.trim();
+		if (trimmed.length === 0 || !this.#currentTurn) {
+			return;
+		}
+		const rawEvent = JSON.parse(trimmed) as Record<string, unknown>;
+		for (const event of normalizeClaudeRawEvent(rawEvent, this.#currentTurn.state)) {
+			this.#pushTurnItem(event);
+		}
+		if (rawEvent.type === "result") {
+			this.#finishTurn();
+		}
+	}
+
+	#pushTurnItem(item: ProviderAdapterEvent) {
+		if (!this.#currentTurn) {
+			return;
+		}
+		const resolver = this.#currentTurn.resolvers.shift();
+		if (resolver) {
+			resolver(item);
+			return;
+		}
+		this.#currentTurn.items.push(item);
+	}
+
+	#finishTurn() {
+		if (!this.#currentTurn) {
+			return;
+		}
+		const resolver = this.#currentTurn.resolvers.shift();
+		if (resolver) {
+			resolver(null);
+		} else {
+			this.#currentTurn.items.push(null);
+		}
+	}
+
+	async #nextTurnItem(turn: ClaudePersistentTurn) {
+		if (turn.items.length > 0) {
+			return turn.items.shift() ?? null;
+		}
+		return await new Promise<ProviderAdapterEvent | null>((resolve) => {
+			turn.resolvers.push(resolve);
+		});
+	}
+
+	#scheduleIdleClose() {
+		this.#clearIdleTimer();
+		this.#idleTimer = setTimeout(() => this.close(), 120_000);
+	}
+
+	#clearIdleTimer() {
+		if (this.#idleTimer) {
+			clearTimeout(this.#idleTimer);
+			this.#idleTimer = null;
+		}
+	}
+}
+
+const persistentClaudeProcesses = new Map<string, ClaudePersistentProcess>();
+
+async function* streamClaudeProcess(
+	runInput: ProviderAdapterRunInput,
+): AsyncGenerator<ProviderAdapterEvent> {
+	if (!shouldUseClaudeBareMode()) {
+		yield* streamSingleClaudeProcess(runInput);
+		return;
+	}
+
+	const process =
+		persistentClaudeProcesses.get(runInput.session.id) ??
+		new ClaudePersistentProcess(runInput.session.id);
+	persistentClaudeProcesses.set(runInput.session.id, process);
+	yield* process.runTurn(runInput);
 }
 
 export async function parseClaudeHistoricalSession(
