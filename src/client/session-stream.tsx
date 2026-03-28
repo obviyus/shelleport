@@ -20,10 +20,6 @@ export type DraftImage = ImagePreview & {
 	file: File;
 };
 
-type UsageSnapshot = {
-	limit: SessionLimit | null;
-};
-
 type LimitSnapshot = SessionLimit & {
 	window: string;
 };
@@ -215,17 +211,6 @@ function getSessionLimitMap(entries: HostEvent[]) {
 	}
 
 	return limits;
-}
-
-function getUsageSnapshot(entries: HostEvent[]): UsageSnapshot {
-	const limits = getSessionLimitMap(entries);
-	let limit: SessionLimit | null = null;
-
-	for (const candidate of limits.values()) {
-		limit = candidate;
-	}
-
-	return { limit };
 }
 
 function formatMetricCount(value: number) {
