@@ -516,6 +516,30 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		} catch {}
 	}, [selectedId]);
 
+	useEffect(() => {
+		function handleCtrlC(event: KeyboardEvent) {
+			if (event.key !== "c" || !event.ctrlKey || event.shiftKey || event.altKey || event.metaKey) {
+				return;
+			}
+
+			const selection = window.getSelection();
+
+			if (selection && selection.toString().length > 0) {
+				return;
+			}
+
+			if (!sessionView || (sessionView.status !== "running" && sessionView.status !== "retrying")) {
+				return;
+			}
+
+			event.preventDefault();
+			void handleInterrupt();
+		}
+
+		window.addEventListener("keydown", handleCtrlC);
+		return () => window.removeEventListener("keydown", handleCtrlC);
+	}, [handleInterrupt, sessionView]);
+
 	const handleArchive = useCallback(
 		async (sessionId: string, archived: boolean) => {
 			try {
