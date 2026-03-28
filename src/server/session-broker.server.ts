@@ -551,14 +551,22 @@ export const sessionBroker = {
 		publishSession(session);
 		return session;
 	},
-	updateQueuedInput(sessionId: string, queuedInputId: string, input: QueuedSessionInputUpdatePayload) {
+	updateQueuedInput(
+		sessionId: string,
+		queuedInputId: string,
+		input: QueuedSessionInputUpdatePayload,
+	) {
 		const session = sessionStore.getSession(sessionId);
 
 		if (!session) {
 			throw new ApiError(404, "session_not_found", `Unknown session: ${sessionId}`);
 		}
 
-		const queuedInput = sessionStore.updateQueuedInput(sessionId, queuedInputId, input.prompt.trim());
+		const queuedInput = sessionStore.updateQueuedInput(
+			sessionId,
+			queuedInputId,
+			input.prompt.trim(),
+		);
 
 		if (!queuedInput) {
 			throw new ApiError(404, "queued_input_not_found", `Unknown queued input: ${queuedInputId}`);

@@ -185,7 +185,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const [busyQueuedInputId, setBusyQueuedInputId] = useState<string | null>(null);
 	const deferredSessionQuery = useDeferredValue(sessionQuery);
 	const selectedSession = useMemo(
-		() => (selectedId ? sessions.find((candidate) => candidate.id === selectedId) ?? null : null),
+		() => (selectedId ? (sessions.find((candidate) => candidate.id === selectedId) ?? null) : null),
 		[selectedId, sessions],
 	);
 	const sessionView = session?.id === selectedId ? session : selectedSession;
@@ -1109,7 +1109,9 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											</button>
 										</>
 									) : (
-										<h1 className="truncate text-xs font-medium text-foreground">Loading session</h1>
+										<h1 className="truncate text-xs font-medium text-foreground">
+											Loading session
+										</h1>
 									)}
 									{sessionView && (
 										<span className="hidden text-[10px] text-muted-foreground/65 lg:inline">
@@ -1155,20 +1157,22 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											}`}
 										>
 											<Pin className="size-3 md:size-2.5" />
-											<span className="hidden md:inline">{sessionView.pinned ? "Pinned" : "Pin"}</span>
+											<span className="hidden md:inline">
+												{sessionView.pinned ? "Pinned" : "Pin"}
+											</span>
 										</button>
 									)}
 									{sessionView &&
 										(sessionView.status === "running" || sessionView.status === "retrying") && (
-										<button
-											type="button"
-											onClick={() => void handleInterrupt()}
-											className="flex items-center justify-center gap-1 rounded border border-foreground/12 px-2 py-1 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-[10px] text-muted-foreground/80 transition hover:border-foreground/18 hover:text-foreground"
-										>
-											<CircleStop className="size-3 md:size-2.5" />
-											<span className="hidden md:inline">Stop</span>
-										</button>
-									)}
+											<button
+												type="button"
+												onClick={() => void handleInterrupt()}
+												className="flex items-center justify-center gap-1 rounded border border-foreground/12 px-2 py-1 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-[10px] text-muted-foreground/80 transition hover:border-foreground/18 hover:text-foreground"
+											>
+												<CircleStop className="size-3 md:size-2.5" />
+												<span className="hidden md:inline">Stop</span>
+											</button>
+										)}
 								</div>
 							</div>
 						</header>
@@ -1217,7 +1221,6 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 									)}
 								</div>
 							) : null}
-							
 						</div>
 
 						{sessionView && pendingRequests.length > 0 && (
@@ -1229,176 +1232,178 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 								<div className="rounded-md border border-foreground/10 bg-card/92 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)] transition-colors focus-within:border-foreground/22">
 									{sessionView && (
 										<>
-									<input
-										ref={fileInputRef}
-										type="file"
-										accept="image/*"
-										multiple
-										onChange={handleImageSelect}
-										className="hidden"
-									/>
-									{draftImages.length > 0 && (
-										<div className="flex flex-wrap gap-2 border-b border-border px-4 py-3">
-											{draftImages.map((image, index) => (
-												<DraftImagePreview
-													key={image.url}
-													image={image}
-													onRemove={() =>
-														setDraftImages((previous) => {
-															const nextImages = [...previous];
-															const [removedImage] = nextImages.splice(index, 1);
+											<input
+												ref={fileInputRef}
+												type="file"
+												accept="image/*"
+												multiple
+												onChange={handleImageSelect}
+												className="hidden"
+											/>
+											{draftImages.length > 0 && (
+												<div className="flex flex-wrap gap-2 border-b border-border px-4 py-3">
+													{draftImages.map((image, index) => (
+														<DraftImagePreview
+															key={image.url}
+															image={image}
+															onRemove={() =>
+																setDraftImages((previous) => {
+																	const nextImages = [...previous];
+																	const [removedImage] = nextImages.splice(index, 1);
 
-															if (removedImage) {
-																URL.revokeObjectURL(removedImage.url);
-															}
-
-															return nextImages;
-														})
-													}
-												/>
-											))}
-										</div>
-									)}
-									{queuedInputs.length > 0 && (
-										<div className="border-b border-border px-4 py-3">
-											<div className="mb-2 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/80">
-												Queued
-											</div>
-											<div className="space-y-2">
-												{queuedInputs.map((queuedInput, index) => {
-													const attachmentLabel = formatQueuedAttachmentLabel(queuedInput);
-													const isEditing = editingQueuedInputId === queuedInput.id;
-													const isBusy = busyQueuedInputId === queuedInput.id;
-
-													return (
-														<div
-															key={queuedInput.id}
-															className="rounded-md border border-foreground/10 bg-background/42 px-3 py-2"
-														>
-															<div className="flex items-center justify-between gap-3">
-																<div className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground/80">
-																	#{index + 1}
-																</div>
-																<div className="flex items-center gap-1">
-																	{attachmentLabel && (
-																		<div className="mr-1 text-[10px] text-muted-foreground/80">
-																			{attachmentLabel}
-																		</div>
-																	)}
-																	{isBusy ? (
-																		<div className="flex size-6 items-center justify-center">
-																			<Loader2 className="size-3 animate-spin text-muted-foreground/80" />
-																		</div>
-																	) : isEditing ? (
-																		<>
-																			<button
-																				type="button"
-																				onClick={() => void handleSaveQueuedInput()}
-																				disabled={queuedInputDraft.trim().length === 0}
-																				className="flex size-9 md:size-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground disabled:opacity-30"
-																				title="Save queued message"
-																			>
-																				<Check className="size-3" />
-																			</button>
-																			<button
-																				type="button"
-																				onClick={handleCancelQueuedInputEdit}
-																				className="flex size-9 md:size-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
-																				title="Cancel edit"
-																			>
-																				<X className="size-3" />
-																			</button>
-																		</>
-																	) : (
-																		<>
-																			<button
-																				type="button"
-																				onClick={() => handleStartQueuedInputEdit(queuedInput)}
-																				className="flex size-9 md:size-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
-																				title="Edit queued message"
-																			>
-																				<Pencil className="size-3" />
-																			</button>
-																			<button
-																				type="button"
-																				onClick={() => void handleDeleteQueuedInput(queuedInput.id)}
-																				className="flex size-9 md:size-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
-																				title="Delete queued message"
-																			>
-																				<Trash2 className="size-3" />
-																			</button>
-																		</>
-																	)}
-																</div>
-															</div>
-															{isEditing ? (
-																<textarea
-																	rows={3}
-																	value={queuedInputDraft}
-																	onChange={(event) =>
-																		setQueuedInputEdit((current) =>
-																			current === null
-																				? null
-																				: { ...current, prompt: event.target.value },
-																		)
+																	if (removedImage) {
+																		URL.revokeObjectURL(removedImage.url);
 																	}
-																	className="mt-2 w-full resize-none rounded border border-foreground/10 bg-background px-2.5 py-2 text-xs leading-[1.7] text-foreground outline-none"
-																/>
-															) : (
-																<div className="mt-1 whitespace-pre-wrap text-xs leading-[1.7] text-foreground/86">
-																	{queuedInput.prompt}
+
+																	return nextImages;
+																})
+															}
+														/>
+													))}
+												</div>
+											)}
+											{queuedInputs.length > 0 && (
+												<div className="border-b border-border px-4 py-3">
+													<div className="mb-2 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/80">
+														Queued
+													</div>
+													<div className="space-y-2">
+														{queuedInputs.map((queuedInput, index) => {
+															const attachmentLabel = formatQueuedAttachmentLabel(queuedInput);
+															const isEditing = editingQueuedInputId === queuedInput.id;
+															const isBusy = busyQueuedInputId === queuedInput.id;
+
+															return (
+																<div
+																	key={queuedInput.id}
+																	className="rounded-md border border-foreground/10 bg-background/42 px-3 py-2"
+																>
+																	<div className="flex items-center justify-between gap-3">
+																		<div className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground/80">
+																			#{index + 1}
+																		</div>
+																		<div className="flex items-center gap-1">
+																			{attachmentLabel && (
+																				<div className="mr-1 text-[10px] text-muted-foreground/80">
+																					{attachmentLabel}
+																				</div>
+																			)}
+																			{isBusy ? (
+																				<div className="flex size-6 items-center justify-center">
+																					<Loader2 className="size-3 animate-spin text-muted-foreground/80" />
+																				</div>
+																			) : isEditing ? (
+																				<>
+																					<button
+																						type="button"
+																						onClick={() => void handleSaveQueuedInput()}
+																						disabled={queuedInputDraft.trim().length === 0}
+																						className="flex size-9 md:size-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground disabled:opacity-30"
+																						title="Save queued message"
+																					>
+																						<Check className="size-3" />
+																					</button>
+																					<button
+																						type="button"
+																						onClick={handleCancelQueuedInputEdit}
+																						className="flex size-9 md:size-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
+																						title="Cancel edit"
+																					>
+																						<X className="size-3" />
+																					</button>
+																				</>
+																			) : (
+																				<>
+																					<button
+																						type="button"
+																						onClick={() => handleStartQueuedInputEdit(queuedInput)}
+																						className="flex size-9 md:size-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
+																						title="Edit queued message"
+																					>
+																						<Pencil className="size-3" />
+																					</button>
+																					<button
+																						type="button"
+																						onClick={() =>
+																							void handleDeleteQueuedInput(queuedInput.id)
+																						}
+																						className="flex size-9 md:size-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
+																						title="Delete queued message"
+																					>
+																						<Trash2 className="size-3" />
+																					</button>
+																				</>
+																			)}
+																		</div>
+																	</div>
+																	{isEditing ? (
+																		<textarea
+																			rows={3}
+																			value={queuedInputDraft}
+																			onChange={(event) =>
+																				setQueuedInputEdit((current) =>
+																					current === null
+																						? null
+																						: { ...current, prompt: event.target.value },
+																				)
+																			}
+																			className="mt-2 w-full resize-none rounded border border-foreground/10 bg-background px-2.5 py-2 text-xs leading-[1.7] text-foreground outline-none"
+																		/>
+																	) : (
+																		<div className="mt-1 whitespace-pre-wrap text-xs leading-[1.7] text-foreground/86">
+																			{queuedInput.prompt}
+																		</div>
+																	)}
 																</div>
-															)}
-														</div>
-													);
-												})}
+															);
+														})}
+													</div>
+												</div>
+											)}
+											<div className="flex items-end gap-1.5 px-2 py-2">
+												<textarea
+													ref={textareaRef}
+													rows={1}
+													value={prompt}
+													onChange={(event) => {
+														setPrompt(event.target.value);
+														autoResize(event.currentTarget);
+													}}
+													onKeyDown={handleKeyDown}
+													onPaste={handlePaste}
+													placeholder={
+														isSessionBusy
+															? "Claude is working... press Enter to queue"
+															: canAttachImages
+																? "Message Claude... paste images or attach files"
+																: "Message Claude... (Enter to send)"
+													}
+													className="min-h-[36px] md:min-h-[28px] flex-1 resize-none bg-transparent px-2 py-1.5 text-xs leading-[1.6] text-foreground outline-none placeholder:text-muted-foreground/80"
+												/>
+												{canAttachImages && (
+													<button
+														type="button"
+														onClick={() => fileInputRef.current?.click()}
+														className="flex size-9 md:size-7 shrink-0 items-center justify-center rounded border border-foreground/10 bg-background text-muted-foreground/86 transition hover:border-foreground/22 hover:text-foreground"
+														title="Attach images"
+													>
+														<ImagePlus className="size-3.5" />
+													</button>
+												)}
+												<button
+													type="button"
+													onClick={() => void handleSend()}
+													disabled={!canSend}
+													className="flex size-9 md:size-7 shrink-0 items-center justify-center rounded bg-foreground text-background shadow-[0_0_18px_oklch(1_0_0_/_0.12)] transition hover:bg-foreground/85 disabled:opacity-20"
+												>
+													<Send className="size-3.5" />
+												</button>
 											</div>
-										</div>
-									)}
-									<div className="flex items-end gap-1.5 px-2 py-2">
-										<textarea
-											ref={textareaRef}
-											rows={1}
-											value={prompt}
-											onChange={(event) => {
-												setPrompt(event.target.value);
-												autoResize(event.currentTarget);
-											}}
-											onKeyDown={handleKeyDown}
-											onPaste={handlePaste}
-											placeholder={
-												isSessionBusy
-													? "Claude is working... press Enter to queue"
-													: canAttachImages
-														? "Message Claude... paste images or attach files"
-														: "Message Claude... (Enter to send)"
-											}
-											className="min-h-[36px] md:min-h-[28px] flex-1 resize-none bg-transparent px-2 py-1.5 text-xs leading-[1.6] text-foreground outline-none placeholder:text-muted-foreground/80"
-										/>
-										{canAttachImages && (
-											<button
-												type="button"
-												onClick={() => fileInputRef.current?.click()}
-												className="flex size-9 md:size-7 shrink-0 items-center justify-center rounded border border-foreground/10 bg-background text-muted-foreground/86 transition hover:border-foreground/22 hover:text-foreground"
-												title="Attach images"
-											>
-												<ImagePlus className="size-3.5" />
-											</button>
-										)}
-										<button
-											type="button"
-											onClick={() => void handleSend()}
-											disabled={!canSend}
-											className="flex size-9 md:size-7 shrink-0 items-center justify-center rounded bg-foreground text-background shadow-[0_0_18px_oklch(1_0_0_/_0.12)] transition hover:bg-foreground/85 disabled:opacity-20"
-										>
-											<Send className="size-3.5" />
-										</button>
-									</div>
-									{queuedInputCount > 0 && (
-										<div className="px-4 pb-1.5 text-[10px] text-muted-foreground/86">
-											{queuedInputCount} queued
-										</div>
-									)}
+											{queuedInputCount > 0 && (
+												<div className="px-4 pb-1.5 text-[10px] text-muted-foreground/86">
+													{queuedInputCount} queued
+												</div>
+											)}
 										</>
 									)}
 								</div>
