@@ -437,7 +437,14 @@ async function dispatchApiRequest(request: Request) {
 		const sessionId = sessionIdFromSegments(segments);
 
 		if (request.method === "GET" && segments.length === 3) {
-			const detail = sessionBroker.getSessionDetail(sessionId);
+			const beforeParam = url.searchParams.get("before");
+			const limitParam = url.searchParams.get("limit");
+			const before = beforeParam !== null ? Number(beforeParam) : undefined;
+			const limit = limitParam !== null ? Number(limitParam) : undefined;
+			const detail = sessionBroker.getSessionDetail(sessionId, {
+				before: before !== undefined && Number.isFinite(before) ? before : undefined,
+				limit: limit !== undefined && Number.isFinite(limit) ? Math.min(limit, 500) : undefined,
+			});
 			return detail
 				? Response.json(detail)
 				: jsonError(404, "session_not_found", "Session not found");

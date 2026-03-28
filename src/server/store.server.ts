@@ -402,8 +402,16 @@ const insertEventStatement = database.query(
 	) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 );
 
-const listEventsStatement = database.query<SqlEventRow, [string]>(
-	"SELECT * FROM host_events WHERE session_id = ? ORDER BY sequence ASC",
+const listRecentEventsStatement = database.query<SqlEventRow, [string, number]>(
+	"SELECT * FROM (SELECT * FROM host_events WHERE session_id = ? ORDER BY sequence DESC LIMIT ?) ORDER BY sequence ASC",
+);
+
+const listEventsBeforeStatement = database.query<SqlEventRow, [string, number, number]>(
+	"SELECT * FROM (SELECT * FROM host_events WHERE session_id = ? AND sequence < ? ORDER BY sequence DESC LIMIT ?) ORDER BY sequence ASC",
+);
+
+const countEventsStatement = database.query<{ total: number }, [string]>(
+	"SELECT COUNT(*) as total FROM host_events WHERE session_id = ?",
 );
 
 const listEventsAfterStatement = database.query<SqlEventRow, [string, number]>(
@@ -670,16 +678,28 @@ export const sessionStore = {
 		const row = getSessionStatement.get(sessionId);
 		return row ? mapSession(row) : null;
 	},
-	getSessionDetail(sessionId: string): SessionDetail | null {
+	getSessionDetail(
+		sessionId: string,
+		options?: { limit?: number; before?: number },
+	): SessionDetail | null {
 		const session = this.getSession(sessionId);
 
 		if (!session) {
 			return null;
 		}
 
+		const limit = options?.limit ?? 200;
+		const before = options?.before ?? null;
+		const events =
+			before !== null
+				? listEventsBeforeStatement.all(sessionId, before, limit).map(mapEvent)
+				: listRecentEventsStatement.all(sessionId, limit).map(mapEvent);
+		const totalEvents = countEventsStatement.get(sessionId)?.total ?? 0;
+
 		return {
 			session,
-			events: listEventsStatement.all(sessionId).map(mapEvent),
+			events,
+			totalEvents,
 			pendingRequests: listRequestsStatement.all(sessionId).map(mapRequest),
 			queuedInputs: listQueuedInputsStatement.all(sessionId).map(mapQueuedInput),
 		};

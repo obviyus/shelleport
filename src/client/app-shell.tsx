@@ -44,6 +44,7 @@ import {
 	createSession,
 	deleteQueuedInput,
 	fetchProviders,
+	fetchSessionDetail,
 	fetchSessions,
 	respondToRequest,
 	sendInput,
@@ -158,6 +159,8 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const [sessions, setSessions] = useState<HostSession[]>(boot.sessions);
 	const [session, setSession] = useState<HostSession | null>(initialDetail?.session ?? null);
 	const [stream, setStream] = useState<HostEvent[]>(initialDetail?.events ?? []);
+	const [totalEvents, setTotalEvents] = useState<number>(initialDetail?.totalEvents ?? 0);
+	const [loadingEarlier, setLoadingEarlier] = useState(false);
 	const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>(
 		initialDetail?.pendingRequests.filter((request) => request.status === "pending") ?? [],
 	);
@@ -323,6 +326,8 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 
 		setSession(selectedSession);
 		setStream([]);
+		setTotalEvents(0);
+		setLoadingEarlier(false);
 		setPendingRequests([]);
 		setQueuedInputs([]);
 		setQueuedInputEdit(null);
@@ -353,6 +358,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 					if (message.type === "snapshot") {
 						setSession(message.payload.session);
 						setStream(message.payload.events);
+						setTotalEvents(message.payload.totalEvents ?? message.payload.events.length);
 						setPendingRequests(
 							message.payload.pendingRequests.filter((request) => request.status === "pending"),
 						);
@@ -381,6 +387,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 						}
 
 						setStream((previous) => [...previous, message.payload]);
+						setTotalEvents((previous) => previous + 1);
 						return;
 					}
 
@@ -413,6 +420,8 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 
 		setSession(null);
 		setStream([]);
+		setTotalEvents(0);
+		setLoadingEarlier(false);
 		setPendingRequests([]);
 		setQueuedInputs([]);
 		setQueuedInputEdit(null);
@@ -540,6 +549,33 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		},
 		[isArchivedView, navigate, refreshSessions, selectedId, sessionQuery],
 	);
+
+	const handleLoadEarlier = useCallback(async () => {
+		if (!selectedId || loadingEarlier || stream.length === 0) {
+			return;
+		}
+
+		const firstSequence = stream[0].sequence;
+		setLoadingEarlier(true);
+
+		try {
+			const detail = await fetchSessionDetail(selectedId, { before: firstSequence });
+			const scrollElement = scrollRef.current;
+			const previousScrollHeight = scrollElement?.scrollHeight ?? 0;
+
+			setStream((previous) => [...detail.events, ...previous]);
+
+			requestAnimationFrame(() => {
+				if (scrollElement) {
+					scrollElement.scrollTop = scrollElement.scrollHeight - previousScrollHeight;
+				}
+			});
+		} catch (error) {
+			console.error("Failed to load earlier events:", error);
+		} finally {
+			setLoadingEarlier(false);
+		}
+	}, [loadingEarlier, selectedId, stream]);
 
 	const handleRespond = useCallback(async (requestId: string, payload: RequestResponsePayload) => {
 		setPendingRequests((previous) => previous.filter((request) => request.id !== requestId));
@@ -1203,6 +1239,19 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 								</div>
 							) : sessionView ? (
 								<div className="mx-auto max-w-[70rem]">
+									{totalEvents > stream.length && (
+										<div className="mb-4 flex justify-center">
+											<button
+												type="button"
+												onClick={() => void handleLoadEarlier()}
+												disabled={loadingEarlier}
+												className="flex items-center gap-1.5 rounded-md border border-foreground/10 bg-card/90 px-3 py-1.5 text-[11px] text-muted-foreground/88 transition hover:border-foreground/18 hover:text-foreground disabled:opacity-40"
+											>
+												{loadingEarlier ? <Loader2 className="size-3 animate-spin" /> : null}
+												Load earlier messages
+											</button>
+										</div>
+									)}
 									{getStatusMessage(sessionView) && (
 										<div className="mb-5 rounded-lg border border-foreground/10 bg-card/90 px-4 py-3 text-[11px] text-muted-foreground/88">
 											{getStatusMessage(sessionView)}
