@@ -208,6 +208,44 @@ async function getUpgradeBinaryPath() {
 	throw new Error("upgrade requires an installed shelleport binary");
 }
 
+function formatByteCount(bytes: number) {
+	if (bytes < 1024 * 1024) {
+		return `${(bytes / 1024).toFixed(1)} KB`;
+	}
+
+	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function renderDownloadProgress(label: string, downloadedBytes: number, totalBytes: number) {
+	if (process.stderr.isTTY) {
+		if (!totalBytes) {
+			process.stderr.write(`\r${label} ${formatByteCount(downloadedBytes)}`);
+			return;
+		}
+
+		const width = 28;
+		const ratio = Math.min(downloadedBytes / totalBytes, 1);
+		const filled = Math.round(width * ratio);
+		const bar = `${"=".repeat(filled)}${" ".repeat(width - filled)}`;
+		const percent = String(Math.round(ratio * 100)).padStart(3, " ");
+
+		process.stderr.write(
+			`\r${label} [${bar}] ${percent}% ${formatByteCount(downloadedBytes)} / ${formatByteCount(totalBytes)}`,
+		);
+		return;
+	}
+
+	if (!totalBytes || downloadedBytes >= totalBytes) {
+		console.log(`${label} ${formatByteCount(downloadedBytes)}`);
+	}
+}
+
+function finishDownloadProgress() {
+	if (process.stderr.isTTY) {
+		process.stderr.write("\n");
+	}
+}
+
 function requireRootForSystemPaths(targetPath: string) {
 	if (
 		targetPath.startsWith("/usr/local/") &&
@@ -215,6 +253,57 @@ function requireRootForSystemPaths(targetPath: string) {
 		process.getuid() !== 0
 	) {
 		throw new Error(`upgrade requires sudo to modify ${targetPath}`);
+	}
+}
+
+async function downloadFile(url: string, destinationPath: string, label: string) {
+	const response = await fetch(url, {
+		headers: {
+			"user-agent": "shelleport-upgrade",
+		},
+	});
+
+	if (!response.ok || !response.body) {
+		throw new Error(`Download failed: ${response.status} ${response.statusText}`);
+	}
+
+	const totalBytes = Number(response.headers.get("content-length") ?? "0");
+	const writer = Bun.file(destinationPath).writer({ highWaterMark: 1024 * 1024 });
+	const reader = response.body.getReader();
+	let downloadedBytes = 0;
+	let lastRenderTime = 0;
+
+	try {
+		while (true) {
+			const { done, value } = await reader.read();
+
+			if (done) {
+				break;
+			}
+
+			if (!value) {
+				continue;
+			}
+
+			downloadedBytes += value.byteLength;
+			await writer.write(value);
+
+			const now = Date.now();
+			if (now - lastRenderTime >= 100) {
+				renderDownloadProgress(label, downloadedBytes, totalBytes);
+				lastRenderTime = now;
+			}
+		}
+
+		renderDownloadProgress(label, downloadedBytes, totalBytes);
+		finishDownloadProgress();
+		await writer.end();
+	} catch (error) {
+		try {
+			await writer.end();
+		} catch {}
+
+		throw error;
 	}
 }
 
@@ -226,32 +315,12 @@ async function installReleaseBinary(version: string, targetPath: string) {
 	const checksumsPath = join(normalizedTmpDir, "SHASUMS256.txt");
 
 	try {
-		console.log(`Downloading ${assetName}...`);
-		const binaryResponse = await fetch(getReleaseUrl(version, assetName), {
-			headers: {
-				"user-agent": "shelleport-upgrade",
-			},
-		});
-
-		if (!binaryResponse.ok || !binaryResponse.body) {
-			throw new Error(`Download failed: ${binaryResponse.status} ${binaryResponse.statusText}`);
-		}
-
-		await Bun.write(downloadPath, binaryResponse);
-
-		const checksumsResponse = await fetch(getReleaseUrl(version, "SHASUMS256.txt"), {
-			headers: {
-				"user-agent": "shelleport-upgrade",
-			},
-		});
-
-		if (!checksumsResponse.ok) {
-			throw new Error(
-				`Checksum download failed: ${checksumsResponse.status} ${checksumsResponse.statusText}`,
-			);
-		}
-
-		await Bun.write(checksumsPath, await checksumsResponse.text());
+		await downloadFile(getReleaseUrl(version, assetName), downloadPath, `Downloading ${assetName}`);
+		await downloadFile(
+			getReleaseUrl(version, "SHASUMS256.txt"),
+			checksumsPath,
+			"Downloading checksums",
+		);
 		console.log(`Verifying ${assetName}...`);
 
 		const expectedLine =
