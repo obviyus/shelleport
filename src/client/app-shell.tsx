@@ -70,6 +70,7 @@ import {
 	formatSessionLimitLabel,
 	formatSessionLimitReset,
 	formatSessionLimitUsage,
+	getSessionModelLabel,
 	getSessionUsageBadges,
 	getSidebarMeta,
 	getSidebarTitle,
@@ -209,6 +210,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		};
 	}, [sessions]);
 	const grouped = useMemo(() => groupStream(stream), [stream]);
+	const sessionModelLabel = useMemo(() => getSessionModelLabel(sessionView), [sessionView]);
 	const usageBadges = useMemo(
 		() => getSessionUsageBadges(sessionView, stream, now),
 		[now, sessionView, stream],
@@ -1136,6 +1138,14 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 									{permissionModeLabel && (
 										<span className="hidden rounded border border-foreground/12 px-2 py-1 text-[9px] uppercase tracking-[0.08em] text-muted-foreground/80 md:inline-flex">
 											{permissionModeLabel}
+										</span>
+									)}
+									{sessionModelLabel && (
+										<span
+											className="hidden max-w-[18rem] truncate rounded border border-foreground/12 px-2 py-1 text-[9px] uppercase tracking-[0.08em] text-muted-foreground/80 lg:inline-flex"
+											title={sessionView?.usage?.model ?? sessionModelLabel}
+										>
+											{sessionModelLabel}
 										</span>
 									)}
 									{usageBadges.map((badge) => (

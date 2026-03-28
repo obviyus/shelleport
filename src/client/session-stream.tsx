@@ -662,13 +662,30 @@ export function getSidebarMeta(session: HostSession, now: number) {
 	return session.cwd;
 }
 
+function formatSessionModelLabel(model: string) {
+	return model
+		.replace(/\u001B\[[0-9;]*m/g, "")
+		.replace(/\[[0-9;]+m\]$/g, "")
+		.trim();
+}
+
+export function getSessionModelLabel(session: Pick<HostSession, "usage"> | null) {
+	const model = session?.usage?.model;
+
+	if (!model) {
+		return null;
+	}
+
+	const label = formatSessionModelLabel(model);
+	return label.length > 0 ? label : model;
+}
+
 export function getSessionUsageBadges(
 	session: Pick<HostSession, "usage"> | null,
-	entries: HostEvent[],
-	now: number,
+	_entries: HostEvent[],
+	_now: number,
 ) {
 	const badges: string[] = [];
-	const { limit } = getUsageSnapshot(entries);
 	const usage = session?.usage ?? null;
 
 	if (usage) {
@@ -686,13 +703,6 @@ export function getSessionUsageBadges(
 		if (usage.costUsd !== null) {
 			badges.push(formatCostUsd(usage.costUsd));
 		}
-	}
-
-	if (limit?.window && limit.resetsAt !== null) {
-		const prefix = limit.status && limit.status !== "allowed" ? `${limit.status} ` : "";
-		badges.push(
-			`${prefix}${formatLimitWindow(limit.window)} resets in ${formatResetCountdown(now, limit.resetsAt)}`,
-		);
 	}
 
 	return badges;
