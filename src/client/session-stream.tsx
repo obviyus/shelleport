@@ -1,5 +1,5 @@
-import { ChevronRight, FileIcon, Loader2, X } from "lucide-react";
-import { Suspense, lazy, useState } from "react";
+import { Check, ChevronRight, Copy, FileIcon, Loader2, X } from "lucide-react";
+import { Suspense, lazy, useCallback, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type {
@@ -98,11 +98,26 @@ function MarkdownMessage({ text }: { text: string }) {
 						</code>
 					);
 				},
-				pre: ({ children }) => (
-					<pre className="my-3 overflow-x-auto rounded-md border border-foreground/10 bg-card/90 px-3 py-2.5 text-[11px] leading-[1.7] text-foreground/86">
-						{children}
-					</pre>
-				),
+				pre: ({ children, node }) => {
+					const codeText =
+						node?.children?.[0]?.type === "element" &&
+						node.children[0].tagName === "code" &&
+						node.children[0].children?.[0]?.type === "text"
+							? node.children[0].children[0].value
+							: "";
+					return (
+						<div className="group/pre relative my-3">
+							<pre className="overflow-x-auto rounded-md border border-foreground/10 bg-card/90 px-3 py-2.5 text-[11px] leading-[1.7] text-foreground/86">
+								{children}
+							</pre>
+							{codeText.length > 0 && (
+								<div className="sticky bottom-2 float-right -mt-8 mr-1.5 opacity-0 transition group-hover/pre:opacity-100">
+									<CopyButton text={codeText} className="size-7 bg-card/95 shadow-sm" />
+								</div>
+							)}
+						</div>
+					);
+				},
 				table: ({ children }) => (
 					<div className="my-3 overflow-x-auto rounded-md border border-foreground/10">
 						<table className="w-full min-w-[20rem] border-collapse text-left text-[11px]">
@@ -132,6 +147,44 @@ function MarkdownMessage({ text }: { text: string }) {
 		>
 			{text}
 		</ReactMarkdown>
+	);
+}
+
+function copyToClipboard(text: string) {
+	if (navigator.clipboard) {
+		return navigator.clipboard.writeText(text);
+	}
+
+	const textarea = document.createElement("textarea");
+	textarea.value = text;
+	textarea.style.position = "fixed";
+	textarea.style.opacity = "0";
+	document.body.appendChild(textarea);
+	textarea.select();
+	document.execCommand("copy");
+	document.body.removeChild(textarea);
+	return Promise.resolve();
+}
+
+function CopyButton({ text, className }: { text: string; className?: string }) {
+	const [copied, setCopied] = useState(false);
+
+	const handleCopy = useCallback(() => {
+		void copyToClipboard(text).then(() => {
+			setCopied(true);
+			setTimeout(() => setCopied(false), 1500);
+		});
+	}, [text]);
+
+	return (
+		<button
+			type="button"
+			onClick={handleCopy}
+			className={`flex items-center justify-center rounded border border-foreground/10 text-muted-foreground/80 transition hover:border-foreground/18 hover:text-foreground ${className ?? "size-6"}`}
+			title="Copy to clipboard"
+		>
+			{copied ? <Check className="size-3" /> : <Copy className="size-3" />}
+		</button>
 	);
 }
 
@@ -994,13 +1047,21 @@ function ToolCard({ call, result }: { call: HostEvent; result: HostEvent | null 
 						<div className="overflow-hidden rounded-md border border-foreground/10 bg-card/90">
 							<div className="flex items-center justify-between border-b border-foreground/12 px-3 py-2 text-[10px] text-muted-foreground/80">
 								<span>{fileName}</span>
-								{strippedRead && strippedRead.matched > 0 && (
-									<span>starts at line {strippedRead.firstLineNumber}</span>
-								)}
+								<div className="flex items-center gap-2">
+									{strippedRead && strippedRead.matched > 0 && (
+										<span>starts at line {strippedRead.firstLineNumber}</span>
+									)}
+									<CopyButton text={output} className="size-5" />
+								</div>
 							</div>
-							<div className="tool-code-view">
+							<div className="group/tool-code tool-code-view relative">
 								{shouldRenderCode ? (
-									<LazyCodeFile content={content} fileName={fileName} language={language} />
+									<>
+										<LazyCodeFile content={content} fileName={fileName} language={language} />
+										<div className="sticky bottom-2 float-right -mt-8 mr-1.5 opacity-0 transition group-hover/tool-code:opacity-100">
+											<CopyButton text={output} className="size-7 bg-card/95 shadow-sm" />
+										</div>
+									</>
 								) : (
 									<div className="px-3 py-2 text-[11px] text-muted-foreground/80">
 										Open to load preview
