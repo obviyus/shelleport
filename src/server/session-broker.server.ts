@@ -1,3 +1,5 @@
+import { join } from "node:path";
+import { rm } from "node:fs/promises";
 import type {
 	CreateSessionInput,
 	HostEvent,
@@ -685,5 +687,27 @@ export const sessionBroker = {
 		void consumeProviderRun(updatedSession.id, { prompt: resumePrompt, attachments: [] }, "resume");
 
 		return resolvedRequest;
+	},
+	async deleteSession(sessionId: string) {
+		const session = sessionStore.getSession(sessionId);
+
+		if (!session) {
+			throw new ApiError(404, "session_not_found", `Unknown session: ${sessionId}`);
+		}
+
+		if (!session.archived) {
+			throw new ApiError(409, "session_not_archived", "Session must be archived before deleting");
+		}
+
+		if (activeRuns.has(sessionId)) {
+			throw new ApiError(409, "session_running", "Cannot delete a running session");
+		}
+
+		const uploadDir = join(session.cwd, ".shelleport", "uploads", sessionId);
+		await rm(uploadDir, { recursive: true, force: true }).catch(() => {});
+
+		sessionStore.deleteSession(sessionId);
+
+		return session;
 	},
 };
