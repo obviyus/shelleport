@@ -189,12 +189,10 @@ async function readSessionInput(request: Request, sessionId: string): Promise<Se
 		throw new ApiError(404, "session_not_found", "Session not found");
 	}
 
-	const attachmentEntries = formData.getAll("attachments");
-	const imageEntries = formData.getAll("images");
 	const attachments = await storeSessionAttachments(
 		sessionId,
 		session.cwd,
-		attachmentEntries.length > 0 ? attachmentEntries : imageEntries,
+		formData.getAll("attachments"),
 	);
 	return {
 		prompt: typeof prompt === "string" ? prompt : "",

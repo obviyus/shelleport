@@ -13,9 +13,8 @@ import type {
 
 export type DraftAttachment = {
 	name: string;
-	url: string;
+	previewUrl: string | null;
 	file: File;
-	isImage: boolean;
 };
 
 type LimitSnapshot = SessionLimit & {
@@ -574,8 +573,7 @@ async function normalizeImageFile(file: File): Promise<DraftAttachment> {
 		return {
 			file: normalizedFile,
 			name: normalizedFile.name,
-			url: URL.createObjectURL(normalizedFile),
-			isImage: true,
+			previewUrl: URL.createObjectURL(normalizedFile),
 		};
 	} finally {
 		URL.revokeObjectURL(objectUrl);
@@ -590,8 +588,7 @@ export async function normalizeDraftAttachment(file: File): Promise<DraftAttachm
 	return {
 		file,
 		name: file.name,
-		url: "",
-		isImage: false,
+		previewUrl: null,
 	};
 }
 
@@ -1092,10 +1089,14 @@ export function DraftAttachmentPreview({
 	attachment: DraftAttachment;
 	onRemove: () => void;
 }) {
-	if (attachment.isImage) {
+	if (attachment.previewUrl) {
 		return (
 			<div className="relative overflow-hidden rounded-md border border-foreground/10 bg-background">
-				<img src={attachment.url} alt={attachment.name} className="h-20 w-20 object-cover" />
+				<img
+					src={attachment.previewUrl}
+					alt={attachment.name}
+					className="h-20 w-20 object-cover"
+				/>
 				<button
 					type="button"
 					onClick={onRemove}

@@ -1776,67 +1776,6 @@ describe("handleApiRequest", () => {
 		await reader.cancel();
 	});
 
-	test("accepts legacy images form field for backwards compatibility", async () => {
-		const createResponse = await handleApiRequest(
-			new Request("http://localhost/api/sessions", {
-				method: "POST",
-				headers: {
-					...authHeader,
-					"content-type": "application/json",
-				},
-				body: JSON.stringify({
-					provider: "claude",
-					cwd: testRoot,
-					title: "Legacy images",
-				}),
-			}),
-		);
-		expect(createResponse.status).toBe(201);
-		const createJson = await readJson<{ session: { id: string } }>(createResponse);
-		const sessionId = createJson.session.id;
-
-		const eventsResponse = await handleApiRequest(
-			new Request(`http://localhost/api/sessions/${sessionId}/events`, {
-				headers: authHeader,
-			}),
-		);
-		const reader = eventsResponse.body?.getReader();
-
-		if (!reader) {
-			throw new Error("Missing SSE body");
-		}
-
-		const imageBytes = await Bun.file(
-			join(process.cwd(), "public/assets/preview.jpg"),
-		).arrayBuffer();
-		const formData = new FormData();
-		formData.set("prompt", "Legacy upload.");
-		formData.append("images", new File([imageBytes], "old.jpg", { type: "image/jpeg" }));
-
-		const inputResponse = await handleApiRequest(
-			new Request(`http://localhost/api/sessions/${sessionId}/input`, {
-				method: "POST",
-				headers: authHeader,
-				body: formData,
-			}),
-		);
-		expect(inputResponse.status).toBe(202);
-
-		const streamState = { buffer: "" };
-		const textMessage = await waitForMessage(
-			reader,
-			streamState,
-			(message) =>
-				message.type === "event" &&
-				message.payload.kind === "text" &&
-				typeof message.payload.data.text === "string" &&
-				message.payload.data.text.includes(`.shelleport/uploads/${sessionId}/`),
-		);
-		expect(textMessage.type).toBe("event");
-
-		await reader.cancel();
-	});
-
 	test("rejects missing auth", async () => {
 		const response = await handleApiRequest(
 			new Request("http://localhost/api/sessions", {

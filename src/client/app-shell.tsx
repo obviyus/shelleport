@@ -248,6 +248,12 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		});
 	}
 
+	function releaseDraftAttachment(attachment: DraftAttachment) {
+		if (attachment.previewUrl) {
+			URL.revokeObjectURL(attachment.previewUrl);
+		}
+	}
+
 	function mergeClaudeLimit(previous: SessionLimit[], next: SessionLimit) {
 		if (!next.window) {
 			return previous;
@@ -324,9 +330,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		setStreamState("connected");
 		setDraftAttachments((previous) => {
 			for (const attachment of previous) {
-				if (attachment.isImage) {
-					URL.revokeObjectURL(attachment.url);
-				}
+				releaseDraftAttachment(attachment);
 			}
 
 			return [];
@@ -430,9 +434,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	useEffect(() => {
 		return () => {
 			for (const attachment of draftAttachmentsRef.current) {
-				if (attachment.isImage) {
-					URL.revokeObjectURL(attachment.url);
-				}
+				releaseDraftAttachment(attachment);
 			}
 		};
 	}, []);
@@ -1249,17 +1251,15 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 												<div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
 													{draftAttachments.map((attachment, index) => (
 														<DraftAttachmentPreview
-															key={
-																attachment.isImage ? attachment.url : `${attachment.name}-${index}`
-															}
+															key={attachment.previewUrl ?? `${attachment.name}-${index}`}
 															attachment={attachment}
 															onRemove={() =>
 																setDraftAttachments((previous) => {
 																	const next = [...previous];
 																	const [removed] = next.splice(index, 1);
 
-																	if (removed?.isImage) {
-																		URL.revokeObjectURL(removed.url);
+																	if (removed) {
+																		releaseDraftAttachment(removed);
 																	}
 
 																	return next;
