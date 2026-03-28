@@ -312,25 +312,33 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			return;
 		}
 
-		if (session?.id !== selectedId) {
-			setSession(selectedSession);
-			setStream([]);
-			setPendingRequests([]);
-			setQueuedInputs([]);
-			setQueuedInputEdit(null);
-			setBusyQueuedInputId(null);
-			setStreamState("connected");
-			setDraftImages((previous) => {
-				for (const image of previous) {
-					URL.revokeObjectURL(image.url);
-				}
+		if (session?.id === selectedId) {
+			return;
+		}
 
-				return [];
-			});
-
-			if (fileInputRef.current) {
-				fileInputRef.current.value = "";
+		setSession(selectedSession);
+		setStream([]);
+		setPendingRequests([]);
+		setQueuedInputs([]);
+		setQueuedInputEdit(null);
+		setBusyQueuedInputId(null);
+		setStreamState("connected");
+		setDraftImages((previous) => {
+			for (const image of previous) {
+				URL.revokeObjectURL(image.url);
 			}
+
+			return [];
+		});
+
+		if (fileInputRef.current) {
+			fileInputRef.current.value = "";
+		}
+	}, [selectedId, selectedSession, session?.id]);
+
+	useEffect(() => {
+		if (!selectedId) {
+			return;
 		}
 
 		const controller = connectSSE(
@@ -391,7 +399,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		);
 
 		return () => controller.abort();
-	}, [replaceSession, selectedId, selectedSession, session?.id]);
+	}, [replaceSession, selectedId]);
 
 	useEffect(() => {
 		if (selectedId) {
