@@ -93,10 +93,16 @@ export function LoginPage() {
 				<div className="mt-4 rounded-md border border-border bg-card/80 px-4 py-3 text-[11px] leading-[1.7] text-muted-foreground/78">
 					<p>The first launch prints the token once in the terminal.</p>
 					<p className="mt-1">
-						Need another one? Run <code className="rounded border border-border bg-background px-1 py-0.5 text-foreground/86">shelleport token</code>
+						Need another one? Run{" "}
+						<code className="rounded border border-border bg-background px-1 py-0.5 text-foreground/86">
+							shelleport token
+						</code>
 					</p>
 					<p className="mt-1">
-						Need a setup check? Run <code className="rounded border border-border bg-background px-1 py-0.5 text-foreground/86">shelleport doctor</code>
+						Need a setup check? Run{" "}
+						<code className="rounded border border-border bg-background px-1 py-0.5 text-foreground/86">
+							shelleport doctor
+						</code>
 					</p>
 				</div>
 

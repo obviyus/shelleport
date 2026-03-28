@@ -310,11 +310,7 @@ function sessionIdFromSegments(segments: string[]) {
 	return sessionId;
 }
 
-function readPositiveIntegerQueryParam(
-	url: URL,
-	name: string,
-	options?: { max?: number },
-) {
+function readPositiveIntegerQueryParam(url: URL, name: string, options?: { max?: number }) {
 	const value = url.searchParams.get(name);
 
 	if (value === null) {

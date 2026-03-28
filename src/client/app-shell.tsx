@@ -1725,7 +1725,9 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 								<div className="mx-auto max-w-[70rem] rounded-lg border border-foreground/10 bg-card/88 px-4 py-4">
 									<div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
 										<div>
-											<h2 className="text-xs font-medium text-foreground">Before your first session</h2>
+											<h2 className="text-xs font-medium text-foreground">
+												Before your first session
+											</h2>
 											<p className="mt-1 text-[11px] leading-[1.7] text-muted-foreground/82">
 												Check Claude readiness once, then pick a project directory below.
 											</p>

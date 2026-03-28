@@ -905,7 +905,9 @@ async function* streamClaudeProcess(
 		}
 
 		if (buffer.trim().length > 0) {
-			for (const event of emitClaudeStreamLine(JSON.parse(buffer.trim()) as Record<string, unknown>)) {
+			for (const event of emitClaudeStreamLine(
+				JSON.parse(buffer.trim()) as Record<string, unknown>,
+			)) {
 				yield event;
 			}
 		}
