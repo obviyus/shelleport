@@ -7,6 +7,7 @@ All notable changes to shelleport are documented here.
 ### Fixed
 
 - Session chats no longer render Claude rate-limit updates inline when the same data already appears in the limits panel (#6) (thanks @kesava500)
+- Invalid login tokens now stay on the login screen and show the error instead of reloading the page immediately (#7) (thanks @kesava500)
 
 ## 0.0.22 - 2026-03-28
 

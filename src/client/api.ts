@@ -75,6 +75,7 @@ export function login(token: string) {
 	return request<{ authenticated: true }>("/api/auth/session", {
 		method: "POST",
 		body: JSON.stringify({ token }),
+		redirectOnUnauthorized: false,
 	});
 }
 
