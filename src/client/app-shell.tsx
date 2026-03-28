@@ -21,6 +21,7 @@ import {
 	useCallback,
 	useDeferredValue,
 	useEffect,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
@@ -179,6 +180,12 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	);
 	const [busyQueuedInputId, setBusyQueuedInputId] = useState<string | null>(null);
 	const deferredSessionQuery = useDeferredValue(sessionQuery);
+	const selectedSession = useMemo(
+		() => (selectedId ? sessions.find((candidate) => candidate.id === selectedId) ?? null : null),
+		[selectedId, sessions],
+	);
+	const sessionView = session?.id === selectedId ? session : selectedSession;
+	const isSessionPending = selectedId !== null && sessionView !== null && session?.id !== selectedId;
 	const { activeSessions, archivedSessions } = useMemo(() => {
 		const active: HostSession[] = [];
 		const archived: HostSession[] = [];
@@ -199,8 +206,8 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	}, [sessions]);
 	const grouped = useMemo(() => groupStream(stream), [stream]);
 	const usageBadges = useMemo(
-		() => getSessionUsageBadges(session, stream, now),
-		[now, session, stream],
+		() => getSessionUsageBadges(sessionView, stream, now),
+		[now, sessionView, stream],
 	);
 	const claudeLimits = useMemo(
 		() => orderSessionLimits(providerLimits.claude),
@@ -225,8 +232,8 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		route.kind === "home" &&
 		typeof window !== "undefined";
 	const showsClaudeBypassWarning = showsClaudeLauncherWarning && !hasDismissedClaudeBypassWarning;
-	const isRenaming = renameState !== null && renameState.sessionId === session?.id;
-	const renameDraft = isRenaming ? renameState.title : (session?.title ?? "");
+	const isRenaming = renameState !== null && renameState.sessionId === sessionView?.id;
+	const renameDraft = isRenaming ? renameState.title : (sessionView?.title ?? "");
 	const editingQueuedInputId = queuedInputEdit?.id ?? null;
 	const queuedInputDraft = queuedInputEdit?.prompt ?? "";
 
@@ -296,18 +303,18 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		};
 	}, [deferredSessionQuery, refreshSessions]);
 
-	useEffect(() => {
+	useLayoutEffect(() => {
 		if (!selectedId) {
 			return;
 		}
 
 		if (session?.id !== selectedId) {
+			setSession(selectedSession);
 			setStream([]);
 			setPendingRequests([]);
 			setQueuedInputs([]);
 			setQueuedInputEdit(null);
 			setBusyQueuedInputId(null);
-			setSession(null);
 			setStreamState("connected");
 			setDraftImages((previous) => {
 				for (const image of previous) {
@@ -380,7 +387,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		);
 
 		return () => controller.abort();
-	}, [replaceSession, selectedId, session?.id]);
+	}, [replaceSession, selectedId, selectedSession, session?.id]);
 
 	useEffect(() => {
 		if (selectedId) {
@@ -646,17 +653,17 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		[addDraftImages],
 	);
 
-	const sessionProvider = session
-		? providers.find((provider) => provider.id === session.provider)
+	const sessionProvider = sessionView
+		? providers.find((provider) => provider.id === sessionView.provider)
 		: null;
 	const canAttachImages = sessionProvider?.capabilities.supportsImages === true;
 	const isSessionBusy =
-		session?.status === "running" ||
-		session?.status === "retrying" ||
-		session?.status === "waiting";
+		sessionView?.status === "running" ||
+		sessionView?.status === "retrying" ||
+		sessionView?.status === "waiting";
 	const queuedInputCount = queuedInputs.length;
 	const canSend = !!selectedId && (prompt.trim().length > 0 || draftImages.length > 0);
-	const permissionModeLabel = session ? formatPermissionModeLabel(session) : null;
+	const permissionModeLabel = sessionView ? formatPermissionModeLabel(sessionView) : null;
 
 	function handleScroll() {
 		const element = scrollRef.current;
@@ -1016,7 +1023,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 							</div>
 						</div>
 					</div>
-				) : selectedId && session ? (
+				) : selectedId && sessionView ? (
 					<>
 						<header className="shrink-0 border-b border-border bg-background/72 px-3 md:px-5 py-2.5 backdrop-blur-sm">
 							<div className="mx-auto flex max-w-[70rem] items-center justify-between gap-2 md:gap-4">
@@ -1029,14 +1036,14 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 									<Menu className="size-5" />
 								</button>
 								<div className="flex min-w-0 flex-1 items-center gap-2 md:gap-3">
-									{session.pinned && <Pin className="size-3 shrink-0 text-foreground/82" />}
+									{sessionView.pinned && <Pin className="size-3 shrink-0 text-foreground/82" />}
 									{isRenaming ? (
 										<div className="flex min-w-0 items-center gap-1.5">
 											<input
 												value={renameDraft}
 												onChange={(event) =>
 													setRenameState({
-														sessionId: session.id,
+														sessionId: sessionView.id,
 														title: event.target.value,
 													})
 												}
@@ -1076,12 +1083,12 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 									) : (
 										<>
 											<h1 className="truncate text-xs font-medium text-foreground">
-												{session.title}
+												{sessionView.title}
 											</h1>
 											<button
 												type="button"
 												onClick={() =>
-													setRenameState({ sessionId: session.id, title: session.title })
+													setRenameState({ sessionId: sessionView.id, title: sessionView.title })
 												}
 												className="flex size-10 md:size-5 items-center justify-center rounded text-muted-foreground/80 transition hover:bg-accent hover:text-foreground"
 												title="Rename chat"
@@ -1091,17 +1098,17 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 										</>
 									)}
 									<span className="hidden text-[10px] text-muted-foreground/65 lg:inline">
-										{session.cwd}
+										{sessionView.cwd}
 									</span>
 								</div>
 								<div className="flex shrink-0 items-center gap-1.5">
 									<div className="flex items-center gap-1.5 rounded border border-foreground/12 px-2 py-1">
-										<StatusDot status={session.status} />
+										<StatusDot status={sessionView.status} />
 										<span className="hidden sm:inline text-[10px] text-muted-foreground/80">
-											{formatStatus(session, now)}
+											{formatStatus(sessionView, now)}
 										</span>
 									</div>
-									{streamState === "reconnecting" && (
+									{!isSessionPending && streamState === "reconnecting" && (
 										<span className="rounded border border-foreground/10 px-2 py-1 text-[9px] uppercase tracking-[0.08em] text-muted-foreground/80">
 											Reconnecting
 										</span>
@@ -1121,17 +1128,17 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 									))}
 									<button
 										type="button"
-										onClick={() => void handlePinned(session.id, !session.pinned)}
+										onClick={() => void handlePinned(sessionView.id, !sessionView.pinned)}
 										className={`flex items-center justify-center gap-1 rounded border px-2 py-1 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-[10px] transition ${
-											session.pinned
+											sessionView.pinned
 												? "border-foreground/15 bg-accent text-foreground"
 												: "border-foreground/12 text-muted-foreground/80 hover:border-foreground/18 hover:text-foreground"
 										}`}
 									>
 										<Pin className="size-3 md:size-2.5" />
-										<span className="hidden md:inline">{session.pinned ? "Pinned" : "Pin"}</span>
+										<span className="hidden md:inline">{sessionView.pinned ? "Pinned" : "Pin"}</span>
 									</button>
-									{(session.status === "running" || session.status === "retrying") && (
+									{(sessionView.status === "running" || sessionView.status === "retrying") && (
 										<button
 											type="button"
 											onClick={() => void handleInterrupt()}
@@ -1150,17 +1157,21 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 							onScroll={handleScroll}
 							className="flex-1 overflow-y-auto px-3 md:px-6 py-4 md:py-6"
 						>
-							{grouped.length === 0 &&
-							session.status !== "running" &&
-							session.status !== "retrying" ? (
+							{isSessionPending ? (
+								<div className="flex h-full items-center justify-center">
+									<Loader2 className="size-4 animate-spin text-muted-foreground/80" />
+								</div>
+							) : grouped.length === 0 &&
+							  sessionView.status !== "running" &&
+							  sessionView.status !== "retrying" ? (
 								<div className="flex h-full items-center justify-center">
 									<p className="text-xs text-muted-foreground/80">Send a message to start</p>
 								</div>
 							) : (
 								<div className="mx-auto max-w-[70rem]">
-									{getStatusMessage(session) && (
+									{getStatusMessage(sessionView) && (
 										<div className="mb-5 rounded-lg border border-foreground/10 bg-card/90 px-4 py-3 text-[11px] text-muted-foreground/88">
-											{getStatusMessage(session)}
+											{getStatusMessage(sessionView)}
 										</div>
 									)}
 									{grouped.map((group) => (
@@ -1175,7 +1186,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											group={group}
 										/>
 									))}
-									{(session.status === "running" || session.status === "retrying") && (
+									{(sessionView.status === "running" || sessionView.status === "retrying") && (
 										<div className="animate-thinking mt-1 flex gap-1 py-2">
 											<span className="size-1 rounded-full bg-foreground" />
 											<span className="size-1 rounded-full bg-foreground" />
