@@ -300,6 +300,17 @@ async function consumeProviderRun(
 				session = updateSessionStatus(sessionId, "running") ?? session;
 			}
 
+			if (event.kind === "error" && activeRun.abortController.signal.aborted) {
+				const interruptedEvent = sessionStore.appendEvent(sessionId, {
+					kind: "system",
+					summary: "Session interrupted",
+					data: {},
+					rawProviderEvent: null,
+				});
+				publishEvent(interruptedEvent);
+				continue;
+			}
+
 			const storedEvent = sessionStore.appendEvent(sessionId, event);
 
 			const limit = readSessionLimit(event.data.limit);
