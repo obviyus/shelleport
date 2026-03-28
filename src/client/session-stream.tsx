@@ -778,6 +778,10 @@ function isRateLimitSystemEvent(event: HostEvent) {
 	return event.kind === "system" && event.data.limit != null;
 }
 
+function shouldSkipGroupedEntry(event: HostEvent) {
+	return event.kind === "tool-result" || isRateLimitSystemEvent(event);
+}
+
 export function groupStream(entries: HostEvent[]): GroupedEntry[] {
 	const grouped: GroupedEntry[] = [];
 	const consumedResultIndexes = new Set<number>();
@@ -833,7 +837,7 @@ export function groupStream(entries: HostEvent[]): GroupedEntry[] {
 			continue;
 		}
 
-		if (entry.kind === "tool-result") {
+		if (shouldSkipGroupedEntry(entry)) {
 			continue;
 		}
 
@@ -846,10 +850,6 @@ export function groupStream(entries: HostEvent[]): GroupedEntry[] {
 			}
 
 			grouped.push({ entries: run, type: "assistant-text-run" });
-			continue;
-		}
-
-		if (isRateLimitSystemEvent(entry)) {
 			continue;
 		}
 
