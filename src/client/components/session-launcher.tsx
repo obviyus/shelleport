@@ -64,6 +64,7 @@ function getPathName(path: string) {
 
 type DirectoryColumnProps = {
 	columnRef: (node: HTMLElement | null) => void;
+	currentPath: string;
 	isActiveColumn: boolean;
 	isFocusedColumn: boolean;
 	isLoading: boolean;
@@ -77,6 +78,7 @@ type DirectoryColumnProps = {
 
 function DirectoryColumn({
 	columnRef,
+	currentPath,
 	isActiveColumn,
 	isFocusedColumn,
 	isLoading,
@@ -113,7 +115,7 @@ function DirectoryColumn({
 	const effectiveActiveEntryPath =
 		activeEntryPath !== null && entries.some((entry) => entry.path === activeEntryPath)
 			? activeEntryPath
-			: (preferredEntryPath ?? entries[0]?.path ?? null);
+			: preferredEntryPath;
 	const activeEntryIndex =
 		effectiveActiveEntryPath === null
 			? -1
@@ -301,7 +303,9 @@ function DirectoryColumn({
 					entries.length > 0 ? (
 						<div className="space-y-1">
 							{entries.map((entry) => {
-								const isSelected = nextPath === entry.path;
+								const isInOpenPath = nextPath === entry.path;
+								const isCurrentSelection = entry.path === currentPath;
+								const isPathAncestor = isInOpenPath && !isCurrentSelection;
 								const isActive = effectiveActiveEntryPath === entry.path;
 								const isHovered = hoveredEntryPath === entry.path;
 								const isDirectory = entry.kind === "directory";
@@ -324,19 +328,21 @@ function DirectoryColumn({
 											setHoveredEntryPath((current) => (current === entry.path ? null : current))
 										}
 										role="option"
-										aria-selected={isSelected}
+										aria-selected={isInOpenPath}
 										style={{ contentVisibility: "auto", containIntrinsicSize: "36px" }}
 										className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-3 md:py-2 text-left text-[11px] transition ${
-											isFocusedColumn && isActive
+											isCurrentSelection
 												? "bg-foreground/88 text-background ring-1 ring-background/20 shadow-[0_10px_30px_oklch(1_0_0_/_0.08)]"
-												: isSelected
-													? "bg-foreground/10 text-foreground ring-1 ring-foreground/20"
-													: isHovered
-														? "bg-foreground/8 text-foreground"
-														: "text-foreground/84 hover:bg-foreground/8 hover:text-foreground"
-										} ${!isFocusedColumn && isActive ? "bg-foreground/14 text-foreground" : ""}`}
+												: isPathAncestor
+													? "bg-foreground/10 text-foreground ring-1 ring-foreground/16"
+													: isFocusedColumn && isActive
+														? "bg-foreground/14 text-foreground ring-1 ring-foreground/12"
+														: isHovered
+															? "bg-foreground/8 text-foreground"
+															: "text-foreground/84 hover:bg-foreground/8 hover:text-foreground"
+										} ${!isFocusedColumn && !isCurrentSelection && !isPathAncestor && isActive ? "bg-foreground/10 text-foreground" : ""}`}
 									>
-										{isSelected ? (
+										{isInOpenPath ? (
 											<FolderOpen aria-hidden="true" className="size-3.5 shrink-0" />
 										) : (
 											<Folder
@@ -741,6 +747,7 @@ export function SessionLauncher({
 								columnRef={(node) => {
 									columnRefs.current[path] = node;
 								}}
+								currentPath={currentPath}
 								isActiveColumn={isActiveColumn}
 								isFocusedColumn={path === activeColumnPath}
 								isLoading={isLoading}
