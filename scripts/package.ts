@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { basename, join } from "node:path";
-import { buildBrowser } from "./build";
+import { getBuildPlugins } from "./build";
 
 const packageJson = await Bun.file("package.json").json();
 const version = packageJson.version;
@@ -45,6 +45,7 @@ async function buildBinary(outputPath: string, bunTarget: Bun.Build.CompileTarge
 		},
 		entrypoints: ["./server.ts"],
 		minify: true,
+		plugins: await getBuildPlugins(),
 		target: "bun",
 	});
 
@@ -69,19 +70,12 @@ async function writeChecksums(files: string[], outputPath: string) {
 	await Bun.write(outputPath, `${lines.join("\n")}\n`);
 }
 
-async function prepareBrowserBuild() {
-	await Bun.$`rm -rf ./src/client/.generated`.quiet();
-	await Bun.$`mkdir -p ./src/client/.generated`.quiet();
-	await buildBrowser();
-}
-
 async function buildRelease() {
 	const releaseDir = "dist/release";
 	const binaries: string[] = [];
 
 	await Bun.$`rm -rf ${releaseDir}`.quiet();
 	await Bun.$`mkdir -p ${releaseDir}`.quiet();
-	await prepareBrowserBuild();
 
 	for (const target of releaseTargets) {
 		const outputPath = join(releaseDir, target.binaryName);
@@ -99,7 +93,6 @@ async function buildLocal() {
 	}
 
 	await Bun.$`rm -rf dist/shelleport`.quiet();
-	await prepareBrowserBuild();
 	await buildBinary("dist/shelleport", currentPlatformTarget.bunTarget);
 }
 
