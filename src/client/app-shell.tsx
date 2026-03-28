@@ -1300,11 +1300,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											</span>
 										</div>
 									)}
-									{!isSessionPending && streamState === "reconnecting" && (
-										<span className="rounded border border-foreground/10 px-2 py-1 text-[9px] uppercase tracking-[0.08em] text-muted-foreground/80">
-											Reconnecting
-										</span>
-									)}
+
 									{permissionModeLabel && (
 										<span className="hidden rounded border border-foreground/12 px-2 py-1 text-[9px] uppercase tracking-[0.08em] text-muted-foreground/80 md:inline-flex">
 											{permissionModeLabel}
@@ -1369,6 +1365,13 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 								</div>
 							</div>
 						</header>
+
+						{!isSessionPending && streamState === "reconnecting" && (
+							<div className="shrink-0 border-b border-amber-500/20 bg-amber-500/10 px-3 md:px-6 py-2 text-center text-[11px] text-amber-200/90">
+								<Loader2 className="mr-1.5 inline size-3 animate-spin align-[-2px]" />
+								Reconnecting to session stream…
+							</div>
+						)}
 
 						<div
 							ref={scrollRef}
