@@ -43,6 +43,7 @@ import {
 	controlSession,
 	createSession,
 	deleteQueuedInput,
+	deleteSession,
 	fetchProviders,
 	fetchSessions,
 	respondToRequest,
@@ -171,6 +172,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const [now, setNow] = useState(() => Date.now());
 	const [streamState, setStreamState] = useState<"connected" | "reconnecting">("connected");
 	const [archiveConfirmId, setArchiveConfirmId] = useState<string | null>(null);
+	const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 	const [renameState, setRenameState] = useState<{ sessionId: string; title: string } | null>(null);
 	const [sidebarOpen, setSidebarOpen] = useState(false);
 	const [sessionQuery, setSessionQuery] = useState("");
@@ -539,6 +541,23 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			}
 		},
 		[isArchivedView, navigate, refreshSessions, selectedId, sessionQuery],
+	);
+
+	const handleDelete = useCallback(
+		async (sessionId: string) => {
+			try {
+				await deleteSession(sessionId);
+				await refreshSessions(sessionQuery);
+				setDeleteConfirmId(null);
+
+				if (selectedId === sessionId) {
+					navigate("/archived");
+				}
+			} catch (error) {
+				console.error("Failed to delete session:", error);
+			}
+		},
+		[navigate, refreshSessions, selectedId, sessionQuery],
 	);
 
 	const handleRespond = useCallback(async (requestId: string, payload: RequestResponsePayload) => {
@@ -1004,6 +1023,11 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 										{archivedSessions.map((archivedSession) => (
 											<div
 												key={archivedSession.id}
+												onMouseLeave={() => {
+													if (deleteConfirmId === archivedSession.id) {
+														setDeleteConfirmId(null);
+													}
+												}}
 												className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 rounded-md border border-foreground/10 bg-card/90 px-3 py-3"
 											>
 												<div className="min-w-0">
@@ -1029,6 +1053,25 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 													>
 														<ArchiveRestore className="size-3" />
 														Unarchive
+													</button>
+													<button
+														type="button"
+														onClick={() => {
+															if (deleteConfirmId === archivedSession.id) {
+																void handleDelete(archivedSession.id);
+																return;
+															}
+
+															setDeleteConfirmId(archivedSession.id);
+														}}
+														className={`flex items-center gap-1.5 rounded border px-3 py-2.5 md:py-1.5 text-[11px] transition ${
+															deleteConfirmId === archivedSession.id
+																? "border-destructive/30 bg-destructive/14 text-destructive"
+																: "border-foreground/10 text-muted-foreground/88 hover:border-destructive/20 hover:text-destructive/80"
+														}`}
+													>
+														<Trash2 className="size-3" />
+														{deleteConfirmId === archivedSession.id ? "Confirm delete" : "Delete"}
 													</button>
 												</div>
 											</div>

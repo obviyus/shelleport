@@ -954,6 +954,86 @@ describe("handleApiRequest", () => {
 		).toBe(false);
 	});
 
+	test("rejects deleting sessions that are not archived", async () => {
+		const createResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "claude",
+					cwd: testRoot,
+					title: "Delete guard",
+				}),
+			}),
+		);
+		expect(createResponse.status).toBe(201);
+		const createJson = await readJson<{ session: { id: string } }>(createResponse);
+
+		const deleteResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${createJson.session.id}`, {
+				method: "DELETE",
+				headers: authHeader,
+			}),
+		);
+		expect(deleteResponse.status).toBe(409);
+		expect(await readJson<{ code: string }>(deleteResponse)).toMatchObject({
+			code: "session_not_archived",
+		});
+	});
+
+	test("deletes archived sessions and their upload directory", async () => {
+		const createResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "claude",
+					cwd: testRoot,
+					title: "Delete me",
+				}),
+			}),
+		);
+		expect(createResponse.status).toBe(201);
+		const createJson = await readJson<{ session: { id: string } }>(createResponse);
+		const sessionId = createJson.session.id;
+
+		const uploadDir = join(testRoot, ".shelleport", "uploads", sessionId);
+		const uploadPath = join(uploadDir, "notes.txt");
+		await Bun.$`mkdir -p ${uploadDir}`.quiet();
+		await Bun.write(uploadPath, "session upload");
+
+		const archiveResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}/archive`, {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({ archived: true }),
+			}),
+		);
+		expect(archiveResponse.status).toBe(200);
+
+		const deleteResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}`, {
+				method: "DELETE",
+				headers: authHeader,
+			}),
+		);
+		expect(deleteResponse.status).toBe(200);
+		expect(await readJson<{ session: { id: string } }>(deleteResponse)).toMatchObject({
+			session: { id: sessionId },
+		});
+		expect(sessionStore.getSession(sessionId)).toBeNull();
+		expect(await Bun.file(uploadPath).exists()).toBe(false);
+	});
+
 	test("renames and pins sessions", async () => {
 		const firstResponse = await handleApiRequest(
 			new Request("http://localhost/api/sessions", {
