@@ -753,6 +753,89 @@ describe("handleApiRequest", () => {
 		).toEqual(expect.arrayContaining(["Second prompt"]));
 	});
 
+	test("paginates session events from newest to oldest", async () => {
+		const session = sessionBroker.createSession({
+			provider: "claude",
+			cwd: testRoot,
+			permissionMode: "default",
+		});
+		if (!session) {
+			throw new Error("Expected session");
+		}
+
+		for (let index = 1; index <= 5; index += 1) {
+			sessionStore.appendEvent(session.id, {
+				kind: "text",
+				summary: `event ${index}`,
+				data: {
+					role: "assistant",
+					text: `event ${index}`,
+				},
+			});
+		}
+
+		const latestResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${session.id}?limit=2`, {
+				headers: authHeader,
+			}),
+		);
+		expect(latestResponse.status).toBe(200);
+		const latestDetail = await readJson<{
+			totalEvents: number;
+			events: Array<{
+				sequence: number;
+			}>;
+		}>(latestResponse);
+		expect(latestDetail.totalEvents).toBe(5);
+		expect(latestDetail.events.map((event) => event.sequence)).toEqual([4, 5]);
+
+		const olderResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${session.id}?before=4&limit=2`, {
+				headers: authHeader,
+			}),
+		);
+		expect(olderResponse.status).toBe(200);
+		const olderDetail = await readJson<{
+			totalEvents: number;
+			events: Array<{
+				sequence: number;
+			}>;
+		}>(olderResponse);
+		expect(olderDetail.totalEvents).toBe(5);
+		expect(olderDetail.events.map((event) => event.sequence)).toEqual([2, 3]);
+	});
+
+	test("rejects invalid event pagination parameters", async () => {
+		const session = sessionBroker.createSession({
+			provider: "claude",
+			cwd: testRoot,
+			permissionMode: "default",
+		});
+		if (!session) {
+			throw new Error("Expected session");
+		}
+
+		const invalidBeforeResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${session.id}?before=nope`, {
+				headers: authHeader,
+			}),
+		);
+		expect(invalidBeforeResponse.status).toBe(400);
+		expect(await readJson<{ code: string }>(invalidBeforeResponse)).toMatchObject({
+			code: "invalid_before",
+		});
+
+		const invalidLimitResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${session.id}?limit=501`, {
+				headers: authHeader,
+			}),
+		);
+		expect(invalidLimitResponse.status).toBe(400);
+		expect(await readJson<{ code: string }>(invalidLimitResponse)).toMatchObject({
+			code: "invalid_limit",
+		});
+	});
+
 	test("tracks Claude usage and rate limit details on the session", async () => {
 		const createResponse = await handleApiRequest(
 			new Request("http://localhost/api/sessions", {
