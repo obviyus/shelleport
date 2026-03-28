@@ -774,6 +774,10 @@ function isAssistantTextEvent(event: HostEvent | undefined) {
 	return !!event && event.kind === "text" && event.data.role === "assistant";
 }
 
+function isThinkingEvent(event: HostEvent) {
+	return event.kind === "text" && event.data.role === "thinking";
+}
+
 export function groupStream(entries: HostEvent[]): GroupedEntry[] {
 	const grouped: GroupedEntry[] = [];
 	const consumedResultIndexes = new Set<number>();
@@ -843,6 +847,18 @@ export function groupStream(entries: HostEvent[]): GroupedEntry[] {
 
 			grouped.push({ entries: run, type: "assistant-text-run" });
 			continue;
+		}
+
+		if (isThinkingEvent(entry)) {
+			const lastGroup = grouped.at(-1);
+
+			if (
+				lastGroup?.type === "single" &&
+				isThinkingEvent(lastGroup.entry) &&
+				lastGroup.entry.data.text === entry.data.text
+			) {
+				continue;
+			}
 		}
 
 		grouped.push({ entry, type: "single" });
@@ -1005,11 +1021,33 @@ function AssistantTextRunRenderer({ entries }: { entries: HostEvent[] }) {
 	);
 }
 
+function ThinkingBlock({ text }: { text: string }) {
+	return (
+		<details className="animate-event-enter group mb-4 overflow-hidden rounded-lg border border-foreground/10 bg-card/92 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]">
+			<summary className="flex cursor-pointer list-none items-center gap-2 px-3 md:px-4 py-2.5 transition hover:bg-accent/45">
+				<ChevronRight className="size-3 shrink-0 text-muted-foreground transition group-open:rotate-90" />
+				<span className="text-[11px] text-muted-foreground/80">Thinking</span>
+			</summary>
+			<div className="border-t border-foreground/12 bg-background/35 px-4 py-3">
+				<div className="text-xs leading-[1.8] text-foreground/80">
+					<MarkdownMessage text={text} />
+				</div>
+			</div>
+		</details>
+	);
+}
+
 function EventRenderer({ event }: { event: HostEvent }) {
 	if (event.kind === "text") {
-		return event.data.role === "user" ? (
-			<UserMessageRenderer event={event} />
-		) : (
+		if (event.data.role === "user") {
+			return <UserMessageRenderer event={event} />;
+		}
+
+		if (event.data.role === "thinking") {
+			return <ThinkingBlock text={readString(event.data.text)} />;
+		}
+
+		return (
 			<div className="animate-event-enter mb-4">
 				<div className="mb-1 px-1 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/68">
 					Claude

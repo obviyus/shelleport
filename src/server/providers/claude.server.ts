@@ -429,6 +429,15 @@ export function normalizeClaudeStreamEvent(
 				: null;
 		const index = typeof event.index === "number" ? event.index : null;
 
+		if (contentBlock?.type === "thinking" && index !== null && toolUseStateByIndex) {
+			toolUseStateByIndex.set(index, {
+				id: null,
+				inputJson: "",
+				name: "__thinking__",
+			});
+			return [];
+		}
+
 		if (
 			contentBlock?.type === "tool_use" &&
 			typeof contentBlock.name === "string" &&
@@ -464,6 +473,24 @@ export function normalizeClaudeStreamEvent(
 
 	if (event.type === "content_block_stop") {
 		if (typeof event.index === "number") {
+			const stoppedState = toolUseStateByIndex?.get(event.index);
+
+			if (stoppedState?.name === "__thinking__" && stoppedState.inputJson.length > 0) {
+				toolUseStateByIndex?.delete(event.index);
+				return [
+					{
+						type: "host-event",
+						kind: "text",
+						summary: "Thinking",
+						data: {
+							role: "thinking",
+							text: stoppedState.inputJson,
+						},
+						rawProviderEvent: rawEvent,
+					},
+				];
+			}
+
 			toolUseStateByIndex?.delete(event.index);
 		}
 
@@ -480,6 +507,21 @@ export function normalizeClaudeStreamEvent(
 			: null;
 
 	if (!delta) {
+		return [];
+	}
+
+	if (
+		delta.type === "thinking_delta" &&
+		typeof delta.thinking === "string" &&
+		delta.thinking.length > 0
+	) {
+		const thinkingState =
+			typeof event.index === "number" ? toolUseStateByIndex?.get(event.index) : null;
+
+		if (thinkingState?.name === "__thinking__") {
+			thinkingState.inputJson += delta.thinking;
+		}
+
 		return [];
 	}
 
@@ -553,6 +595,19 @@ export function normalizeClaudeEvent(rawEvent: Record<string, unknown>): Provide
 			}
 
 			const contentItem = item as Record<string, unknown>;
+
+			if (contentItem.type === "thinking" && typeof contentItem.thinking === "string") {
+				events.push({
+					type: "host-event",
+					kind: "text",
+					summary: "Thinking",
+					data: {
+						role: "thinking",
+						text: contentItem.thinking,
+					},
+					rawProviderEvent: rawEvent,
+				});
+			}
 
 			if (contentItem.type === "text" && typeof contentItem.text === "string") {
 				events.push({
@@ -697,6 +752,7 @@ async function* streamClaudeProcess(
 
 	let buffer = "";
 	let sawAssistantTextDelta = false;
+	let sawThinkingBlock = false;
 	const partialToolUseIds = new Set<string>();
 	const toolUseStateByIndex = new Map<number, ClaudeStreamToolUseState>();
 
@@ -730,7 +786,9 @@ async function* streamClaudeProcess(
 								continue;
 							}
 
-							if (event.kind === "text") {
+							if (event.kind === "text" && event.data.role === "thinking") {
+								sawThinkingBlock = true;
+							} else if (event.kind === "text") {
 								sawAssistantTextDelta = true;
 							}
 
@@ -754,6 +812,16 @@ async function* streamClaudeProcess(
 						event.type === "host-event" &&
 						event.kind === "text" &&
 						event.data.role === "assistant"
+					) {
+						return false;
+					}
+
+					if (
+						sawThinkingBlock &&
+						rawEvent.type === "assistant" &&
+						event.type === "host-event" &&
+						event.kind === "text" &&
+						event.data.role === "thinking"
 					) {
 						return false;
 					}
@@ -793,7 +861,9 @@ async function* streamClaudeProcess(
 							continue;
 						}
 
-						if (event.kind === "text") {
+						if (event.kind === "text" && event.data.role === "thinking") {
+							sawThinkingBlock = true;
+						} else if (event.kind === "text") {
 							sawAssistantTextDelta = true;
 						}
 
@@ -814,6 +884,16 @@ async function* streamClaudeProcess(
 						event.type === "host-event" &&
 						event.kind === "text" &&
 						event.data.role === "assistant"
+					) {
+						return false;
+					}
+
+					if (
+						sawThinkingBlock &&
+						rawEvent.type === "assistant" &&
+						event.type === "host-event" &&
+						event.kind === "text" &&
+						event.data.role === "thinking"
 					) {
 						return false;
 					}
