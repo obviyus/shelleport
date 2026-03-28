@@ -510,6 +510,18 @@ const listQueuedInputsStatement = database.query<SqlQueuedInputRow, [string]>(
 		ORDER BY create_time ASC, id ASC`,
 );
 
+const deleteSessionStatement = database.query("DELETE FROM host_sessions WHERE id = ?");
+
+const deleteSessionEventsStatement = database.query("DELETE FROM host_events WHERE session_id = ?");
+
+const deleteSessionRequestsStatement = database.query(
+	"DELETE FROM pending_requests WHERE session_id = ?",
+);
+
+const deleteSessionQueuedInputsStatement = database.query(
+	"DELETE FROM queued_session_inputs WHERE session_id = ?",
+);
+
 const clearSessionSearchStatement = database.query("DELETE FROM host_session_fts");
 
 const insertSessionSearchStatement = database.query(
@@ -942,5 +954,20 @@ export const sessionStore = {
 		}
 
 		return request;
+	},
+	deleteSession(sessionId: string) {
+		const session = this.getSession(sessionId);
+
+		if (!session) {
+			return null;
+		}
+
+		deleteSessionEventsStatement.run(sessionId);
+		deleteSessionRequestsStatement.run(sessionId);
+		deleteSessionQueuedInputsStatement.run(sessionId);
+		deleteSessionSearchStatement.run(sessionId);
+		deleteSessionStatement.run(sessionId);
+
+		return session;
 	},
 };
