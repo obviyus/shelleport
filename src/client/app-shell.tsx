@@ -4,6 +4,7 @@ import {
 	Check,
 	CircleStop,
 	CircleX,
+	ClipboardCopy,
 	Paperclip,
 	Loader2,
 	LogOut,
@@ -82,6 +83,8 @@ import {
 	normalizeDraftAttachment,
 	PendingRequestBanner,
 	StatusDot,
+	copyToClipboard,
+	streamToMarkdown,
 } from "~/client/session-stream";
 
 function requestNotificationPermission() {
@@ -240,6 +243,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const [now, setNow] = useState(() => Date.now());
 	const [streamState, setStreamState] = useState<"connected" | "reconnecting">("connected");
 	const [archiveConfirmId, setArchiveConfirmId] = useState<string | null>(null);
+	const [copiedConversation, setCopiedConversation] = useState(false);
 	const [renameState, setRenameState] = useState<{ sessionId: string; title: string } | null>(null);
 	const [sidebarOpen, setSidebarOpen] = useState(false);
 	const [sessionQuery, setSessionQuery] = useState("");
@@ -668,6 +672,13 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			setLoadingEarlier(false);
 		}
 	}, [loadingEarlier, selectedId, stream]);
+
+	const handleCopyConversation = useCallback(() => {
+		void copyToClipboard(streamToMarkdown(stream)).then(() => {
+			setCopiedConversation(true);
+			setTimeout(() => setCopiedConversation(false), 2000);
+		});
+	}, [stream]);
 
 	const handleRespond = useCallback(async (requestId: string, payload: RequestResponsePayload) => {
 		setPendingRequests((previous) => previous.filter((request) => request.id !== requestId));
@@ -1295,6 +1306,22 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											<Pin className="size-3 md:size-2.5" />
 											<span className="hidden md:inline">
 												{sessionView.pinned ? "Pinned" : "Pin"}
+											</span>
+										</button>
+									)}
+									{sessionView && stream.length > 0 && (
+										<button
+											type="button"
+											onClick={handleCopyConversation}
+											className="flex items-center justify-center gap-1 rounded border border-foreground/12 px-2 py-1 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-[10px] text-muted-foreground/80 transition hover:border-foreground/18 hover:text-foreground"
+										>
+											{copiedConversation ? (
+												<Check className="size-3 md:size-2.5" />
+											) : (
+												<ClipboardCopy className="size-3 md:size-2.5" />
+											)}
+											<span className="hidden md:inline">
+												{copiedConversation ? "Copied" : "Copy"}
 											</span>
 										</button>
 									)}

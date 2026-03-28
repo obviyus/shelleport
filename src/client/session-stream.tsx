@@ -919,6 +919,51 @@ export function groupStream(entries: HostEvent[]): GroupedEntry[] {
 	return grouped;
 }
 
+export function streamToMarkdown(entries: HostEvent[]) {
+	const grouped = groupStream(entries);
+	const parts: string[] = [];
+
+	for (const group of grouped) {
+		if (group.type === "assistant-text-run") {
+			const text = group.entries.map((entry) => readString(entry.data.text)).join("");
+
+			if (text.length > 0) {
+				parts.push(`## Assistant\n\n${text}`);
+			}
+
+			continue;
+		}
+
+		if (group.type === "tool") {
+			const toolName =
+				typeof group.call.data.toolName === "string" ? group.call.data.toolName : "Tool";
+			const preview = getToolPreview(group.call);
+			const result = readToolResultContent(group.result);
+			const lines = [`### ${toolName}: \`${preview}\``];
+
+			if (result.length > 0) {
+				lines.push(`\n\`\`\`\n${result}\n\`\`\``);
+			}
+
+			parts.push(lines.join("\n"));
+			continue;
+		}
+
+		const entry = group.entry;
+
+		if (entry.kind === "text") {
+			const role = entry.data.role === "user" ? "User" : "Assistant";
+			const text = readString(entry.data.text);
+
+			if (text.length > 0) {
+				parts.push(`## ${role}\n\n${text}`);
+			}
+		}
+	}
+
+	return parts.join("\n\n");
+}
+
 export function readToolResultContent(result: HostEvent | null) {
 	if (!result) {
 		return "";

@@ -6,6 +6,7 @@ import {
 	getSessionHeaderBadges,
 	groupStream,
 	readToolResultContent,
+	streamToMarkdown,
 } from "~/client/session-stream";
 
 describe("getSessionHeaderBadges", () => {
@@ -231,6 +232,87 @@ describe("readToolResultContent", () => {
 				createTime: 1,
 			}),
 		).toBe("bash output");
+	});
+});
+
+describe("streamToMarkdown", () => {
+	test("renders assistant runs and tool results as markdown", () => {
+		expect(
+			streamToMarkdown([
+				{
+					id: "user-1",
+					sessionId: "session-1",
+					sequence: 1,
+					kind: "text",
+					summary: "User prompt",
+					data: {
+						role: "user",
+						text: "Explain this diff",
+					},
+					rawProviderEvent: null,
+					createTime: 1,
+				},
+				{
+					id: "assistant-1",
+					sessionId: "session-1",
+					sequence: 2,
+					kind: "text",
+					summary: "Assistant reply",
+					data: {
+						role: "assistant",
+						text: "Working on it.",
+					},
+					rawProviderEvent: null,
+					createTime: 2,
+				},
+				{
+					id: "call-1",
+					sessionId: "session-1",
+					sequence: 3,
+					kind: "tool-call",
+					summary: "Read file",
+					data: {
+						toolName: "Read",
+						toolUseId: "tool-1",
+						input: {
+							file_path: "/tmp/demo.ts",
+						},
+					},
+					rawProviderEvent: null,
+					createTime: 3,
+				},
+				{
+					id: "result-1",
+					sessionId: "session-1",
+					sequence: 4,
+					kind: "tool-result",
+					summary: "Tool output",
+					data: {
+						toolUseId: "tool-1",
+						content: "const value = 1;",
+						isError: false,
+					},
+					rawProviderEvent: null,
+					createTime: 4,
+				},
+			]),
+		).toBe(
+			[
+				"## User",
+				"",
+				"Explain this diff",
+				"",
+				"## Assistant",
+				"",
+				"Working on it.",
+				"",
+				"### Read: `/tmp/demo.ts`",
+				"",
+				"```",
+				"const value = 1;",
+				"```",
+			].join("\n"),
+		);
 	});
 });
 

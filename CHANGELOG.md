@@ -13,6 +13,7 @@ All notable changes to shelleport are documented here.
 - Browser tabs now show the selected session title and status while you are viewing a session (#17) (thanks @kesava500)
 - Browser notifications now fire when a background session finishes or fails while you are viewing that session (#18) (thanks @kesava500)
 - Sessions now auto-title from the first prompt instead of keeping the generic provider title (#19) (thanks @kesava500)
+- Session views can now copy the full conversation transcript as markdown (#20) (thanks @kesava500)
 
 ## 0.0.22 - 2026-03-28
 
