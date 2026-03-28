@@ -9,6 +9,7 @@ All notable changes to shelleport are documented here.
 - Session chats no longer render Claude rate-limit updates inline when the same data already appears in the limits panel (#6) (thanks @kesava500)
 - Invalid login tokens now stay on the login screen and show the error instead of reloading the page immediately (#7) (thanks @kesava500)
 - Session text selections now stay intact instead of clearing every second while countdown badges update (#9) (thanks @kesava500)
+- Tests now isolate their SQLite data directory before server modules load, so local production data no longer gets polluted by test fixtures (#10) (thanks @kesava500)
 
 ### Added
 
