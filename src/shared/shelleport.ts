@@ -131,6 +131,7 @@ export type HistoricalSession = {
 export type SessionDetail = {
 	session: HostSession;
 	events: HostEvent[];
+	totalEvents: number;
 	pendingRequests: PendingRequest[];
 	queuedInputs: QueuedSessionInput[];
 };

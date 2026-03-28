@@ -412,8 +412,8 @@ export const sessionBroker = {
 			? sessionStore.searchSessions(query)
 			: sessionStore.listSessions();
 	},
-	getSessionDetail(sessionId: string) {
-		return sessionStore.getSessionDetail(sessionId);
+	getSessionDetail(sessionId: string, options?: { limit?: number; before?: number }) {
+		return sessionStore.getSessionDetail(sessionId, options);
 	},
 	subscribe(sessionId: string, subscriber: SessionSubscriber) {
 		const sessionSubscribers = subscribers.get(sessionId) ?? new Set<SessionSubscriber>();

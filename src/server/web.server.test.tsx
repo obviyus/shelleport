@@ -39,6 +39,7 @@ const testSession: HostSession = {
 };
 const testSessionDetail: SessionDetail = {
 	events: [],
+	totalEvents: 0,
 	pendingRequests: [],
 	queuedInputs: [],
 	session: testSession,
