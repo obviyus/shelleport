@@ -662,37 +662,89 @@ export function getSidebarMeta(session: HostSession, now: number) {
 	return session.cwd;
 }
 
-export function getSessionUsageBadges(
-	session: Pick<HostSession, "usage"> | null,
-	entries: HostEvent[],
-	now: number,
-) {
-	const badges: string[] = [];
-	const { limit } = getUsageSnapshot(entries);
-	const usage = session?.usage ?? null;
+function formatSessionModelLabel(model: string) {
+	let stripped = model;
 
-	if (usage) {
-		badges.push(`in ${formatMetricCount(usage.inputTokens)}`);
-		badges.push(`out ${formatMetricCount(usage.outputTokens)}`);
+	for (;;) {
+		const start = stripped.indexOf("\u001B[");
 
-		if (usage.cacheReadInputTokens > 0) {
-			badges.push(`cache read ${formatMetricCount(usage.cacheReadInputTokens)}`);
+		if (start === -1) {
+			break;
 		}
 
-		if (usage.cacheCreationInputTokens > 0) {
-			badges.push(`cache write ${formatMetricCount(usage.cacheCreationInputTokens)}`);
+		const end = stripped.indexOf("m", start + 2);
+
+		if (end === -1) {
+			break;
 		}
 
-		if (usage.costUsd !== null) {
-			badges.push(formatCostUsd(usage.costUsd));
-		}
+		stripped = `${stripped.slice(0, start)}${stripped.slice(end + 1)}`;
 	}
 
-	if (limit?.window && limit.resetsAt !== null) {
-		const prefix = limit.status && limit.status !== "allowed" ? `${limit.status} ` : "";
-		badges.push(
-			`${prefix}${formatLimitWindow(limit.window)} resets in ${formatResetCountdown(now, limit.resetsAt)}`,
-		);
+	return stripped.replace(/\[[0-9;]+m\]$/g, "").trim();
+}
+
+export type SessionHeaderBadge = {
+	key: string;
+	label: string;
+	title?: string;
+	visibility: "lg" | "xl";
+};
+
+export function getSessionHeaderBadges(session: Pick<HostSession, "usage"> | null) {
+	const usage = session?.usage ?? null;
+
+	if (!usage) {
+		return [];
+	}
+
+	const badges: SessionHeaderBadge[] = [];
+
+	if (usage.model) {
+		const modelLabel = formatSessionModelLabel(usage.model);
+		const label = modelLabel.length > 0 ? modelLabel : usage.model;
+
+		badges.push({
+			key: `model:${usage.model}`,
+			label,
+			title: usage.model,
+			visibility: "lg",
+		});
+	}
+
+	badges.push({
+		key: `in:${usage.inputTokens}`,
+		label: `in ${formatMetricCount(usage.inputTokens)}`,
+		visibility: "xl",
+	});
+	badges.push({
+		key: `out:${usage.outputTokens}`,
+		label: `out ${formatMetricCount(usage.outputTokens)}`,
+		visibility: "xl",
+	});
+
+	if (usage.cacheReadInputTokens > 0) {
+		badges.push({
+			key: `cache-read:${usage.cacheReadInputTokens}`,
+			label: `cache read ${formatMetricCount(usage.cacheReadInputTokens)}`,
+			visibility: "xl",
+		});
+	}
+
+	if (usage.cacheCreationInputTokens > 0) {
+		badges.push({
+			key: `cache-write:${usage.cacheCreationInputTokens}`,
+			label: `cache write ${formatMetricCount(usage.cacheCreationInputTokens)}`,
+			visibility: "xl",
+		});
+	}
+
+	if (usage.costUsd !== null) {
+		badges.push({
+			key: `cost:${usage.costUsd}`,
+			label: formatCostUsd(usage.costUsd),
+			visibility: "xl",
+		});
 	}
 
 	return badges;
