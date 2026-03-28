@@ -818,6 +818,26 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		});
 	}, [stream]);
 
+	const loadEarlierEvents = useCallback(
+		async (before: number) => {
+			if (!selectedId) {
+				throw new Error("Cannot load earlier events without a selected session");
+			}
+
+			const detail = await fetchSessionDetail(selectedId, { before });
+			return {
+				events: detail.events,
+				totalEvents: detail.totalEvents,
+			};
+		},
+		[selectedId],
+	);
+
+	const prependEarlierEvents = useCallback((page: { events: HostEvent[]; totalEvents: number }) => {
+		setStream((previous) => [...page.events, ...previous]);
+		setTotalEvents(page.totalEvents);
+	}, []);
+
 	const handleRespond = useCallback(async (requestId: string, payload: RequestResponsePayload) => {
 		setPendingRequests((previous) => previous.filter((request) => request.id !== requestId));
 		try {
@@ -956,6 +976,9 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const queuedInputCount = queuedInputs.length;
 	const canSend = !!selectedId && (prompt.trim().length > 0 || draftAttachments.length > 0);
 	const permissionModeLabel = sessionView ? formatPermissionModeLabel(sessionView) : null;
+	const pendingRequest = pendingRequests[0] ?? null;
+	const showReconnectBanner = shouldShowReconnectBanner(isSessionPending, streamState);
+	const statusMessage = sessionView ? getStatusMessage(sessionView) : null;
 
 	function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
 		if (event.key === "Enter" && !event.shiftKey) {
@@ -1477,26 +1500,13 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 							hasEarlier={totalEvents > stream.length}
 							isRunning={sessionView?.status === "running" || sessionView?.status === "retrying"}
 							isSessionPending={isSessionPending}
-							loadEarlier={
-								selectedId
-									? async (before) => {
-											const detail = await fetchSessionDetail(selectedId, { before });
-											return {
-												events: detail.events,
-												totalEvents: detail.totalEvents,
-											};
-										}
-									: null
-							}
-							onPrependEarlier={(page) => {
-								setStream((previous) => [...page.events, ...previous]);
-								setTotalEvents(page.totalEvents);
-							}}
+							loadEarlier={selectedId ? loadEarlierEvents : null}
+							onPrependEarlier={prependEarlierEvents}
 							onRespond={handleRespond}
-							pendingRequest={pendingRequests[0] ?? null}
+							pendingRequest={pendingRequest}
 							session={sessionView}
-							showReconnectBanner={shouldShowReconnectBanner(isSessionPending, streamState)}
-							statusMessage={sessionView ? getStatusMessage(sessionView) : null}
+							showReconnectBanner={showReconnectBanner}
+							statusMessage={statusMessage}
 						/>
 
 						<div className="shrink-0 border-t border-border px-3 md:px-6 py-3 md:py-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:pb-4">

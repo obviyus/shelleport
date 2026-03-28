@@ -1,5 +1,5 @@
 import { Loader2 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { HostEvent, HostSession, PendingRequest, RequestResponsePayload } from "~/shared/shelleport";
 import {
 	type GroupedEntry,
@@ -12,7 +12,7 @@ type EarlierEventPage = {
 	totalEvents: number;
 };
 
-export function SessionTranscript({
+export const SessionTranscript = memo(function SessionTranscript({
 	firstSequence,
 	grouped,
 	hasEarlier,
@@ -152,4 +152,4 @@ export function SessionTranscript({
 			{session && pendingRequest && <PendingRequestBanner request={pendingRequest} onRespond={onRespond} />}
 		</>
 	);
-}
+});
