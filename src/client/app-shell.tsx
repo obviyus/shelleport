@@ -128,6 +128,28 @@ function getSessionLimitTone(limit: SessionLimit) {
 	return "bg-white shadow-[0_0_18px_oklch(1_0_0_/_0.26)]";
 }
 
+const PROMPT_HISTORY_KEY = "shelleport.prompt-history";
+const PROMPT_HISTORY_MAX = 50;
+
+function readPromptHistory(): string[] {
+	if (typeof window === "undefined") {
+		return [];
+	}
+
+	try {
+		const stored = window.localStorage.getItem(PROMPT_HISTORY_KEY);
+		return stored ? (JSON.parse(stored) as string[]) : [];
+	} catch {
+		return [];
+	}
+}
+
+function savePromptHistory(history: string[]) {
+	try {
+		window.localStorage.setItem(PROMPT_HISTORY_KEY, JSON.stringify(history));
+	} catch {}
+}
+
 function formatQueuedAttachmentLabel(queuedInput: QueuedSessionInput) {
 	const count = queuedInput.attachments.length;
 
@@ -148,6 +170,9 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const draftAttachmentsRef = useRef<DraftAttachment[]>([]);
 	const isAtBottom = useRef(true);
+	const promptHistory = useRef<string[]>(readPromptHistory());
+	const historyIndex = useRef(-1);
+	const savedDraft = useRef("");
 	const selectedId = renderRoute.kind === "session" ? renderRoute.params.sessionId : null;
 	const isSessionRoute = selectedId !== null;
 	const isArchivedView = renderRoute.kind === "archived";
@@ -487,6 +512,16 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			return;
 		}
 
+		if (nextPrompt.trim().length > 0) {
+			promptHistory.current = [
+				nextPrompt.trim(),
+				...promptHistory.current.slice(0, PROMPT_HISTORY_MAX - 1),
+			];
+			savePromptHistory(promptHistory.current);
+		}
+
+		historyIndex.current = -1;
+		savedDraft.current = "";
 		setPrompt("");
 		setDraftAttachments([]);
 
@@ -694,6 +729,34 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		if (event.key === "Enter" && !event.shiftKey) {
 			event.preventDefault();
 			void handleSend();
+			return;
+		}
+
+		if (event.key === "ArrowUp" && promptHistory.current.length > 0) {
+			const textarea = event.currentTarget;
+			const cursorAtStart = textarea.selectionStart === 0 && textarea.selectionEnd === 0;
+
+			if (!cursorAtStart && prompt.length > 0) {
+				return;
+			}
+
+			event.preventDefault();
+
+			if (historyIndex.current === -1) {
+				savedDraft.current = prompt;
+			}
+
+			const nextIndex = Math.min(historyIndex.current + 1, promptHistory.current.length - 1);
+			historyIndex.current = nextIndex;
+			setPrompt(promptHistory.current[nextIndex]);
+			return;
+		}
+
+		if (event.key === "ArrowDown" && historyIndex.current >= 0) {
+			event.preventDefault();
+			const nextIndex = historyIndex.current - 1;
+			historyIndex.current = nextIndex;
+			setPrompt(nextIndex === -1 ? savedDraft.current : promptHistory.current[nextIndex]);
 		}
 	}
 
