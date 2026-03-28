@@ -4,6 +4,13 @@ All notable changes to shelleport are documented here.
 
 ## Unreleased
 
+## 0.0.17 - 2026-03-28
+
+### Fixed
+
+- Session switches no longer flash the new-session launcher before the target chat hydrates
+- Session event streams now hold one SSE connection per selected chat instead of repeatedly reconnecting during session hydration
+
 ## 0.0.16 - 2026-03-27
 
 ### Changed
