@@ -4,6 +4,10 @@ All notable changes to shelleport are documented here.
 
 ## Unreleased
 
+### Fixed
+
+- Session chats no longer render Claude rate-limit updates inline when the same data already appears in the limits panel (#6) (thanks @kesava500)
+
 ## 0.0.22 - 2026-03-28
 
 ### Fixed
