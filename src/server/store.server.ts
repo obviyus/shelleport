@@ -474,12 +474,12 @@ const listSessionsForSearchSyncStatement = database.query<SqlSessionSearchRow, [
 	"SELECT id, title, cwd, provider FROM host_sessions",
 );
 
-const updateQueuedInputCountStatement = database.query(
-	"UPDATE host_sessions SET queued_input_count = ?, update_time = ? WHERE id = ?",
+const incrementQueuedInputCountStatement = database.query(
+	"UPDATE host_sessions SET queued_input_count = queued_input_count + 1, update_time = ? WHERE id = ?",
 );
 
-const countQueuedInputsStatement = database.query<{ total: number }, [string]>(
-	"SELECT COUNT(*) as total FROM queued_session_inputs WHERE session_id = ?",
+const decrementQueuedInputCountStatement = database.query(
+	"UPDATE host_sessions SET queued_input_count = MAX(queued_input_count - 1, 0), update_time = ? WHERE id = ?",
 );
 
 const insertQueuedInputStatement = database.query(
@@ -543,10 +543,12 @@ function syncSessionSearchIndex(session: Pick<HostSession, "id" | "title" | "cwd
 	insertSessionSearchStatement.run(session.id, session.title, session.cwd, session.provider);
 }
 
-function syncQueuedInputCount(sessionId: string) {
-	const total = countQueuedInputsStatement.get(sessionId)?.total ?? 0;
-	updateQueuedInputCountStatement.run(total, createTimestamp(), sessionId);
-	return total;
+function incrementQueuedInputCount(sessionId: string) {
+	incrementQueuedInputCountStatement.run(createTimestamp(), sessionId);
+}
+
+function decrementQueuedInputCount(sessionId: string) {
+	decrementQueuedInputCountStatement.run(createTimestamp(), sessionId);
 }
 
 function rebuildSessionSearchIndex() {
@@ -911,7 +913,7 @@ export const sessionStore = {
 			JSON.stringify(input.attachments),
 			createTimestamp(),
 		);
-		syncQueuedInputCount(sessionId);
+		incrementQueuedInputCount(sessionId);
 		return this.getSession(sessionId);
 	},
 	listQueuedInputs(sessionId: string) {
@@ -927,7 +929,7 @@ export const sessionStore = {
 	},
 	deleteQueuedInput(sessionId: string, queuedInputId: string) {
 		deleteQueuedInputStatement.run(sessionId, queuedInputId);
-		syncQueuedInputCount(sessionId);
+		decrementQueuedInputCount(sessionId);
 		return this.getSession(sessionId);
 	},
 	shiftQueuedInput(sessionId: string) {
@@ -938,7 +940,7 @@ export const sessionStore = {
 		}
 
 		deleteQueuedInputStatement.run(sessionId, row.id);
-		syncQueuedInputCount(sessionId);
+		decrementQueuedInputCount(sessionId);
 		return {
 			prompt: row.prompt,
 			attachments: parseAttachments(row.attachments_json),
