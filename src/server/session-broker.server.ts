@@ -1,5 +1,4 @@
 import { join } from "node:path";
-import { rm } from "node:fs/promises";
 import type {
 	CreateSessionInput,
 	HostEvent,
@@ -704,7 +703,7 @@ export const sessionBroker = {
 		}
 
 		const uploadDir = join(session.cwd, ".shelleport", "uploads", sessionId);
-		await rm(uploadDir, { recursive: true, force: true }).catch(() => {});
+		await Bun.$`rm -rf ${uploadDir}`.quiet();
 
 		sessionStore.deleteSession(sessionId);
 
