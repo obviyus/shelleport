@@ -6,14 +6,18 @@ describe("login", () => {
 		const originalFetch = globalThis.fetch;
 		const originalWindow = globalThis.window;
 		const location = { href: "/keep" };
-
-		Object.defineProperty(globalThis, "fetch", {
-			configurable: true,
-			value: (async () =>
+		const fetchMock = Object.assign(
+			async () =>
 				new Response(JSON.stringify({ error: "Unauthorized" }), {
 					headers: { "Content-Type": "application/json" },
 					status: 401,
-				})) satisfies typeof fetch,
+				}),
+			originalFetch,
+		);
+
+		Object.defineProperty(globalThis, "fetch", {
+			configurable: true,
+			value: fetchMock,
 		});
 		Object.defineProperty(globalThis, "window", {
 			configurable: true,
