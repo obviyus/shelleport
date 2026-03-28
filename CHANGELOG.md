@@ -4,6 +4,13 @@ All notable changes to shelleport are documented here.
 
 ## Unreleased
 
+## 0.0.22 - 2026-03-28
+
+### Fixed
+
+- `shelleport upgrade` now streams release downloads to disk with a live progress bar instead of looking frozen for large binaries
+- `shelleport upgrade` now reports checksum download progress separately so slow GitHub asset fetches are visible
+
 ## 0.0.21 - 2026-03-28
 
 ### Fixed
