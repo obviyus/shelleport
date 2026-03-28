@@ -109,12 +109,12 @@ export function fetchProviders() {
 	return request<{ providers: ProviderSummary[] }>("/api/providers");
 }
 
-export function sendInput(sessionId: string, prompt: string, images: File[]) {
+export function sendInput(sessionId: string, prompt: string, attachments: File[]) {
 	const formData = new FormData();
 	formData.set("prompt", prompt);
 
-	for (const image of images) {
-		formData.append("images", image);
+	for (const file of attachments) {
+		formData.append("attachments", file);
 	}
 
 	return request<{ session: HostSession }>(`/api/sessions/${sessionId}/input`, {

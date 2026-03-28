@@ -492,7 +492,7 @@ export const sessionBroker = {
 	},
 	async sendInput(sessionId: string, input: SessionInputPayload) {
 		if (input.prompt.trim().length === 0 && input.attachments.length === 0) {
-			throw new ApiError(400, "prompt_required", "Prompt or image is required");
+			throw new ApiError(400, "prompt_required", "Prompt or attachment is required");
 		}
 
 		const session = sessionStore.getSession(sessionId);
@@ -503,11 +503,11 @@ export const sessionBroker = {
 
 		const provider = getProvider(session.provider);
 
-		if (input.attachments.length > 0 && !provider.capabilities().supportsImages) {
+		if (input.attachments.length > 0 && !provider.capabilities().supportsAttachments) {
 			throw new ApiError(
 				400,
-				"provider_no_image_support",
-				`${provider.label} does not support images`,
+				"provider_no_attachment_support",
+				`${provider.label} does not support attachments`,
 			);
 		}
 

@@ -1,4 +1,4 @@
-import { basename, join } from "node:path";
+import { basename, extname, join } from "node:path";
 import type { SessionAttachment } from "~/shared/shelleport";
 import { ApiError } from "~/server/api-error.server";
 import { createId } from "~/server/id.server";
@@ -6,10 +6,10 @@ import { createId } from "~/server/id.server";
 function sanitizeFilename(name: string) {
 	const trimmed = basename(name).trim();
 	const safeName = trimmed.replace(/[^A-Za-z0-9._-]/g, "-");
-	return safeName.length > 0 ? safeName : "image";
+	return safeName.length > 0 ? safeName : "file";
 }
 
-function extensionForContentType(contentType: string) {
+function extensionForImageContentType(contentType: string) {
 	switch (contentType) {
 		case "image/jpeg":
 			return ".jpg";
@@ -68,7 +68,7 @@ function isWebp(bytes: Uint8Array) {
 	);
 }
 
-function detectImageContentType(bytes: Uint8Array) {
+function detectImageContentType(bytes: Uint8Array): string | null {
 	if (isJpeg(bytes)) {
 		return "image/jpeg";
 	}
@@ -85,16 +85,39 @@ function detectImageContentType(bytes: Uint8Array) {
 		return "image/webp";
 	}
 
-	throw new ApiError(400, "unsupported_image_format", "Images must be JPEG, PNG, GIF, or WebP");
+	return null;
 }
 
-function validateImageFile(entry: FormDataEntryValue) {
-	if (!(entry instanceof File)) {
-		throw new ApiError(400, "invalid_image", "images must be files");
+function resolveContentType(file: File, bytes: Uint8Array): string {
+	const detected = detectImageContentType(bytes);
+	if (detected) {
+		return detected;
 	}
 
-	if (!entry.type.startsWith("image/")) {
-		throw new ApiError(400, "invalid_image", "images must be image files");
+	if (file.type && file.type.length > 0) {
+		return file.type;
+	}
+
+	return "application/octet-stream";
+}
+
+function resolveExtension(contentType: string, originalName: string): string {
+	const imageExt = extensionForImageContentType(contentType);
+	if (imageExt) {
+		return imageExt;
+	}
+
+	const ext = extname(originalName);
+	if (ext.length > 0) {
+		return ext;
+	}
+
+	return "";
+}
+
+function validateAttachmentFile(entry: FormDataEntryValue) {
+	if (!(entry instanceof File)) {
+		throw new ApiError(400, "invalid_attachment", "attachments must be files");
 	}
 
 	return entry;
@@ -114,13 +137,13 @@ export async function storeSessionAttachments(
 
 	return Promise.all(
 		entries.map(async (entry) => {
-			const file = validateImageFile(entry);
+			const file = validateAttachmentFile(entry);
 			const bytes = new Uint8Array(await file.arrayBuffer());
-			const contentType = detectImageContentType(bytes);
+			const contentType = resolveContentType(file, bytes);
 			const safeName = sanitizeFilename(file.name);
-			const extension = extensionForContentType(contentType);
+			const extension = resolveExtension(contentType, file.name);
 			const baseName = extension.length > 0 ? safeName.slice(0, -extension.length) : safeName;
-			const filename = `${baseName || "image"}-${createId()}${extension}`;
+			const filename = `${baseName || "file"}-${createId()}${extension}`;
 			const path = join(uploadDir, filename);
 			await Bun.write(path, bytes);
 			return {
