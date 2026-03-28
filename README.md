@@ -48,18 +48,18 @@ sudo shelleport install-service --tailscale --service-user ubuntu
 ```
 
 This writes a service definition for your platform and starts it immediately.
-On Linux this now writes a plain systemd unit at `/etc/systemd/system/shelleport.service` and runs it as the selected `--service-user`.
+On Linux this installs the native binary at `/usr/local/lib/shelleport/shelleport`, creates `/usr/local/bin/shelleport`, writes a plain systemd unit at `/etc/systemd/system/shelleport.service`, and runs it as the selected `--service-user`.
 By default, service installs bind `0.0.0.0`. Pass `--tailscale` to bind the machine's Tailscale IPv4 instead.
 
 ### Upgrade
 
-If you installed shelleport from npm, upgrade the downloaded runtime binary in place with:
+Upgrade the installed binary in place with:
 
 ```bash
 shelleport upgrade
 ```
 
-On Linux, this also restarts the system `shelleport.service` automatically when it is installed.
+On Linux, this also repairs the systemd unit, reloads it, upgrades the binary, and restarts `shelleport.service` when it is installed.
 
 ### Health Check
 
