@@ -1092,11 +1092,7 @@ export function DraftAttachmentPreview({
 	if (attachment.previewUrl) {
 		return (
 			<div className="relative overflow-hidden rounded-md border border-foreground/10 bg-background">
-				<img
-					src={attachment.previewUrl}
-					alt={attachment.name}
-					className="h-20 w-20 object-cover"
-				/>
+				<img src={attachment.previewUrl} alt={attachment.name} className="h-20 w-20 object-cover" />
 				<button
 					type="button"
 					onClick={onRemove}
