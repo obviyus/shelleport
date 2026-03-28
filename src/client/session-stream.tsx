@@ -774,6 +774,14 @@ function isAssistantTextEvent(event: HostEvent | undefined) {
 	return !!event && event.kind === "text" && event.data.role === "assistant";
 }
 
+function isRateLimitSystemEvent(event: HostEvent) {
+	return event.kind === "system" && event.data.limit != null;
+}
+
+function shouldSkipGroupedEntry(event: HostEvent) {
+	return event.kind === "tool-result" || isRateLimitSystemEvent(event);
+}
+
 export function groupStream(entries: HostEvent[]): GroupedEntry[] {
 	const grouped: GroupedEntry[] = [];
 	const consumedResultIndexes = new Set<number>();
@@ -829,7 +837,7 @@ export function groupStream(entries: HostEvent[]): GroupedEntry[] {
 			continue;
 		}
 
-		if (entry.kind === "tool-result") {
+		if (shouldSkipGroupedEntry(entry)) {
 			continue;
 		}
 

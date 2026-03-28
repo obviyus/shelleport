@@ -81,6 +81,59 @@ describe("getSessionHeaderBadges", () => {
 });
 
 describe("groupStream", () => {
+	test("excludes rate limit system events from grouped output", () => {
+		const grouped = groupStream([
+			{
+				id: "text-1",
+				sessionId: "session-1",
+				sequence: 1,
+				kind: "text",
+				summary: "Assistant message",
+				data: { role: "assistant", text: "Hello" },
+				rawProviderEvent: null,
+				createTime: 1,
+			},
+			{
+				id: "rate-1",
+				sessionId: "session-1",
+				sequence: 2,
+				kind: "system",
+				summary: "Rate limit update",
+				data: {
+					limit: {
+						status: "active",
+						resetsAt: null,
+						window: "five_hour",
+						isUsingOverage: false,
+						utilization: 42,
+					},
+				},
+				rawProviderEvent: null,
+				createTime: 2,
+			},
+			{
+				id: "text-2",
+				sessionId: "session-1",
+				sequence: 3,
+				kind: "text",
+				summary: "Assistant message",
+				data: { role: "assistant", text: "Done" },
+				rawProviderEvent: null,
+				createTime: 3,
+			},
+		]);
+
+		expect(grouped).toHaveLength(2);
+		expect(grouped[0]).toMatchObject({ type: "assistant-text-run" });
+		expect(grouped[1]).toMatchObject({ type: "assistant-text-run" });
+
+		const ids = grouped.flatMap((group) =>
+			group.type === "assistant-text-run" ? group.entries.map((entry) => entry.id) : [],
+		);
+
+		expect(ids).not.toContain("rate-1");
+	});
+
 	test("pairs tool results by toolUseId across intervening events", () => {
 		const grouped = groupStream([
 			{
