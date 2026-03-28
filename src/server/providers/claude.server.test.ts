@@ -2,9 +2,11 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import {
 	createClaudeBashToolRule,
+	filterClaudeStreamDuplicates,
 	normalizeClaudeEvent,
 	normalizeClaudeStreamEvent,
 	parseClaudeHistoricalSession,
+	updateClaudeStreamMergeState,
 } from "~/server/providers/claude.server";
 
 const tempPaths: string[] = [];
@@ -404,6 +406,60 @@ describe("normalizeClaudeEvent", () => {
 				data: expect.objectContaining({
 					role: "thinking",
 					text: "first pass then verify",
+				}),
+			}),
+		]);
+	});
+
+	test("does not suppress later assistant thinking after a prior streamed block", () => {
+		const mergeState = {
+			contentStateByIndex: new Map(),
+			partialToolUseIds: new Set<string>(),
+			sawAssistantTextDelta: false,
+			sawThinkingBlock: false,
+		};
+
+		updateClaudeStreamMergeState(mergeState, [
+			{
+				type: "host-event",
+				kind: "text",
+				summary: "Thinking",
+				data: {
+					role: "thinking",
+					text: "streamed thinking",
+				},
+				rawProviderEvent: null,
+			},
+		]);
+
+		expect(
+			filterClaudeStreamDuplicates(
+				{
+					type: "assistant",
+				},
+				normalizeClaudeEvent({
+					type: "assistant",
+					message: {
+						content: [
+							{
+								type: "thinking",
+								thinking: "non-stream thinking",
+							},
+						],
+					},
+				}),
+				{
+					...mergeState,
+					sawThinkingBlock: false,
+				},
+			),
+		).toEqual([
+			expect.objectContaining({
+				type: "host-event",
+				kind: "text",
+				data: expect.objectContaining({
+					role: "thinking",
+					text: "non-stream thinking",
 				}),
 			}),
 		]);

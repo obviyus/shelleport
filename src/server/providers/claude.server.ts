@@ -411,6 +411,13 @@ type ClaudeStreamContentState =
 			name: string;
 	  };
 
+type ClaudeStreamMergeState = {
+	contentStateByIndex: Map<number, ClaudeStreamContentState>;
+	partialToolUseIds: Set<string>;
+	sawAssistantTextDelta: boolean;
+	sawThinkingBlock: boolean;
+};
+
 export function normalizeClaudeStreamEvent(
 	rawEvent: Record<string, unknown>,
 	contentStateByIndex?: Map<number, ClaudeStreamContentState>,
@@ -743,6 +750,88 @@ export function normalizeClaudeEvent(rawEvent: Record<string, unknown>): Provide
 	];
 }
 
+export function updateClaudeStreamMergeState(
+	state: ClaudeStreamMergeState,
+	events: ProviderAdapterEvent[],
+) {
+	for (const event of events) {
+		if (event.type !== "host-event") {
+			continue;
+		}
+
+		if (event.kind === "text" && event.data.role === "thinking") {
+			state.sawThinkingBlock = true;
+			continue;
+		}
+
+		if (event.kind === "text") {
+			state.sawAssistantTextDelta = true;
+			continue;
+		}
+
+		if (event.kind === "tool-call" && typeof event.data.toolUseId === "string") {
+			state.partialToolUseIds.add(event.data.toolUseId);
+		}
+	}
+}
+
+export function filterClaudeStreamDuplicates(
+	rawEvent: Record<string, unknown>,
+	events: ProviderAdapterEvent[],
+	state: Pick<
+		ClaudeStreamMergeState,
+		"sawAssistantTextDelta" | "sawThinkingBlock" | "partialToolUseIds"
+	>,
+) {
+	if (rawEvent.type !== "assistant") {
+		return events;
+	}
+
+	return events.filter((event) => {
+		if (
+			state.sawAssistantTextDelta &&
+			event.type === "host-event" &&
+			event.kind === "text" &&
+			event.data.role === "assistant"
+		) {
+			return false;
+		}
+
+		if (
+			state.sawThinkingBlock &&
+			event.type === "host-event" &&
+			event.kind === "text" &&
+			event.data.role === "thinking"
+		) {
+			return false;
+		}
+
+		if (
+			event.type === "host-event" &&
+			event.kind === "tool-call" &&
+			typeof event.data.toolUseId === "string" &&
+			state.partialToolUseIds.has(event.data.toolUseId)
+		) {
+			return false;
+		}
+
+		return true;
+	});
+}
+
+function resetClaudeStreamMergeStateAfterAssistant(
+	rawEvent: Record<string, unknown>,
+	state: ClaudeStreamMergeState,
+) {
+	if (rawEvent.type !== "assistant") {
+		return;
+	}
+
+	state.sawAssistantTextDelta = false;
+	state.sawThinkingBlock = false;
+	state.partialToolUseIds.clear();
+}
+
 async function* streamClaudeProcess(
 	runInput: ProviderAdapterRunInput,
 ): AsyncGenerator<ProviderAdapterEvent> {
@@ -757,12 +846,40 @@ async function* streamClaudeProcess(
 	const stderrReader = subprocess.stderr.getReader();
 
 	let buffer = "";
-	let sawAssistantTextDelta = false;
-	let sawThinkingBlock = false;
-	const partialToolUseIds = new Set<string>();
-	const contentStateByIndex = new Map<number, ClaudeStreamContentState>();
+	const mergeState: ClaudeStreamMergeState = {
+		contentStateByIndex: new Map<number, ClaudeStreamContentState>(),
+		partialToolUseIds: new Set<string>(),
+		sawAssistantTextDelta: false,
+		sawThinkingBlock: false,
+	};
 
 	try {
+		const emitClaudeStreamLine = function* (
+			rawEvent: Record<string, unknown>,
+		): Generator<ProviderAdapterEvent> {
+			if (rawEvent.type === "stream_event") {
+				const partialEvents = normalizeClaudeStreamEvent(rawEvent, mergeState.contentStateByIndex);
+				updateClaudeStreamMergeState(mergeState, partialEvents);
+
+				for (const event of partialEvents) {
+					yield event;
+				}
+
+				return;
+			}
+
+			const normalizedEvents = filterClaudeStreamDuplicates(
+				rawEvent,
+				normalizeClaudeEvent(rawEvent),
+				mergeState,
+			);
+			resetClaudeStreamMergeStateAfterAssistant(rawEvent, mergeState);
+
+			for (const event of normalizedEvents) {
+				yield event;
+			}
+		};
+
 		while (true) {
 			const { done, value } = await stdoutReader.read();
 
@@ -781,149 +898,15 @@ async function* streamClaudeProcess(
 					continue;
 				}
 
-				const rawEvent = JSON.parse(trimmed) as Record<string, unknown>;
-
-				if (rawEvent.type === "stream_event") {
-					const partialEvents = normalizeClaudeStreamEvent(rawEvent, contentStateByIndex);
-
-					if (partialEvents.length > 0) {
-						for (const event of partialEvents) {
-							if (event.type !== "host-event") {
-								continue;
-							}
-
-							if (event.kind === "text" && event.data.role === "thinking") {
-								sawThinkingBlock = true;
-							} else if (event.kind === "text") {
-								sawAssistantTextDelta = true;
-							}
-
-							if (event.kind === "tool-call" && typeof event.data.toolUseId === "string") {
-								partialToolUseIds.add(event.data.toolUseId);
-							}
-						}
-
-						for (const event of partialEvents) {
-							yield event;
-						}
-					}
-
-					continue;
-				}
-
-				const normalizedEvents = normalizeClaudeEvent(rawEvent).filter((event) => {
-					if (
-						sawAssistantTextDelta &&
-						rawEvent.type === "assistant" &&
-						event.type === "host-event" &&
-						event.kind === "text" &&
-						event.data.role === "assistant"
-					) {
-						return false;
-					}
-
-					if (
-						sawThinkingBlock &&
-						rawEvent.type === "assistant" &&
-						event.type === "host-event" &&
-						event.kind === "text" &&
-						event.data.role === "thinking"
-					) {
-						return false;
-					}
-
-					if (
-						rawEvent.type === "assistant" &&
-						event.type === "host-event" &&
-						event.kind === "tool-call" &&
-						typeof event.data.toolUseId === "string" &&
-						partialToolUseIds.has(event.data.toolUseId)
-					) {
-						return false;
-					}
-
-					return true;
-				});
-
-				if (rawEvent.type === "assistant") {
-					sawAssistantTextDelta = false;
-				}
-
-				for (const event of normalizedEvents) {
+				for (const event of emitClaudeStreamLine(JSON.parse(trimmed) as Record<string, unknown>)) {
 					yield event;
 				}
 			}
 		}
 
 		if (buffer.trim().length > 0) {
-			const rawEvent = JSON.parse(buffer.trim()) as Record<string, unknown>;
-
-			if (rawEvent.type === "stream_event") {
-				const partialEvents = normalizeClaudeStreamEvent(rawEvent, contentStateByIndex);
-
-				if (partialEvents.length > 0) {
-					for (const event of partialEvents) {
-						if (event.type !== "host-event") {
-							continue;
-						}
-
-						if (event.kind === "text" && event.data.role === "thinking") {
-							sawThinkingBlock = true;
-						} else if (event.kind === "text") {
-							sawAssistantTextDelta = true;
-						}
-
-						if (event.kind === "tool-call" && typeof event.data.toolUseId === "string") {
-							partialToolUseIds.add(event.data.toolUseId);
-						}
-					}
-				}
-
-				for (const event of partialEvents) {
-					yield event;
-				}
-			} else {
-				const normalizedEvents = normalizeClaudeEvent(rawEvent).filter((event) => {
-					if (
-						sawAssistantTextDelta &&
-						rawEvent.type === "assistant" &&
-						event.type === "host-event" &&
-						event.kind === "text" &&
-						event.data.role === "assistant"
-					) {
-						return false;
-					}
-
-					if (
-						sawThinkingBlock &&
-						rawEvent.type === "assistant" &&
-						event.type === "host-event" &&
-						event.kind === "text" &&
-						event.data.role === "thinking"
-					) {
-						return false;
-					}
-
-					if (
-						rawEvent.type === "assistant" &&
-						event.type === "host-event" &&
-						event.kind === "tool-call" &&
-						typeof event.data.toolUseId === "string" &&
-						partialToolUseIds.has(event.data.toolUseId)
-					) {
-						return false;
-					}
-
-					return true;
-				});
-
-				if (rawEvent.type === "assistant") {
-					sawAssistantTextDelta = false;
-				}
-
-				for (const event of normalizedEvents) {
-					yield event;
-				}
+			for (const event of emitClaudeStreamLine(JSON.parse(buffer.trim()) as Record<string, unknown>)) {
+				yield event;
 			}
 		}
 

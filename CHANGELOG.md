@@ -20,6 +20,10 @@ All notable changes to shelleport are documented here.
 - The prompt composer now supports shell-style history recall with Up/Down arrow keys across page refreshes (#24) (thanks @kesava500)
 - Claude thinking/reasoning blocks now render as collapsible transcript sections and stay labeled as thinking in transcript exports (#25) (thanks @kesava500)
 
+### Fixed
+
+- Claude streamed thinking/tool deltas now only suppress duplicate assistant events for the current response instead of leaking into later assistant messages
+
 ## 0.0.22 - 2026-03-28
 
 ### Fixed
