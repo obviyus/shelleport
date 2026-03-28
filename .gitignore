@@ -5,8 +5,6 @@
 /.shelleport-delete-test
 
 /build/
-/src/client/.generated/
-/src/server/client-assets.generated.js
 
 # Project
 .shelleport/

@@ -2,7 +2,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { config, ensureDataDir, getClaudeBin } from "~/server/config.server";
-import { browserOutdir, buildBrowser, readBrowserBuild } from "./scripts/build";
+import clientShell from "./src/client/index.html";
 import packageJson from "./package.json";
 
 const serverFilePath = fileURLToPath(import.meta.url);
@@ -576,56 +576,6 @@ async function getReachableHosts(host: string) {
 	return [host];
 }
 
-async function getProductionShellPath() {
-	if (isDevelopment) {
-		await Bun.$`rm -rf ${browserOutdir}`.quiet();
-		await Bun.$`mkdir -p ${browserOutdir}`.quiet();
-		await buildBrowser();
-
-		const { files, shellFileName } = await readBrowserBuild();
-		const clientAssetPaths = Object.fromEntries(
-			files
-				.filter((fileName) => fileName !== shellFileName)
-				.map((fileName) => [`/${fileName}`, `${browserOutdir}/${fileName}`]),
-		);
-
-		return {
-			clientAssetPaths,
-			clientShellPath: `${browserOutdir}/${shellFileName}`,
-		};
-	}
-
-	return import("./src/server/client-assets.generated.js");
-}
-
-function getContentType(pathname: string) {
-	if (pathname.endsWith(".css")) {
-		return "text/css; charset=utf-8";
-	}
-
-	if (pathname.endsWith(".js")) {
-		return "text/javascript; charset=utf-8";
-	}
-
-	if (pathname.endsWith(".html")) {
-		return "text/html; charset=utf-8";
-	}
-
-	if (pathname.endsWith(".woff2")) {
-		return "font/woff2";
-	}
-
-	if (pathname.endsWith(".svg")) {
-		return "image/svg+xml";
-	}
-
-	if (pathname.endsWith(".png")) {
-		return "image/png";
-	}
-
-	return "application/octet-stream";
-}
-
 async function runDoctor(options: CliOptions) {
 	await ensureDataDir();
 	const { getAuthStatus } = await loadAuthModule();
@@ -766,10 +716,7 @@ async function runUpgrade() {
 	console.log(`Installed shelleport ${version}.`);
 }
 
-export async function createServerFetchHandler(
-	clientAssets: Record<string, string> | null = null,
-	shellPath: string | null = null,
-) {
+export async function createServerFetchHandler() {
 	const { sessionBroker } = await import("~/server/session-broker.server");
 	sessionBroker.recoverInterruptedRuns();
 
@@ -777,15 +724,6 @@ export async function createServerFetchHandler(
 		const url = new URL(request.url);
 
 		try {
-			const clientAssetPath = clientAssets?.[url.pathname];
-			if (clientAssetPath) {
-				return new Response(Bun.file(clientAssetPath), {
-					headers: {
-						"Content-Type": getContentType(url.pathname),
-					},
-				});
-			}
-
 			if (url.pathname.startsWith("/api/")) {
 				const { handleApiRequest } = await loadApiModule();
 				return await handleApiRequest(request);
@@ -805,20 +743,6 @@ export async function createServerFetchHandler(
 					headers: {
 						Location: "/login",
 						"Set-Cookie": clearAuthCookie(),
-					},
-				});
-			}
-
-			if (
-				shellPath &&
-				(url.pathname === "/" ||
-					url.pathname === "/archived" ||
-					url.pathname === "/login" ||
-					url.pathname.startsWith("/sessions/"))
-			) {
-				return new Response(Bun.file(shellPath), {
-					headers: {
-						"Content-Type": "text/html; charset=utf-8",
 					},
 				});
 			}
@@ -844,11 +768,7 @@ export async function runServe(options: CliOptions) {
 	await ensureDataDir();
 	const { ensureAuthSetup } = await loadAuthModule();
 	const authSetup = ensureAuthSetup();
-	const productionAssets = await getProductionShellPath();
-	const fetch = await createServerFetchHandler(
-		productionAssets?.clientAssetPaths ?? null,
-		productionAssets?.clientShellPath ?? null,
-	);
+	const fetch = await createServerFetchHandler();
 	console.log(`Server binding on ${options.host}:${options.port}`);
 	for (const host of await getReachableHosts(options.host)) {
 		console.log(`Open: http://${host}:${options.port}`);
@@ -873,6 +793,12 @@ export async function runServe(options: CliOptions) {
 		fetch,
 		hostname: options.host,
 		port: options.port,
+		routes: {
+			"/": clientShell,
+			"/archived": clientShell,
+			"/login": clientShell,
+			"/sessions/:sessionId": clientShell,
+		},
 		error(error) {
 			console.error("Server error:", error);
 			return new Response("Server Error", { status: 500 });
