@@ -774,6 +774,10 @@ function isAssistantTextEvent(event: HostEvent | undefined) {
 	return !!event && event.kind === "text" && event.data.role === "assistant";
 }
 
+function isRateLimitSystemEvent(event: HostEvent) {
+	return event.kind === "system" && event.data.limit != null;
+}
+
 export function groupStream(entries: HostEvent[]): GroupedEntry[] {
 	const grouped: GroupedEntry[] = [];
 	const consumedResultIndexes = new Set<number>();
@@ -842,6 +846,10 @@ export function groupStream(entries: HostEvent[]): GroupedEntry[] {
 			}
 
 			grouped.push({ entries: run, type: "assistant-text-run" });
+			continue;
+		}
+
+		if (isRateLimitSystemEvent(entry)) {
 			continue;
 		}
 
@@ -1092,11 +1100,7 @@ export function DraftAttachmentPreview({
 	if (attachment.previewUrl) {
 		return (
 			<div className="relative overflow-hidden rounded-md border border-foreground/10 bg-background">
-				<img
-					src={attachment.previewUrl}
-					alt={attachment.name}
-					className="h-20 w-20 object-cover"
-				/>
+				<img src={attachment.previewUrl} alt={attachment.name} className="h-20 w-20 object-cover" />
 				<button
 					type="button"
 					onClick={onRemove}
