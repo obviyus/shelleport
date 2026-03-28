@@ -81,13 +81,13 @@ describe("parseCliOptions", () => {
 	});
 
 	test("suggests closest command for typos", async () => {
-		await expect(parseCliOptions(["doctro"])).rejects.toThrow(
+		return expect(parseCliOptions(["doctro"])).rejects.toThrow(
 			"Unknown command: doctro. Did you mean 'doctor'?",
 		);
 	});
 
 	test("rejects unknown argument after command", async () => {
-		await expect(parseCliOptions(["doctor", "upgrade"])).rejects.toThrow(
+		return expect(parseCliOptions(["doctor", "upgrade"])).rejects.toThrow(
 			"Unknown argument: upgrade",
 		);
 	});
