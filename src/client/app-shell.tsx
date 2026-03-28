@@ -29,6 +29,7 @@ import {
 import type { AppBootData } from "~/client/boot";
 import { SessionLauncher } from "~/client/components/session-launcher";
 import { Sheet, SheetContent, SheetTitle } from "~/client/components/ui/sheet";
+import { matchAppRoute } from "~/client/routes";
 import {
 	Dialog,
 	DialogContent,
@@ -139,14 +140,17 @@ function formatQueuedAttachmentLabel(queuedInput: QueuedSessionInput) {
 
 export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated: true }> }) {
 	const route = useCurrentRoute();
+	const renderRoute =
+		typeof window === "undefined" ? route : matchAppRoute(window.location.pathname);
 	const { navigate } = useRouter();
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const draftImagesRef = useRef<DraftImage[]>([]);
 	const isAtBottom = useRef(true);
-	const selectedId = route.kind === "session" ? route.params.sessionId : null;
-	const isArchivedView = route.kind === "archived";
+	const selectedId = renderRoute.kind === "session" ? renderRoute.params.sessionId : null;
+	const isSessionRoute = selectedId !== null;
+	const isArchivedView = renderRoute.kind === "archived";
 	const initialDetail = boot.route.kind === "session" ? boot.sessionDetail : null;
 
 	const [providers, setProviders] = useState<ProviderSummary[]>(boot.providers);
@@ -185,7 +189,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		[selectedId, sessions],
 	);
 	const sessionView = session?.id === selectedId ? session : selectedSession;
-	const isSessionPending = selectedId !== null && sessionView !== null && session?.id !== selectedId;
+	const isSessionPending = isSessionRoute && (sessionView === null || session?.id !== selectedId);
 	const { activeSessions, archivedSessions } = useMemo(() => {
 		const active: HostSession[] = [];
 		const archived: HostSession[] = [];
@@ -229,7 +233,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const showsClaudeLauncherWarning =
 		createProvider?.id === "claude" &&
 		sessions.length === 0 &&
-		route.kind === "home" &&
+		renderRoute.kind === "home" &&
 		typeof window !== "undefined";
 	const showsClaudeBypassWarning = showsClaudeLauncherWarning && !hasDismissedClaudeBypassWarning;
 	const isRenaming = renameState !== null && renameState.sessionId === sessionView?.id;
@@ -1023,7 +1027,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 							</div>
 						</div>
 					</div>
-				) : selectedId && sessionView ? (
+				) : isSessionRoute ? (
 					<>
 						<header className="shrink-0 border-b border-border bg-background/72 px-3 md:px-5 py-2.5 backdrop-blur-sm">
 							<div className="mx-auto flex max-w-[70rem] items-center justify-between gap-2 md:gap-4">
@@ -1036,8 +1040,8 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 									<Menu className="size-5" />
 								</button>
 								<div className="flex min-w-0 flex-1 items-center gap-2 md:gap-3">
-									{sessionView.pinned && <Pin className="size-3 shrink-0 text-foreground/82" />}
-									{isRenaming ? (
+									{sessionView?.pinned && <Pin className="size-3 shrink-0 text-foreground/82" />}
+									{sessionView && isRenaming ? (
 										<div className="flex min-w-0 items-center gap-1.5">
 											<input
 												value={renameDraft}
@@ -1080,7 +1084,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 												<X className="size-3" />
 											</button>
 										</div>
-									) : (
+									) : sessionView ? (
 										<>
 											<h1 className="truncate text-xs font-medium text-foreground">
 												{sessionView.title}
@@ -1096,18 +1100,24 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 												<Pencil className="size-2.5" />
 											</button>
 										</>
+									) : (
+										<h1 className="truncate text-xs font-medium text-foreground">Loading session</h1>
 									)}
-									<span className="hidden text-[10px] text-muted-foreground/65 lg:inline">
-										{sessionView.cwd}
-									</span>
+									{sessionView && (
+										<span className="hidden text-[10px] text-muted-foreground/65 lg:inline">
+											{sessionView.cwd}
+										</span>
+									)}
 								</div>
 								<div className="flex shrink-0 items-center gap-1.5">
-									<div className="flex items-center gap-1.5 rounded border border-foreground/12 px-2 py-1">
-										<StatusDot status={sessionView.status} />
-										<span className="hidden sm:inline text-[10px] text-muted-foreground/80">
-											{formatStatus(sessionView, now)}
-										</span>
-									</div>
+									{sessionView && (
+										<div className="flex items-center gap-1.5 rounded border border-foreground/12 px-2 py-1">
+											<StatusDot status={sessionView.status} />
+											<span className="hidden sm:inline text-[10px] text-muted-foreground/80">
+												{formatStatus(sessionView, now)}
+											</span>
+										</div>
+									)}
 									{!isSessionPending && streamState === "reconnecting" && (
 										<span className="rounded border border-foreground/10 px-2 py-1 text-[9px] uppercase tracking-[0.08em] text-muted-foreground/80">
 											Reconnecting
@@ -1126,19 +1136,22 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											{badge}
 										</span>
 									))}
-									<button
-										type="button"
-										onClick={() => void handlePinned(sessionView.id, !sessionView.pinned)}
-										className={`flex items-center justify-center gap-1 rounded border px-2 py-1 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-[10px] transition ${
-											sessionView.pinned
-												? "border-foreground/15 bg-accent text-foreground"
-												: "border-foreground/12 text-muted-foreground/80 hover:border-foreground/18 hover:text-foreground"
-										}`}
-									>
-										<Pin className="size-3 md:size-2.5" />
-										<span className="hidden md:inline">{sessionView.pinned ? "Pinned" : "Pin"}</span>
-									</button>
-									{(sessionView.status === "running" || sessionView.status === "retrying") && (
+									{sessionView && (
+										<button
+											type="button"
+											onClick={() => void handlePinned(sessionView.id, !sessionView.pinned)}
+											className={`flex items-center justify-center gap-1 rounded border px-2 py-1 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-[10px] transition ${
+												sessionView.pinned
+													? "border-foreground/15 bg-accent text-foreground"
+													: "border-foreground/12 text-muted-foreground/80 hover:border-foreground/18 hover:text-foreground"
+											}`}
+										>
+											<Pin className="size-3 md:size-2.5" />
+											<span className="hidden md:inline">{sessionView.pinned ? "Pinned" : "Pin"}</span>
+										</button>
+									)}
+									{sessionView &&
+										(sessionView.status === "running" || sessionView.status === "retrying") && (
 										<button
 											type="button"
 											onClick={() => void handleInterrupt()}
@@ -1161,13 +1174,14 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 								<div className="flex h-full items-center justify-center">
 									<Loader2 className="size-4 animate-spin text-muted-foreground/80" />
 								</div>
-							) : grouped.length === 0 &&
+							) : sessionView &&
+							  grouped.length === 0 &&
 							  sessionView.status !== "running" &&
 							  sessionView.status !== "retrying" ? (
 								<div className="flex h-full items-center justify-center">
 									<p className="text-xs text-muted-foreground/80">Send a message to start</p>
 								</div>
-							) : (
+							) : sessionView ? (
 								<div className="mx-auto max-w-[70rem]">
 									{getStatusMessage(sessionView) && (
 										<div className="mb-5 rounded-lg border border-foreground/10 bg-card/90 px-4 py-3 text-[11px] text-muted-foreground/88">
@@ -1194,16 +1208,19 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 										</div>
 									)}
 								</div>
-							)}
+							) : null}
+							
 						</div>
 
-						{pendingRequests.length > 0 && (
+						{sessionView && pendingRequests.length > 0 && (
 							<PendingRequestBanner request={pendingRequests[0]} onRespond={handleRespond} />
 						)}
 
 						<div className="shrink-0 border-t border-border px-3 md:px-6 py-3 md:py-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:pb-4">
 							<div className="mx-auto max-w-[70rem]">
-								<div className="relative rounded-md border border-foreground/10 bg-card/92 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)] transition-colors focus-within:border-foreground/22">
+								<div className="rounded-md border border-foreground/10 bg-card/92 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)] transition-colors focus-within:border-foreground/22">
+									{sessionView && (
+										<>
 									<input
 										ref={fileInputRef}
 										type="file"
@@ -1330,48 +1347,52 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											</div>
 										</div>
 									)}
-									<textarea
-										ref={textareaRef}
-										rows={1}
-										value={prompt}
-										onChange={(event) => {
-											setPrompt(event.target.value);
-											autoResize(event.currentTarget);
-										}}
-										onKeyDown={handleKeyDown}
-										onPaste={handlePaste}
-										placeholder={
-											isSessionBusy
-												? "Claude is working... press Enter to queue"
-												: canAttachImages
-													? "Message Claude... paste images or attach files"
-													: "Message Claude... (Enter to send)"
-										}
-										className="w-full resize-none bg-transparent px-4 py-3 pr-14 md:pr-20 text-xs text-foreground outline-none placeholder:text-muted-foreground/80"
-									/>
+									<div className="flex items-end gap-1.5 px-2 py-2">
+										<textarea
+											ref={textareaRef}
+											rows={1}
+											value={prompt}
+											onChange={(event) => {
+												setPrompt(event.target.value);
+												autoResize(event.currentTarget);
+											}}
+											onKeyDown={handleKeyDown}
+											onPaste={handlePaste}
+											placeholder={
+												isSessionBusy
+													? "Claude is working... press Enter to queue"
+													: canAttachImages
+														? "Message Claude... paste images or attach files"
+														: "Message Claude... (Enter to send)"
+											}
+											className="min-h-[36px] md:min-h-[28px] flex-1 resize-none bg-transparent px-2 py-1.5 text-xs leading-[1.6] text-foreground outline-none placeholder:text-muted-foreground/80"
+										/>
+										{canAttachImages && (
+											<button
+												type="button"
+												onClick={() => fileInputRef.current?.click()}
+												className="flex size-9 md:size-7 shrink-0 items-center justify-center rounded border border-foreground/10 bg-background text-muted-foreground/86 transition hover:border-foreground/22 hover:text-foreground"
+												title="Attach images"
+											>
+												<ImagePlus className="size-3.5" />
+											</button>
+										)}
+										<button
+											type="button"
+											onClick={() => void handleSend()}
+											disabled={!canSend}
+											className="flex size-9 md:size-7 shrink-0 items-center justify-center rounded bg-foreground text-background shadow-[0_0_18px_oklch(1_0_0_/_0.12)] transition hover:bg-foreground/85 disabled:opacity-20"
+										>
+											<Send className="size-3.5" />
+										</button>
+									</div>
 									{queuedInputCount > 0 && (
-										<div className="pointer-events-none absolute bottom-2 left-4 text-[10px] text-muted-foreground/86">
+										<div className="px-4 pb-1.5 text-[10px] text-muted-foreground/86">
 											{queuedInputCount} queued
 										</div>
 									)}
-									{canAttachImages && (
-										<button
-											type="button"
-											onClick={() => fileInputRef.current?.click()}
-											className="absolute right-14 md:right-10 bottom-2 flex size-10 md:size-7 items-center justify-center rounded border border-foreground/10 bg-background text-muted-foreground/86 transition hover:border-foreground/22 hover:text-foreground"
-											title="Attach images"
-										>
-											<ImagePlus className="size-3.5" />
-										</button>
+										</>
 									)}
-									<button
-										type="button"
-										onClick={() => void handleSend()}
-										disabled={!canSend}
-										className="absolute right-2 bottom-2 flex size-10 md:size-7 items-center justify-center rounded bg-foreground text-background shadow-[0_0_18px_oklch(1_0_0_/_0.12)] transition hover:bg-foreground/85 disabled:opacity-20"
-									>
-										<Send className="size-3.5" />
-									</button>
 								</div>
 							</div>
 						</div>
