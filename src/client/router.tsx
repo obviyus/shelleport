@@ -1,4 +1,4 @@
-import { createContext, startTransition, use, useEffect, useMemo, useState } from "react";
+import { createContext, use, useEffect, useMemo, useState } from "react";
 import { type AppRoute, matchAppRoute } from "~/client/routes";
 
 type NavigateOptions = {
@@ -27,9 +27,7 @@ export function BrowserRouterProvider({
 
 	useEffect(() => {
 		function syncRoute() {
-			startTransition(() => {
-				setRoute(createBrowserRoute());
-			});
+			setRoute(createBrowserRoute());
 		}
 
 		syncRoute();
@@ -45,9 +43,7 @@ export function BrowserRouterProvider({
 				const method = options?.replace ? "replaceState" : "pushState";
 
 				window.history[method](null, "", url.pathname);
-				startTransition(() => {
-					setRoute(matchAppRoute(url.pathname));
-				});
+				setRoute(matchAppRoute(url.pathname));
 			},
 			route,
 		}),
