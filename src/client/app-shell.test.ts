@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
 	getDocumentTitle,
+	getNextPromptHistoryState,
+	getPreviousPromptHistoryState,
 	getSessionCompletionNotificationBody,
+	pushPromptHistory,
 	shouldShowReconnectBanner,
 	shouldInterruptOnCtrlC,
 	shouldNotifySessionCompletion,
@@ -250,5 +253,27 @@ describe("shouldShowReconnectBanner", () => {
 
 	test("hides the banner while the session is still pending", () => {
 		expect(shouldShowReconnectBanner(true, "reconnecting")).toBe(false);
+	});
+});
+
+describe("prompt history helpers", () => {
+	test("pushPromptHistory prepends the latest prompt and caps the list", () => {
+		expect(pushPromptHistory(["older", "oldest"], "latest", 2)).toEqual(["latest", "older"]);
+	});
+
+	test("getPreviousPromptHistoryState enters history from the current draft", () => {
+		expect(getPreviousPromptHistoryState(["older"], -1, "draft", true, "")).toEqual({
+			historyIndex: 0,
+			prompt: "older",
+			savedDraft: "draft",
+		});
+	});
+
+	test("getNextPromptHistoryState restores the saved draft at the end", () => {
+		expect(getNextPromptHistoryState(["older"], 0, "draft")).toEqual({
+			historyIndex: -1,
+			prompt: "draft",
+			savedDraft: "draft",
+		});
 	});
 });

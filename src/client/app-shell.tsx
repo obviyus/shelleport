@@ -203,6 +203,72 @@ function getSessionLimitTone(limit: SessionLimit) {
 	return "bg-white shadow-[0_0_18px_oklch(1_0_0_/_0.26)]";
 }
 
+const PROMPT_HISTORY_KEY = "shelleport.prompt-history";
+const PROMPT_HISTORY_MAX = 50;
+
+function readPromptHistory(): string[] {
+	if (typeof window === "undefined") {
+		return [];
+	}
+
+	try {
+		const stored = window.localStorage.getItem(PROMPT_HISTORY_KEY);
+		return stored ? (JSON.parse(stored) as string[]) : [];
+	} catch {
+		return [];
+	}
+}
+
+function savePromptHistory(history: string[]) {
+	try {
+		window.localStorage.setItem(PROMPT_HISTORY_KEY, JSON.stringify(history));
+	} catch {}
+}
+
+export function pushPromptHistory(history: string[], prompt: string, max = PROMPT_HISTORY_MAX) {
+	return [prompt.trim(), ...history.slice(0, max - 1)];
+}
+
+export function getPreviousPromptHistoryState(
+	history: string[],
+	historyIndex: number,
+	prompt: string,
+	cursorAtStart: boolean,
+	savedDraft: string,
+) {
+	if (history.length === 0) {
+		return null;
+	}
+
+	if (!cursorAtStart && prompt.length > 0) {
+		return null;
+	}
+
+	const nextIndex = Math.min(historyIndex + 1, history.length - 1);
+	return {
+		historyIndex: nextIndex,
+		prompt: history[nextIndex],
+		savedDraft: historyIndex === -1 ? prompt : savedDraft,
+	};
+}
+
+export function getNextPromptHistoryState(
+	history: string[],
+	historyIndex: number,
+	savedDraft: string,
+) {
+	if (historyIndex < 0) {
+		return null;
+	}
+
+	const nextIndex = historyIndex - 1;
+	return {
+		historyIndex: nextIndex,
+		prompt: nextIndex === -1 ? savedDraft : history[nextIndex],
+		savedDraft,
+	};
+}
+
 function formatQueuedAttachmentLabel(queuedInput: QueuedSessionInput) {
 	const count = queuedInput.attachments.length;
 
@@ -239,8 +305,11 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const draftAttachmentsRef = useRef<DraftAttachment[]>([]);
-	const isAtBottom = useRef(true);
 	const previousSessionStatus = useRef<SessionStatus | null>(null);
+	const promptHistory = useRef<string[]>(readPromptHistory());
+	const historyIndex = useRef(-1);
+	const savedDraft = useRef("");
+	const isAtBottom = useRef(true);
 	const selectedId = renderRoute.kind === "session" ? renderRoute.params.sessionId : null;
 	const isSessionRoute = selectedId !== null;
 	const isArchivedView = renderRoute.kind === "archived";
@@ -614,6 +683,13 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			return;
 		}
 
+		if (nextPrompt.trim().length > 0) {
+			promptHistory.current = pushPromptHistory(promptHistory.current, nextPrompt);
+			savePromptHistory(promptHistory.current);
+		}
+
+		historyIndex.current = -1;
+		savedDraft.current = "";
 		setPrompt("");
 		setDraftAttachments([]);
 
@@ -870,6 +946,45 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		if (event.key === "Enter" && !event.shiftKey) {
 			event.preventDefault();
 			void handleSend();
+			return;
+		}
+
+		if (event.key === "ArrowUp" && promptHistory.current.length > 0) {
+			const textarea = event.currentTarget;
+			const nextState = getPreviousPromptHistoryState(
+				promptHistory.current,
+				historyIndex.current,
+				prompt,
+				textarea.selectionStart === 0 && textarea.selectionEnd === 0,
+				savedDraft.current,
+			);
+
+			if (!nextState) {
+				return;
+			}
+
+			event.preventDefault();
+			historyIndex.current = nextState.historyIndex;
+			savedDraft.current = nextState.savedDraft;
+			setPrompt(nextState.prompt);
+			return;
+		}
+
+		if (event.key === "ArrowDown" && historyIndex.current >= 0) {
+			const nextState = getNextPromptHistoryState(
+				promptHistory.current,
+				historyIndex.current,
+				savedDraft.current,
+			);
+
+			if (!nextState) {
+				return;
+			}
+
+			event.preventDefault();
+			historyIndex.current = nextState.historyIndex;
+			savedDraft.current = nextState.savedDraft;
+			setPrompt(nextState.prompt);
 		}
 	}
 

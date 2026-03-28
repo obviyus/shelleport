@@ -17,6 +17,7 @@ All notable changes to shelleport are documented here.
 - Running sessions can now be interrupted with Ctrl+C from the browser, with clean interrupted-session messaging instead of a CLI error card (#21) (thanks @kesava500)
 - Session views now show a visible reconnect banner when the live stream drops instead of only a tiny badge in the header (#22) (thanks @kesava500)
 - The browser tab now uses an inline shell favicon instead of the default blank icon (#23) (thanks @kesava500)
+- The prompt composer now supports shell-style history recall with Up/Down arrow keys across page refreshes (#24) (thanks @kesava500)
 
 ## 0.0.22 - 2026-03-28
 
