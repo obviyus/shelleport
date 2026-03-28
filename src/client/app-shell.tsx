@@ -366,6 +366,19 @@ export function getSessionListEmptyState(sessionQuery: string) {
 		: { actionLabel: "Create one", message: "No sessions" };
 }
 
+export function getFirstRunReadiness(providers: ProviderSummary[]) {
+	const claude = providers.find((provider) => provider.id === "claude") ?? null;
+	const canCreateManagedSession = providers.some(
+		(provider) => provider.capabilities.canCreate && provider.status === "ready",
+	);
+
+	return {
+		canCreateManagedSession,
+		claudeReady: claude?.status === "ready",
+		claudeStatusDetail: claude?.statusDetail ?? null,
+	};
+}
+
 export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated: true }> }) {
 	const route = useCurrentRoute();
 	const renderRoute =
@@ -979,6 +992,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const pendingRequest = pendingRequests[0] ?? null;
 	const showReconnectBanner = shouldShowReconnectBanner(isSessionPending, streamState);
 	const statusMessage = sessionView ? getStatusMessage(sessionView) : null;
+	const firstRunReadiness = getFirstRunReadiness(providers);
 
 	function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
 		if (event.key === "Enter" && !event.shiftKey) {
@@ -1706,6 +1720,56 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 								shelleport
 							</span>
 						</div>
+						{sessions.length === 0 && renderRoute.kind === "home" && (
+							<div className="shrink-0 border-b border-border bg-background/50 px-3 py-3 md:px-6 md:py-4">
+								<div className="mx-auto max-w-[70rem] rounded-lg border border-foreground/10 bg-card/88 px-4 py-4">
+									<div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+										<div>
+											<h2 className="text-xs font-medium text-foreground">Before your first session</h2>
+											<p className="mt-1 text-[11px] leading-[1.7] text-muted-foreground/82">
+												Check Claude readiness once, then pick a project directory below.
+											</p>
+										</div>
+										<div className="flex flex-col gap-1 text-[11px] text-muted-foreground/82">
+											<div className="flex items-center gap-2">
+												{firstRunReadiness.claudeReady ? (
+													<Check className="size-3 text-foreground/80" />
+												) : (
+													<X className="size-3 text-destructive/80" />
+												)}
+												<span>
+													Claude CLI {firstRunReadiness.claudeReady ? "ready" : "needs attention"}
+												</span>
+											</div>
+											<div className="flex items-center gap-2">
+												{firstRunReadiness.canCreateManagedSession ? (
+													<Check className="size-3 text-foreground/80" />
+												) : (
+													<X className="size-3 text-destructive/80" />
+												)}
+												<span>
+													Managed session launch{" "}
+													{firstRunReadiness.canCreateManagedSession ? "ready" : "blocked"}
+												</span>
+											</div>
+										</div>
+									</div>
+									{firstRunReadiness.claudeStatusDetail && (
+										<p className="mt-3 text-[11px] leading-[1.7] text-muted-foreground/78">
+											{firstRunReadiness.claudeStatusDetail}
+										</p>
+									)}
+									<div className="mt-3 flex flex-wrap gap-2 text-[11px] text-muted-foreground/82">
+										<span className="rounded border border-foreground/10 bg-background px-2 py-1 text-foreground/86">
+											claude doctor
+										</span>
+										<span className="rounded border border-foreground/10 bg-background px-2 py-1 text-foreground/86">
+											shelleport doctor
+										</span>
+									</div>
+								</div>
+							</div>
+						)}
 						<SessionLauncher
 							key={`${boot.defaultCwd}:${createProvider?.id ?? "none"}`}
 							createDisabledReason={createDisabledReason}

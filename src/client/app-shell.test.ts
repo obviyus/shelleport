@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
 	getDocumentTitle,
+	getFirstRunReadiness,
 	getNextPromptHistoryState,
 	getPreviousPromptHistoryState,
 	getSessionCompletionNotificationBody,
@@ -269,6 +270,68 @@ describe("getSessionListEmptyState", () => {
 		expect(getSessionListEmptyState("")).toEqual({
 			actionLabel: "Create one",
 			message: "No sessions",
+		});
+	});
+});
+
+describe("getFirstRunReadiness", () => {
+	test("reports ready when Claude can create managed sessions", () => {
+		expect(
+			getFirstRunReadiness([
+				{
+					id: "claude",
+					label: "Claude",
+					status: "ready",
+					statusDetail: null,
+					capabilities: {
+						canCreate: true,
+						canResumeHistorical: true,
+						canInterrupt: true,
+						canTerminate: true,
+						hasStructuredEvents: true,
+						supportsApprovals: true,
+						supportsQuestions: false,
+						supportsAttachments: true,
+						supportsFork: false,
+						supportsWorktree: true,
+						liveResume: "managed-only",
+					},
+				},
+			]),
+		).toEqual({
+			canCreateManagedSession: true,
+			claudeReady: true,
+			claudeStatusDetail: null,
+		});
+	});
+
+	test("surfaces Claude status detail when managed sessions are blocked", () => {
+		expect(
+			getFirstRunReadiness([
+				{
+					id: "claude",
+					label: "Claude",
+					status: "partial",
+					statusDetail: "Claude CLI is not authenticated.",
+					capabilities: {
+						canCreate: true,
+						canResumeHistorical: true,
+						canInterrupt: true,
+						canTerminate: true,
+						hasStructuredEvents: true,
+						supportsApprovals: true,
+						supportsQuestions: false,
+						supportsAttachments: true,
+						supportsFork: false,
+						supportsWorktree: true,
+						liveResume: "managed-only",
+					},
+				},
+			]),
+		).toEqual({
+			canCreateManagedSession: false,
+			claudeReady: false,
+			claudeStatusDetail: "Claude CLI is not authenticated.",
 		});
 	});
 });
