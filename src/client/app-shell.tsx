@@ -1018,17 +1018,25 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 								</div>
 							) : activeSessions.length === 0 ? (
 								<div className="py-8 text-center">
-									<p className="text-[11px] text-muted-foreground">No sessions</p>
-									<button
-										type="button"
-										onClick={() => {
-											navigate("/");
-											setSidebarOpen(false);
-										}}
-										className="mt-2 text-[11px] text-foreground/68 transition hover:text-foreground"
-									>
-										Create one
-									</button>
+									{deferredSessionQuery.trim().length > 0 ? (
+										<p className="text-[11px] text-muted-foreground">
+											No results for &ldquo;{deferredSessionQuery.trim()}&rdquo;
+										</p>
+									) : (
+										<>
+											<p className="text-[11px] text-muted-foreground">No sessions</p>
+											<button
+												type="button"
+												onClick={() => {
+													navigate("/");
+													setSidebarOpen(false);
+												}}
+												className="mt-2 text-[11px] text-foreground/68 transition hover:text-foreground"
+											>
+												Create one
+											</button>
+										</>
+									)}
 								</div>
 							) : (
 								<SidebarActiveSessions
