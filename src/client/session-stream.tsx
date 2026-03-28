@@ -838,6 +838,11 @@ type PassthroughGroup = {
 
 export type GroupedEntry = ToolGroup | AssistantTextRunGroup | PassthroughGroup;
 
+type PendingQueue = {
+	cursor: number;
+	indices: number[];
+};
+
 function isAssistantTextEvent(event: HostEvent | undefined) {
 	return !!event && event.kind === "text" && event.data.role === "assistant";
 }
@@ -850,62 +855,97 @@ function isRateLimitSystemEvent(event: HostEvent) {
 	return event.kind === "system" && event.summary === "Rate limit update";
 }
 
+function pushPending(queue: PendingQueue, groupIndex: number) {
+	queue.indices.push(groupIndex);
+}
+
+function peekPending(queue: PendingQueue, matchedGroupIndexes: Set<number>) {
+	while (
+		queue.cursor < queue.indices.length &&
+		matchedGroupIndexes.has(queue.indices[queue.cursor])
+	) {
+		queue.cursor += 1;
+	}
+
+	return queue.cursor < queue.indices.length ? queue.indices[queue.cursor] : null;
+}
+
 export function groupStream(entries: HostEvent[]): GroupedEntry[] {
 	const grouped: GroupedEntry[] = [];
-	const consumedResultIndexes = new Set<number>();
+	const matchedGroupIndexes = new Set<number>();
+	const pendingToolOrder: PendingQueue = { cursor: 0, indices: [] };
+	const pendingAnonymousTools: PendingQueue = { cursor: 0, indices: [] };
+	const pendingToolsById = new Map<string, PendingQueue>();
 
 	for (let index = 0; index < entries.length; index += 1) {
-		if (consumedResultIndexes.has(index)) {
-			continue;
-		}
-
 		const entry = entries[index];
 
 		if (entry.kind === "tool-call") {
-			let call = entry;
 			const toolUseId = typeof entry.data.toolUseId === "string" ? entry.data.toolUseId : null;
+			const lastGroup = grouped.at(-1);
 
-			while (true) {
-				const nextCall = entries[index + 1];
-
-				if (nextCall?.kind === "tool-call" && toolUseId && nextCall.data.toolUseId === toolUseId) {
-					index += 1;
-					call = nextCall;
-					continue;
-				}
-
-				break;
+			if (
+				toolUseId &&
+				lastGroup?.type === "tool" &&
+				lastGroup.result === null &&
+				lastGroup.call.kind === "tool-call" &&
+				lastGroup.call.data.toolUseId === toolUseId
+			) {
+				lastGroup.call = entry;
+				continue;
 			}
 
-			let resultIndex = -1;
+			const group: ToolGroup = {
+				call: entry,
+				result: null,
+				type: "tool",
+			};
+			const groupIndex = grouped.push(group) - 1;
 
-			for (let candidateIndex = index + 1; candidateIndex < entries.length; candidateIndex += 1) {
-				const candidate = entries[candidateIndex];
+			pushPending(pendingToolOrder, groupIndex);
 
-				if (candidate.kind !== "tool-result") {
-					continue;
-				}
-
-				const candidateToolUseId =
-					typeof candidate.data.toolUseId === "string" ? candidate.data.toolUseId : null;
-
-				if (!toolUseId || !candidateToolUseId || candidateToolUseId === toolUseId) {
-					resultIndex = candidateIndex;
-					break;
-				}
-			}
-
-			if (resultIndex !== -1) {
-				consumedResultIndexes.add(resultIndex);
-				grouped.push({ call, result: entries[resultIndex], type: "tool" });
+			if (toolUseId) {
+				const queue = pendingToolsById.get(toolUseId) ?? { cursor: 0, indices: [] };
+				pushPending(queue, groupIndex);
+				pendingToolsById.set(toolUseId, queue);
 			} else {
-				grouped.push({ call, result: null, type: "tool" });
+				pushPending(pendingAnonymousTools, groupIndex);
 			}
 
 			continue;
 		}
 
 		if (entry.kind === "tool-result") {
+			const toolUseId = typeof entry.data.toolUseId === "string" ? entry.data.toolUseId : null;
+			let groupIndex: number | null = null;
+
+			if (toolUseId === null) {
+				groupIndex = peekPending(pendingToolOrder, matchedGroupIndexes);
+			} else {
+				const anonymousGroupIndex = peekPending(pendingAnonymousTools, matchedGroupIndexes);
+				const specificGroupIndex = peekPending(
+					pendingToolsById.get(toolUseId) ?? { cursor: 0, indices: [] },
+					matchedGroupIndexes,
+				);
+
+				if (anonymousGroupIndex === null) {
+					groupIndex = specificGroupIndex;
+				} else if (specificGroupIndex === null) {
+					groupIndex = anonymousGroupIndex;
+				} else {
+					groupIndex = Math.min(anonymousGroupIndex, specificGroupIndex);
+				}
+			}
+
+			if (groupIndex !== null) {
+				const group = grouped[groupIndex];
+
+				if (group?.type === "tool" && group.result === null) {
+					group.result = entry;
+					matchedGroupIndexes.add(groupIndex);
+				}
+			}
+
 			continue;
 		}
 

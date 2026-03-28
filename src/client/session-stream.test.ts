@@ -145,6 +145,130 @@ describe("groupStream", () => {
 		});
 	});
 
+	test("keeps collapsing consecutive partial tool calls before the result arrives", () => {
+		const grouped = groupStream([
+			{
+				id: "call-1",
+				sessionId: "session-1",
+				sequence: 1,
+				kind: "tool-call",
+				summary: "Read",
+				data: {
+					toolName: "Read",
+					toolUseId: "tool-1",
+					inputJson: '{"file_path":"/tmp/a"}',
+				},
+				rawProviderEvent: null,
+				createTime: 1,
+			},
+			{
+				id: "call-2",
+				sessionId: "session-1",
+				sequence: 2,
+				kind: "tool-call",
+				summary: "Read",
+				data: {
+					toolName: "Read",
+					toolUseId: "tool-1",
+					input: {
+						file_path: "/tmp/a",
+					},
+				},
+				rawProviderEvent: null,
+				createTime: 2,
+			},
+			{
+				id: "result-1",
+				sessionId: "session-1",
+				sequence: 3,
+				kind: "tool-result",
+				summary: "Tool result",
+				data: {
+					toolUseId: "tool-1",
+					content: "ok",
+				},
+				rawProviderEvent: null,
+				createTime: 3,
+			},
+		]);
+
+		expect(grouped).toEqual([
+			{
+				type: "tool",
+				call: expect.objectContaining({ id: "call-2" }),
+				result: expect.objectContaining({ id: "result-1" }),
+			},
+		]);
+	});
+
+	test("matches specific tool results against the earliest eligible pending call", () => {
+		const grouped = groupStream([
+			{
+				id: "call-1",
+				sessionId: "session-1",
+				sequence: 1,
+				kind: "tool-call",
+				summary: "Read",
+				data: {
+					toolName: "Read",
+					toolUseId: null,
+				},
+				rawProviderEvent: null,
+				createTime: 1,
+			},
+			{
+				id: "call-2",
+				sessionId: "session-1",
+				sequence: 2,
+				kind: "tool-call",
+				summary: "Bash",
+				data: {
+					toolName: "Bash",
+					toolUseId: "tool-2",
+				},
+				rawProviderEvent: null,
+				createTime: 2,
+			},
+			{
+				id: "result-1",
+				sessionId: "session-1",
+				sequence: 3,
+				kind: "tool-result",
+				summary: "Tool result",
+				data: {
+					toolUseId: "tool-2",
+					content: "first",
+				},
+				rawProviderEvent: null,
+				createTime: 3,
+			},
+			{
+				id: "result-2",
+				sessionId: "session-1",
+				sequence: 4,
+				kind: "tool-result",
+				summary: "Tool result",
+				data: {
+					toolUseId: "tool-2",
+					content: "second",
+				},
+				rawProviderEvent: null,
+				createTime: 4,
+			},
+		]);
+
+		expect(grouped[0]).toMatchObject({
+			type: "tool",
+			call: { id: "call-1" },
+			result: { id: "result-1" },
+		});
+		expect(grouped[1]).toMatchObject({
+			type: "tool",
+			call: { id: "call-2" },
+			result: { id: "result-2" },
+		});
+	});
+
 	test("drops consecutive duplicate thinking events", () => {
 		const grouped = groupStream([
 			{
