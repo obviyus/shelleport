@@ -8,6 +8,7 @@ All notable changes to shelleport are documented here.
 
 - Session launcher now keeps the actual selected directory highlighted instead of promoting the first child entry (#1) (thanks @kesava500)
 - Session headers now show the active model badge without duplicating the old reset countdown there (#2) (thanks @kesava500)
+- Session launcher now scrolls correctly on mobile instead of clipping the directory browser near the bottom (#3) (thanks @kesava500)
 
 ## 0.0.18 - 2026-03-28
 
