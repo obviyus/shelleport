@@ -145,6 +145,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const { navigate } = useRouter();
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
+	const searchInputRef = useRef<HTMLInputElement>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const draftAttachmentsRef = useRef<DraftAttachment[]>([]);
 	const isAtBottom = useRef(true);
@@ -438,6 +439,34 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			}
 		};
 	}, []);
+
+	useEffect(() => {
+		function handleGlobalKeyDown(event: KeyboardEvent) {
+			const mod = event.metaKey || event.ctrlKey;
+
+			if (mod && event.key === "k") {
+				event.preventDefault();
+				const isMobile = window.innerWidth < 768;
+
+				if (isMobile) {
+					setSidebarOpen(true);
+					setTimeout(() => searchInputRef.current?.focus(), 50);
+				} else {
+					searchInputRef.current?.focus();
+				}
+
+				return;
+			}
+
+			if (event.key === "Escape" && sidebarOpen) {
+				setSidebarOpen(false);
+				return;
+			}
+		}
+
+		window.addEventListener("keydown", handleGlobalKeyDown);
+		return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+	}, [sidebarOpen]);
 
 	const handleCreateSession = useCallback(
 		async (cwd: string, title: string, permissionMode: PermissionMode) => {
@@ -768,6 +797,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 								<div className="relative">
 									<Search className="pointer-events-none absolute top-1/2 left-2.5 size-3 -translate-y-1/2 text-muted-foreground/70" />
 									<input
+										ref={searchInputRef}
 										value={sessionQuery}
 										onChange={(event) => setSessionQuery(event.target.value)}
 										placeholder="Search chats"
@@ -888,6 +918,12 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 						</div>
 
 						<div className="shrink-0 px-3 pt-3">
+							<div className="mb-3 hidden md:flex items-center justify-center gap-3 text-[9px] text-muted-foreground/70">
+								<kbd className="rounded border border-foreground/14 bg-background/60 px-1.5 py-0.5 font-mono text-[8px] text-muted-foreground/80">
+									⌘K
+								</kbd>{" "}
+								search
+							</div>
 							{claudeLimits.length > 0 && (
 								<div className="mb-3 rounded border border-foreground/8 bg-background/30 px-3.5 py-3">
 									<div className="mb-3 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/60">
