@@ -71,6 +71,26 @@ describe("parseCliOptions", () => {
 			serviceUser: "ubuntu",
 		});
 	});
+
+	test("parses upgrade command", async () => {
+		const options = await parseCliOptions(["upgrade"]);
+
+		expect(options).toMatchObject({
+			command: "upgrade",
+		});
+	});
+
+	test("suggests closest command for typos", async () => {
+		await expect(parseCliOptions(["doctro"])).rejects.toThrow(
+			"Unknown command: doctro. Did you mean 'doctor'?",
+		);
+	});
+
+	test("rejects unknown argument after command", async () => {
+		await expect(parseCliOptions(["doctor", "upgrade"])).rejects.toThrow(
+			"Unknown argument: upgrade",
+		);
+	});
 });
 
 describe("getInstallServiceHost", () => {

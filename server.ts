@@ -1,15 +1,23 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createHash } from "node:crypto";
 import { config, ensureDataDir, getClaudeBin } from "~/server/config.server";
 import { browserOutdir, buildBrowser, readBrowserBuild } from "./scripts/build";
 import packageJson from "./package.json";
 
 const serverFilePath = fileURLToPath(import.meta.url);
+const projectRoot = dirname(serverFilePath);
 const usingBunRuntime =
 	process.execPath.endsWith("/bun") || process.execPath.endsWith("/bun-debug");
 const isDevelopment = usingBunRuntime && Bun.env.NODE_ENV !== "production";
+const commandNames = ["serve", "doctor", "token", "install-service", "upgrade"] as const;
+const repository = "obviyus/shelleport";
+const linuxInstallDir = "/usr/local/lib/shelleport";
+const linuxBinaryPath = `${linuxInstallDir}/shelleport`;
+const linuxCliPath = "/usr/local/bin/shelleport";
+const systemdServicePath = "/etc/systemd/system/shelleport.service";
 
-type CommandName = "serve" | "doctor" | "token" | "install-service";
+type CommandName = "serve" | "doctor" | "token" | "install-service" | "upgrade";
 
 type CliOptions = {
 	command: CommandName;
@@ -80,18 +88,29 @@ async function getUserHomeDirectory(user: string) {
 }
 
 async function getLinuxServiceCommand() {
+	await Bun.$`mkdir -p ${linuxInstallDir}`.quiet();
+
 	if (usingBunRuntime) {
-		return ["bun", "run", serverFilePath, "serve"];
+		const compile = Bun.spawn(["bun", "run", "./scripts/package.ts", "local"], {
+			cwd: projectRoot,
+			stderr: "inherit",
+			stdout: "inherit",
+		});
+		const exitCode = await compile.exited;
+
+		if (exitCode !== 0) {
+			throw new Error("Failed to build native binary for install-service");
+		}
+
+		await Bun.write(linuxBinaryPath, Bun.file(join(projectRoot, "dist", "shelleport")));
+	} else {
+		await Bun.write(linuxBinaryPath, Bun.file(process.execPath));
 	}
 
-	const installDir = "/usr/local/lib/shelleport";
-	const installPath = `${installDir}/shelleport`;
+	await Bun.$`chmod 755 ${linuxBinaryPath}`.quiet();
+	await Bun.$`ln -sf ${linuxBinaryPath} ${linuxCliPath}`.quiet();
 
-	await Bun.$`mkdir -p ${installDir}`.quiet();
-	await Bun.write(installPath, Bun.file(process.execPath));
-	await Bun.$`chmod 755 ${installPath}`.quiet();
-
-	return [installPath, "serve"];
+	return [linuxBinaryPath, "serve"];
 }
 
 function getCliCommand() {
@@ -118,6 +137,235 @@ function parsePort(value: string) {
 
 export function getInstallServiceHost(host: string) {
 	return host === config.defaultHost ? "0.0.0.0" : host;
+}
+
+function getReleaseTarget() {
+	if (process.platform === "darwin" && process.arch === "arm64") {
+		return "darwin-arm64";
+	}
+
+	if (process.platform === "darwin" && process.arch === "x64") {
+		return "darwin-x64";
+	}
+
+	if (process.platform === "linux" && process.arch === "arm64") {
+		return "linux-arm64";
+	}
+
+	if (process.platform === "linux" && process.arch === "x64") {
+		return "linux-x64";
+	}
+
+	throw new Error(`Unsupported platform: ${process.platform}-${process.arch}`);
+}
+
+function normalizeReleaseVersion(tag: string) {
+	return tag.startsWith("v") ? tag.slice(1) : tag;
+}
+
+function getReleaseAssetName(version: string) {
+	return `shelleport-v${version}-${getReleaseTarget()}`;
+}
+
+function getReleaseUrl(version: string, fileName: string) {
+	return `https://github.com/${repository}/releases/download/v${version}/${fileName}`;
+}
+
+async function fetchLatestReleaseVersion() {
+	const response = await fetch(`https://api.github.com/repos/${repository}/releases/latest`, {
+		headers: {
+			accept: "application/vnd.github+json",
+			"user-agent": "shelleport-upgrade",
+		},
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to fetch latest release: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = await response.json();
+
+	if (!payload || typeof payload.tag_name !== "string" || payload.tag_name.length === 0) {
+		throw new Error("Latest release is missing tag_name");
+	}
+
+	return normalizeReleaseVersion(payload.tag_name);
+}
+
+async function pathExists(path: string) {
+	return (await Bun.file(path).exists()) || false;
+}
+
+async function getUpgradeBinaryPath() {
+	if (process.platform === "linux" && (await pathExists(linuxBinaryPath))) {
+		return linuxBinaryPath;
+	}
+
+	if (!usingBunRuntime) {
+		return process.execPath;
+	}
+
+	throw new Error("upgrade requires an installed shelleport binary");
+}
+
+async function installReleaseBinary(version: string, targetPath: string) {
+	const assetName = getReleaseAssetName(version);
+	const tmpDir = await Bun.$`mktemp -d`.text();
+	const normalizedTmpDir = tmpDir.trim();
+	const downloadPath = join(normalizedTmpDir, assetName);
+	const checksumsPath = join(normalizedTmpDir, "SHASUMS256.txt");
+
+	try {
+		const binaryResponse = await fetch(getReleaseUrl(version, assetName), {
+			headers: {
+				"user-agent": "shelleport-upgrade",
+			},
+		});
+
+		if (!binaryResponse.ok || !binaryResponse.body) {
+			throw new Error(`Download failed: ${binaryResponse.status} ${binaryResponse.statusText}`);
+		}
+
+		await Bun.write(downloadPath, binaryResponse);
+
+		const checksumsResponse = await fetch(getReleaseUrl(version, "SHASUMS256.txt"), {
+			headers: {
+				"user-agent": "shelleport-upgrade",
+			},
+		});
+
+		if (!checksumsResponse.ok) {
+			throw new Error(
+				`Checksum download failed: ${checksumsResponse.status} ${checksumsResponse.statusText}`,
+			);
+		}
+
+		await Bun.write(checksumsPath, await checksumsResponse.text());
+
+		const expectedLine =
+			(await Bun.file(checksumsPath).text())
+				.split("\n")
+				.map((line) => line.trim())
+				.find((line) => line.endsWith(`  ${assetName}`)) ?? null;
+
+		if (!expectedLine) {
+			throw new Error(`Missing checksum for ${assetName}`);
+		}
+
+		const expectedChecksum = expectedLine.split(/\s+/)[0];
+		const actualChecksum = createHash("sha256")
+			.update(await Bun.file(downloadPath).bytes())
+			.digest("hex");
+
+		if (expectedChecksum !== actualChecksum) {
+			throw new Error(`Checksum mismatch for ${assetName}`);
+		}
+
+		await Bun.$`mkdir -p ${dirname(targetPath)}`.quiet();
+		await Bun.write(targetPath, Bun.file(downloadPath));
+		await Bun.$`chmod 755 ${targetPath}`.quiet();
+	} finally {
+		if (normalizedTmpDir) {
+			await Bun.$`rm -rf ${normalizedTmpDir}`.quiet();
+		}
+	}
+}
+
+function readServiceValue(text: string, key: string) {
+	return text.match(new RegExp(`^${key}=(.+)$`, "m"))?.[1]?.trim() ?? null;
+}
+
+function buildLinuxSystemdService(
+	serviceUser: string,
+	serviceHome: string,
+	host: string,
+	port: number,
+	serviceEnvironment: Awaited<ReturnType<typeof getServiceEnvironment>>,
+) {
+	return `[Unit]
+Description=Shelleport host daemon
+After=network.target
+
+[Service]
+Type=simple
+User=${serviceUser}
+WorkingDirectory=${serviceHome}
+ExecStart=${linuxBinaryPath} serve --host=${host} --port=${port}
+Restart=always
+Environment=HOME=${serviceHome}
+${serviceEnvironment.path ? `Environment=PATH=${serviceEnvironment.path}\n` : ""}${serviceEnvironment.claudeBin ? `Environment=SHELLEPORT_CLAUDE_BIN=${serviceEnvironment.claudeBin}\n` : ""}
+
+[Install]
+WantedBy=multi-user.target
+`;
+}
+
+async function repairInstalledSystemdService() {
+	if (process.platform !== "linux" || !(await pathExists(systemdServicePath))) {
+		return false;
+	}
+
+	const serviceText = await Bun.file(systemdServicePath).text();
+	const serviceUser = readServiceValue(serviceText, "User") ?? "root";
+	const serviceHome =
+		readServiceValue(serviceText, "Environment=HOME") ??
+		(serviceUser === "root" ? "/root" : `/home/${serviceUser}`);
+	const host =
+		readServiceValue(serviceText, "Environment=HOST") ??
+		readServiceValue(serviceText, "ExecStart")?.match(/--host=([^\s]+)/)?.[1] ??
+		config.defaultHost;
+	const portValue =
+		readServiceValue(serviceText, "Environment=PORT") ??
+		readServiceValue(serviceText, "ExecStart")?.match(/--port=(\d+)/)?.[1] ??
+		String(config.defaultPort);
+	const port = parsePort(portValue);
+	const serviceEnvironment = await getServiceEnvironment(serviceHome);
+
+	await Bun.write(
+		systemdServicePath,
+		buildLinuxSystemdService(serviceUser, serviceHome, host, port, serviceEnvironment),
+	);
+	await runCheckedCommand(["systemctl", "daemon-reload"]);
+	return true;
+}
+
+function getEditDistance(left: string, right: string) {
+	const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+	const current = new Array<number>(right.length + 1).fill(0);
+
+	for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+		current[0] = leftIndex;
+
+		for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+			const substitutionCost = left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1;
+			current[rightIndex] = Math.min(
+				current[rightIndex - 1] + 1,
+				previous[rightIndex] + 1,
+				previous[rightIndex - 1] + substitutionCost,
+			);
+		}
+
+		for (let rightIndex = 0; rightIndex <= right.length; rightIndex += 1) {
+			previous[rightIndex] = current[rightIndex]!;
+		}
+	}
+
+	return previous[right.length]!;
+}
+
+function getUnknownCommandError(argument: string) {
+	const suggestion = commandNames
+		.map((command) => ({
+			command,
+			distance: getEditDistance(argument, command),
+		}))
+		.sort((left, right) => left.distance - right.distance)[0];
+
+	if (suggestion && suggestion.distance <= 3) {
+		return `Unknown command: ${argument}. Did you mean '${suggestion.command}'?`;
+	}
+
+	return `Unknown command: ${argument}. Run 'shelleport --help'.`;
 }
 
 async function runCheckedCommand(command: string[]) {
@@ -179,13 +427,10 @@ export async function parseCliOptions(argv = Bun.argv.slice(2)): Promise<CliOpti
 			continue;
 		}
 
-		if (
-			argument === "serve" ||
-			argument === "doctor" ||
-			argument === "token" ||
-			argument === "install-service"
-		) {
-			command = argument;
+		const matchedCommand = commandNames.find((candidate) => candidate === argument);
+
+		if (matchedCommand && command === "serve") {
+			command = matchedCommand;
 			continue;
 		}
 
@@ -272,6 +517,10 @@ export async function parseCliOptions(argv = Bun.argv.slice(2)): Promise<CliOpti
 			continue;
 		}
 
+		if (!argument.startsWith("-") && command === "serve") {
+			throw new Error(getUnknownCommandError(argument));
+		}
+
 		throw new Error(`Unknown argument: ${argument}`);
 	}
 
@@ -293,6 +542,7 @@ function printHelp() {
 	console.log("  doctor             Check local setup");
 	console.log("  token              Rotate the admin token");
 	console.log("  install-service    Write a launchd/systemd service");
+	console.log("  upgrade            Download and install the latest release");
 	console.log("");
 	console.log("Options:");
 	console.log("  --host <address>   Bind one address");
@@ -469,32 +719,17 @@ ${command.map((part) => `		<string>${part}</string>`).join("\n")}
 
 	const serviceUser = getInstallServiceUser(options.serviceUser);
 	const serviceHome = await getUserHomeDirectory(serviceUser);
-	const command = await getLinuxServiceCommand();
+	await getLinuxServiceCommand();
 	const serviceEnvironment = await getServiceEnvironment(serviceHome);
-	const servicePath = "/etc/systemd/system/shelleport.service";
-	const service = `[Unit]
-Description=Shelleport host daemon
-After=network.target
-
-[Service]
-Type=simple
-User=${serviceUser}
-WorkingDirectory=${serviceHome}
-ExecStart=${command.join(" ")}
-Restart=always
-Environment=HOME=${serviceHome}
-Environment=HOST=${host}
-Environment=PORT=${options.port}
-${serviceEnvironment.path ? `Environment=PATH=${serviceEnvironment.path}\n` : ""}${serviceEnvironment.claudeBin ? `Environment=SHELLEPORT_CLAUDE_BIN=${serviceEnvironment.claudeBin}\n` : ""}
-
-[Install]
-WantedBy=multi-user.target
-`;
-	await Bun.write(servicePath, service);
+	await Bun.write(
+		systemdServicePath,
+		buildLinuxSystemdService(serviceUser, serviceHome, host, options.port, serviceEnvironment),
+	);
 	await runCheckedCommand(["systemctl", "daemon-reload"]);
 	await runCheckedCommand(["systemctl", "enable", "--now", "shelleport.service"]);
-	console.log(`Wrote ${servicePath}`);
+	console.log(`Wrote ${systemdServicePath}`);
 	console.log(`Installed and started shelleport.service as ${serviceUser}`);
+	console.log(`CLI available at ${linuxCliPath}`);
 }
 
 async function runToken() {
@@ -505,6 +740,30 @@ async function runToken() {
 	console.log(token);
 	console.log("");
 	console.log("Existing sessions were signed out.");
+}
+
+async function runUpgrade() {
+	const version = await fetchLatestReleaseVersion();
+	const targetPath = await getUpgradeBinaryPath();
+
+	if (process.platform === "linux" && targetPath === linuxBinaryPath) {
+		const hasService = await repairInstalledSystemdService();
+		await installReleaseBinary(version, targetPath);
+		await Bun.$`ln -sf ${linuxBinaryPath} ${linuxCliPath}`.quiet();
+
+		if (hasService) {
+			await runCheckedCommand(["systemctl", "restart", "shelleport.service"]);
+			console.log(`Installed shelleport ${version}.`);
+			console.log("Restarted shelleport.service.");
+			return;
+		}
+
+		console.log(`Installed shelleport ${version}.`);
+		return;
+	}
+
+	await installReleaseBinary(version, targetPath);
+	console.log(`Installed shelleport ${version}.`);
 }
 
 export async function createServerFetchHandler(
@@ -622,26 +881,33 @@ export async function runServe(options: CliOptions) {
 }
 
 if (import.meta.main) {
-	const options = await parseCliOptions();
-	const { command, help, version } = options;
+	try {
+		const options = await parseCliOptions();
+		const { command, help, version } = options;
 
-	if (help) {
-		printHelp();
-		process.exit(0);
-	}
+		if (help) {
+			printHelp();
+			process.exit(0);
+		}
 
-	if (version) {
-		printVersion();
-		process.exit(0);
-	}
+		if (version) {
+			printVersion();
+			process.exit(0);
+		}
 
-	if (command === "doctor") {
-		await runDoctor(options);
-	} else if (command === "token") {
-		await runToken();
-	} else if (command === "install-service") {
-		await runInstallService(options);
-	} else {
-		await runServe(options);
+		if (command === "doctor") {
+			await runDoctor(options);
+		} else if (command === "token") {
+			await runToken();
+		} else if (command === "install-service") {
+			await runInstallService(options);
+		} else if (command === "upgrade") {
+			await runUpgrade();
+		} else {
+			await runServe(options);
+		}
+	} catch (error) {
+		console.error(error instanceof Error ? error.message : String(error));
+		process.exit(1);
 	}
 }
