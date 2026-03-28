@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+	getSidebarMeta,
 	getSessionHeaderBadges,
 	groupStream,
 	readToolResultContent,
@@ -139,6 +140,76 @@ describe("groupStream", () => {
 			type: "assistant-text-run",
 			entries: [{ id: "text-1" }],
 		});
+	});
+});
+
+describe("getSidebarMeta", () => {
+	test("shows cwd for running sessions", () => {
+		expect(
+			getSidebarMeta(
+				{
+					allowedTools: [],
+					archived: false,
+					createTime: 0,
+					cwd: "/tmp/project",
+					id: "session-1",
+					imported: false,
+					lastEventSequence: 0,
+					permissionMode: "default",
+					pid: null,
+					pinned: false,
+					provider: "claude",
+					providerSessionRef: null,
+					queuedInputCount: 0,
+					status: "running",
+					statusDetail: {
+						attempt: null,
+						blockReason: null,
+						message: null,
+						nextRetryTime: null,
+						waitKind: null,
+					},
+					title: "Run",
+					updateTime: 120_000,
+					usage: null,
+				},
+				180_000,
+			),
+		).toBe("/tmp/project");
+	});
+
+	test("shows relative time for idle sessions", () => {
+		expect(
+			getSidebarMeta(
+				{
+					allowedTools: [],
+					archived: false,
+					createTime: 0,
+					cwd: "/tmp/project",
+					id: "session-1",
+					imported: false,
+					lastEventSequence: 0,
+					permissionMode: "default",
+					pid: null,
+					pinned: false,
+					provider: "claude",
+					providerSessionRef: null,
+					queuedInputCount: 0,
+					status: "idle",
+					statusDetail: {
+						attempt: null,
+						blockReason: null,
+						message: null,
+						nextRetryTime: null,
+						waitKind: null,
+					},
+					title: "Done",
+					updateTime: 120_000,
+					usage: null,
+				},
+				180_000,
+			),
+		).toBe("1m ago");
 	});
 });
 
