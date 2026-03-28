@@ -62,6 +62,7 @@ import type {
 	QueuedSessionInput,
 	RequestResponsePayload,
 	SessionLimit,
+	SessionStatus,
 } from "~/shared/shelleport";
 import { useCurrentRoute, useRouter } from "~/client/router";
 import {
@@ -93,6 +94,28 @@ function requestNotificationPermission() {
 	}
 }
 
+function isActiveStatus(status: HostSession["status"]) {
+	return status === "running" || status === "retrying";
+}
+
+export function shouldNotifySessionCompletion(
+	previousStatus: HostSession["status"] | null,
+	nextStatus: HostSession["status"],
+) {
+	return (
+		previousStatus !== null &&
+		isActiveStatus(previousStatus) &&
+		!isActiveStatus(nextStatus) &&
+		nextStatus !== "waiting"
+	);
+}
+
+export function getSessionCompletionNotificationBody(session: HostSession) {
+	return session.status === "failed"
+		? `Failed: ${session.statusDetail.message ?? "unknown error"}`
+		: "Task complete";
+}
+
 function notifySessionComplete(session: HostSession) {
 	if (typeof window === "undefined" || !("Notification" in window)) {
 		return;
@@ -102,16 +125,10 @@ function notifySessionComplete(session: HostSession) {
 		return;
 	}
 
-	const body =
-		session.status === "failed"
-			? `Failed: ${session.statusDetail.message ?? "unknown error"}`
-			: "Task complete";
-
-	new Notification(session.title, { body, tag: `shelleport-${session.id}` });
-}
-
-function isActiveStatus(status: string) {
-	return status === "running" || status === "retrying";
+	new Notification(session.title, {
+		body: getSessionCompletionNotificationBody(session),
+		tag: `shelleport-${session.id}`,
+	});
 }
 
 function orderSessions(nextSessions: HostSession[]) {
@@ -197,7 +214,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const draftAttachmentsRef = useRef<DraftAttachment[]>([]);
 	const isAtBottom = useRef(true);
-	const previousSessionStatus = useRef<string | null>(null);
+	const previousSessionStatus = useRef<SessionStatus | null>(null);
 	const selectedId = renderRoute.kind === "session" ? renderRoute.params.sessionId : null;
 	const isSessionRoute = selectedId !== null;
 	const isArchivedView = renderRoute.kind === "archived";
@@ -401,6 +418,14 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			return;
 		}
 
+		requestNotificationPermission();
+	}, [selectedId]);
+
+	useEffect(() => {
+		if (!selectedId) {
+			return;
+		}
+
 		const controller = connectSSE(
 			selectedId,
 			(message) => {
@@ -422,12 +447,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 						const prevStatus = previousSessionStatus.current;
 						previousSessionStatus.current = message.payload.status;
 
-						if (
-							prevStatus !== null &&
-							isActiveStatus(prevStatus) &&
-							!isActiveStatus(message.payload.status) &&
-							message.payload.status !== "waiting"
-						) {
+						if (shouldNotifySessionCompletion(prevStatus, message.payload.status)) {
 							notifySessionComplete(message.payload);
 						}
 
@@ -567,7 +587,6 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			return;
 		}
 
-		requestNotificationPermission();
 		setPrompt("");
 		setDraftAttachments([]);
 
