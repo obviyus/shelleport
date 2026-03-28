@@ -73,6 +73,15 @@ function publishQueuedInputs(sessionId: string, queuedInputs: QueuedSessionInput
 	});
 }
 
+function titleFromPrompt(prompt: string) {
+	const firstLine = prompt.trim().split("\n")[0].trim();
+	return firstLine.length <= 60 ? firstLine : `${firstLine.slice(0, 57)}...`;
+}
+
+function isDefaultTitle(title: string) {
+	return /^(Claude Code|Codex) session$/.test(title);
+}
+
 function normalizeAllowedTools(allowedTools: string[]) {
 	return [...new Set(allowedTools)].sort();
 }
@@ -454,10 +463,13 @@ export const sessionBroker = {
 			);
 		}
 
+		const autoTitle =
+			!input.title?.trim() && input.prompt?.trim() ? titleFromPrompt(input.prompt) : null;
+
 		const session = sessionStore.createSession({
 			provider: input.provider,
 			cwd: input.cwd,
-			title: input.title?.trim() || `${provider.label} session`,
+			title: input.title?.trim() || autoTitle || `${provider.label} session`,
 			permissionMode: input.permissionMode ?? getDefaultPermissionMode(input.provider),
 			allowedTools: normalizeAllowedTools(input.allowedTools ?? []),
 		});
@@ -509,6 +521,16 @@ export const sessionBroker = {
 				"provider_no_attachment_support",
 				`${provider.label} does not support attachments`,
 			);
+		}
+
+		if (isDefaultTitle(session.title) && input.prompt.trim().length > 0) {
+			const updated = sessionStore.updateSession(sessionId, {
+				title: titleFromPrompt(input.prompt),
+			});
+
+			if (updated) {
+				publishSession(updated);
+			}
 		}
 
 		publishPromptEvent(sessionId, input);
