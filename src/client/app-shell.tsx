@@ -139,6 +139,23 @@ function formatQueuedAttachmentLabel(queuedInput: QueuedSessionInput) {
 	return `${count} attachment${count === 1 ? "" : "s"}`;
 }
 
+export function getDocumentTitle(session: HostSession | null) {
+	if (!session) {
+		return "shelleport";
+	}
+
+	const statusIcon =
+		session.status === "running" || session.status === "retrying"
+			? "● "
+			: session.status === "waiting"
+				? "◉ "
+				: session.status === "failed"
+					? "✗ "
+					: "";
+
+	return `${statusIcon}${session.title} — shelleport`;
+}
+
 export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated: true }> }) {
 	const route = useCurrentRoute();
 	const renderRoute =
@@ -436,21 +453,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	}, [stream]);
 
 	useEffect(() => {
-		if (!sessionView) {
-			document.title = "shelleport";
-			return;
-		}
-
-		const statusIcon =
-			sessionView.status === "running" || sessionView.status === "retrying"
-				? "● "
-				: sessionView.status === "waiting"
-					? "◉ "
-					: sessionView.status === "failed"
-						? "✗ "
-						: "";
-
-		document.title = `${statusIcon}${sessionView.title} — shelleport`;
+		document.title = getDocumentTitle(sessionView);
 
 		return () => {
 			document.title = "shelleport";
