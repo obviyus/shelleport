@@ -639,6 +639,29 @@ export function getStatusMessage(session: HostSession) {
 	return null;
 }
 
+function formatRelativeTime(now: number, time: number) {
+	const deltaMs = now - time;
+
+	if (deltaMs < 60_000) {
+		return "just now";
+	}
+
+	const minutes = Math.floor(deltaMs / 60_000);
+
+	if (minutes < 60) {
+		return `${minutes}m ago`;
+	}
+
+	const hours = Math.floor(minutes / 60);
+
+	if (hours < 24) {
+		return `${hours}h ago`;
+	}
+
+	const days = Math.floor(hours / 24);
+	return `${days}d ago`;
+}
+
 export function getSidebarMeta(session: HostSession, now: number) {
 	if (session.status === "retrying" && session.statusDetail.nextRetryTime !== null) {
 		const seconds = Math.max(0, Math.ceil((session.statusDetail.nextRetryTime - now) / 1000));
@@ -653,7 +676,11 @@ export function getSidebarMeta(session: HostSession, now: number) {
 		return session.statusDetail.message ?? "failed";
 	}
 
-	return session.cwd;
+	if (session.status === "running") {
+		return session.cwd;
+	}
+
+	return formatRelativeTime(now, session.updateTime);
 }
 
 function formatSessionModelLabel(model: string) {
