@@ -249,7 +249,7 @@ function DirectoryColumn({
 			tabIndex={0}
 			onFocus={onColumnFocus}
 			onKeyDown={handleKeyDown}
-			className={`flex h-full w-full md:w-64 shrink-0 flex-col overflow-hidden rounded-xl border ${
+			className={`flex min-h-[18rem] w-full shrink-0 flex-col overflow-hidden rounded-xl border md:h-full md:min-h-0 md:w-64 ${
 				isActiveColumn
 					? "border-foreground/18 bg-card shadow-[0_18px_50px_oklch(0_0_0_/_0.28)]"
 					: "border-foreground/10 bg-card/82 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.02)]"
@@ -585,7 +585,7 @@ export function SessionLauncher({
 	}, []);
 
 	return (
-		<div className="flex h-full flex-col">
+		<div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:overflow-hidden">
 			<div className="border-b border-border px-3 md:px-6 py-4 md:py-5">
 				<div className="mx-auto flex w-full max-w-[110rem] flex-col md:flex-row md:items-end md:justify-between gap-4 md:gap-6">
 					<div className="min-w-0 flex-1">
@@ -708,7 +708,7 @@ export function SessionLauncher({
 				)}
 			</div>
 
-			<div className="min-h-0 flex-1 px-3 md:px-6 py-4 md:py-5">
+			<div className="px-3 py-4 md:min-h-0 md:flex-1 md:px-6 md:py-5">
 				{isMobile && pathChain.length > 1 && (
 					<div className="mx-auto flex max-w-[110rem] items-center gap-2 mb-3">
 						<button
@@ -732,7 +732,7 @@ export function SessionLauncher({
 				)}
 				<div
 					ref={browserRef}
-					className="mx-auto flex h-full w-full max-w-[110rem] gap-3 overflow-hidden pb-2"
+					className="mx-auto flex w-full max-w-[110rem] gap-3 overflow-hidden pb-2 md:h-full"
 				>
 					{(isMobile ? pathChain.slice(-1) : visiblePathChain).map((path, index) => {
 						const absoluteIndex = windowStartIndex + index;
