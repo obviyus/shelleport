@@ -445,8 +445,7 @@ describe("handleApiRequest", () => {
 			}>;
 		}>(response);
 		expect(
-			body.providers.find((provider) => provider.id === "claude")?.capabilities
-				.supportsAttachments,
+			body.providers.find((provider) => provider.id === "claude")?.capabilities.supportsAttachments,
 		).toBe(true);
 	});
 
@@ -1095,15 +1094,15 @@ describe("handleApiRequest", () => {
 				title: string;
 			}>;
 		}>(searchResponse);
-		expect(
-			searchJson.sessions.some((session) => session.id === alphaSession.session.id),
-		).toBe(true);
-		expect(
-			searchJson.sessions.some((session) => session.title === "Refactor search index"),
-		).toBe(true);
-		expect(
-			searchJson.sessions.some((session) => session.id === bravoSession.session.id),
-		).toBe(false);
+		expect(searchJson.sessions.some((session) => session.id === alphaSession.session.id)).toBe(
+			true,
+		);
+		expect(searchJson.sessions.some((session) => session.title === "Refactor search index")).toBe(
+			true,
+		);
+		expect(searchJson.sessions.some((session) => session.id === bravoSession.session.id)).toBe(
+			false,
+		);
 	});
 
 	test("starts a session, streams SSE, and resumes after approval", async () => {
@@ -1730,10 +1729,7 @@ describe("handleApiRequest", () => {
 		const textContent = "hello world\n";
 		const formData = new FormData();
 		formData.set("prompt", "Read this file.");
-		formData.append(
-			"attachments",
-			new File([textContent], "notes.txt", { type: "text/plain" }),
-		);
+		formData.append("attachments", new File([textContent], "notes.txt", { type: "text/plain" }));
 
 		const inputResponse = await handleApiRequest(
 			new Request(`http://localhost/api/sessions/${sessionId}/input`, {
@@ -1875,5 +1871,128 @@ describe("handleApiRequest", () => {
 		expect(await response.json()).toMatchObject({
 			code: "invalid_cwd",
 		});
+	});
+
+	test("rejects too many attachments", async () => {
+		const createResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "claude",
+					cwd: testRoot,
+					title: "Too many attachments",
+				}),
+			}),
+		);
+		expect(createResponse.status).toBe(201);
+		const createJson = await readJson<{ session: { id: string } }>(createResponse);
+		const sessionId = createJson.session.id;
+
+		const formData = new FormData();
+		formData.set("prompt", "Too many files.");
+		for (let i = 0; i < 11; i++) {
+			formData.append(
+				"attachments",
+				new File([`content-${i}`], `file-${i}.txt`, { type: "text/plain" }),
+			);
+		}
+
+		const inputResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}/input`, {
+				method: "POST",
+				headers: authHeader,
+				body: formData,
+			}),
+		);
+		expect(inputResponse.status).toBe(400);
+		expect(await inputResponse.json()).toMatchObject({
+			code: "too_many_attachments",
+		});
+	});
+
+	test("rejects oversized attachment", async () => {
+		const createResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "claude",
+					cwd: testRoot,
+					title: "Oversized attachment",
+				}),
+			}),
+		);
+		expect(createResponse.status).toBe(201);
+		const createJson = await readJson<{ session: { id: string } }>(createResponse);
+		const sessionId = createJson.session.id;
+
+		const formData = new FormData();
+		formData.set("prompt", "Big file.");
+		const oversizedBuffer = new Uint8Array(25 * 1024 * 1024 + 1);
+		formData.append(
+			"attachments",
+			new File([oversizedBuffer], "huge.bin", { type: "application/octet-stream" }),
+		);
+
+		const inputResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}/input`, {
+				method: "POST",
+				headers: authHeader,
+				body: formData,
+			}),
+		);
+		expect(inputResponse.status).toBe(400);
+		expect(await inputResponse.json()).toMatchObject({
+			code: "attachment_too_large",
+		});
+	});
+
+	test("rejects attachments exceeding total size limit", async () => {
+		const createResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "claude",
+					cwd: testRoot,
+					title: "Total size exceeded",
+				}),
+			}),
+		);
+		expect(createResponse.status).toBe(201);
+		const createJson = await readJson<{ session: { id: string } }>(createResponse);
+		const sessionId = createJson.session.id;
+
+		const formData = new FormData();
+		formData.set("prompt", "Multiple large files.");
+		// 3 files at 20 MB each = 60 MB, exceeding the 50 MB total limit
+		const largeBuffer = new Uint8Array(20 * 1024 * 1024);
+		for (let i = 0; i < 3; i++) {
+			formData.append(
+				"attachments",
+				new File([largeBuffer], `large-${i}.bin`, { type: "application/octet-stream" }),
+			);
+		}
+
+		const inputResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}/input`, {
+				method: "POST",
+				headers: authHeader,
+				body: formData,
+			}),
+		);
+		expect(inputResponse.status).toBe(400);
+		const json = await inputResponse.json();
+		expect(json.code).toBe("attachments_total_too_large");
 	});
 });

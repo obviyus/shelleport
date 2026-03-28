@@ -131,7 +131,11 @@ function classifyClaudeBlockReason(content: string) {
 	return null;
 }
 
-function formatAttachmentLine(attachment: ProviderAdapterRunInput["attachments"][number], index: number, total: number) {
+function formatAttachmentLine(
+	attachment: ProviderAdapterRunInput["attachments"][number],
+	index: number,
+	total: number,
+) {
 	const isImage = attachment.contentType.startsWith("image/");
 	if (total === 1) {
 		return isImage
@@ -151,9 +155,7 @@ function formatClaudePrompt(prompt: string, attachments: ProviderAdapterRunInput
 		formatAttachmentLine(attachment, index, attachments.length),
 	);
 
-	return prompt.trim().length === 0
-		? lines.join("\n")
-		: `${lines.join("\n")}\n\n${prompt}`;
+	return prompt.trim().length === 0 ? lines.join("\n") : `${lines.join("\n")}\n\n${prompt}`;
 }
 
 function createClaudeCommand(input: ProviderAdapterRunInput) {

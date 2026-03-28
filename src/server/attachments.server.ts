@@ -3,6 +3,15 @@ import type { SessionAttachment } from "~/shared/shelleport";
 import { ApiError } from "~/server/api-error.server";
 import { createId } from "~/server/id.server";
 
+/** Maximum number of attachments per message. */
+export const MAX_ATTACHMENT_COUNT = 10;
+
+/** Maximum size of a single attachment in bytes (25 MB). */
+export const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
+
+/** Maximum total size of all attachments in a single message in bytes (50 MB). */
+export const MAX_TOTAL_ATTACHMENT_SIZE = 50 * 1024 * 1024;
+
 function sanitizeFilename(name: string) {
 	const trimmed = basename(name).trim();
 	const safeName = trimmed.replace(/[^A-Za-z0-9._-]/g, "-");
@@ -132,12 +141,40 @@ export async function storeSessionAttachments(
 		return [];
 	}
 
+	if (entries.length > MAX_ATTACHMENT_COUNT) {
+		throw new ApiError(
+			400,
+			"too_many_attachments",
+			`Too many attachments: maximum is ${MAX_ATTACHMENT_COUNT} files per message`,
+		);
+	}
+
+	const files = entries.map(validateAttachmentFile);
+	const totalSize = files.reduce((sum, file) => sum + file.size, 0);
+
+	for (const file of files) {
+		if (file.size > MAX_ATTACHMENT_SIZE) {
+			throw new ApiError(
+				400,
+				"attachment_too_large",
+				`Attachment "${file.name}" exceeds the ${MAX_ATTACHMENT_SIZE / (1024 * 1024)} MB size limit`,
+			);
+		}
+	}
+
+	if (totalSize > MAX_TOTAL_ATTACHMENT_SIZE) {
+		throw new ApiError(
+			400,
+			"attachments_total_too_large",
+			`Total attachment size exceeds the ${MAX_TOTAL_ATTACHMENT_SIZE / (1024 * 1024)} MB limit`,
+		);
+	}
+
 	const uploadDir = join(cwd, ".shelleport", "uploads", sessionId);
 	await Bun.$`mkdir -p ${uploadDir}`.quiet();
 
 	return Promise.all(
-		entries.map(async (entry) => {
-			const file = validateAttachmentFile(entry);
+		files.map(async (file) => {
 			const bytes = new Uint8Array(await file.arrayBuffer());
 			const contentType = resolveContentType(file, bytes);
 			const safeName = sanitizeFilename(file.name);
