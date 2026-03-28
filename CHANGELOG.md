@@ -15,6 +15,7 @@ All notable changes to shelleport are documented here.
 - Sessions now auto-title from the first prompt instead of keeping the generic provider title (#19) (thanks @kesava500)
 - Session views can now copy the full conversation transcript as markdown (#20) (thanks @kesava500)
 - Running sessions can now be interrupted with Ctrl+C from the browser, with clean interrupted-session messaging instead of a CLI error card (#21) (thanks @kesava500)
+- Session views now show a visible reconnect banner when the live stream drops instead of only a tiny badge in the header (#22) (thanks @kesava500)
 
 ## 0.0.22 - 2026-03-28
 

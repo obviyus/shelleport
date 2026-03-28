@@ -135,6 +135,13 @@ export function shouldInterruptOnCtrlC(
 	return session?.status === "running" || session?.status === "retrying";
 }
 
+export function shouldShowReconnectBanner(
+	isSessionPending: boolean,
+	streamState: "connected" | "reconnecting",
+) {
+	return !isSessionPending && streamState === "reconnecting";
+}
+
 function notifySessionComplete(session: HostSession) {
 	if (typeof window === "undefined" || !("Notification" in window)) {
 		return;
@@ -1366,7 +1373,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 							</div>
 						</header>
 
-						{!isSessionPending && streamState === "reconnecting" && (
+						{shouldShowReconnectBanner(isSessionPending, streamState) && (
 							<div className="shrink-0 border-b border-amber-500/20 bg-amber-500/10 px-3 md:px-6 py-2 text-center text-[11px] text-amber-200/90">
 								<Loader2 className="mr-1.5 inline size-3 animate-spin align-[-2px]" />
 								Reconnecting to session stream…

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
 	getDocumentTitle,
 	getSessionCompletionNotificationBody,
+	shouldShowReconnectBanner,
 	shouldInterruptOnCtrlC,
 	shouldNotifySessionCompletion,
 } from "~/client/app-shell";
@@ -239,5 +240,15 @@ describe("shouldInterruptOnCtrlC", () => {
 				null,
 			),
 		).toBe(false);
+	});
+});
+
+describe("shouldShowReconnectBanner", () => {
+	test("shows the banner when a loaded session is reconnecting", () => {
+		expect(shouldShowReconnectBanner(false, "reconnecting")).toBe(true);
+	});
+
+	test("hides the banner while the session is still pending", () => {
+		expect(shouldShowReconnectBanner(true, "reconnecting")).toBe(false);
 	});
 });
