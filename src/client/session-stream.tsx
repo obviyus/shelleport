@@ -912,9 +912,34 @@ function UserMessageRenderer({ event }: { event: HostEvent }) {
 	);
 }
 
+function getWriteContent(call: HostEvent) {
+	const toolName = call.data.toolName as string;
+
+	if (toolName !== "Write" && toolName !== "Edit") {
+		return null;
+	}
+
+	const input = call.data.input as Record<string, unknown> | undefined;
+
+	if (!input) {
+		return null;
+	}
+
+	const content =
+		typeof input.content === "string"
+			? input.content
+			: typeof input.new_string === "string"
+				? input.new_string
+				: null;
+
+	return content && content.length > 0 ? content : null;
+}
+
 function ToolCard({ call, result }: { call: HostEvent; result: HostEvent | null }) {
 	const [shouldRenderCode, setShouldRenderCode] = useState(false);
-	const output = readToolResultContent(result);
+	const resultOutput = readToolResultContent(result);
+	const writeContent = getWriteContent(call);
+	const output = writeContent ?? resultOutput;
 	const hasOutput = output.length > 0;
 	const isRunning = result === null;
 	const fileName = getHighlightedFileName(call);
