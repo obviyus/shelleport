@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { getSessionHeaderBadges } from "~/client/session-stream";
+import { getSessionHeaderBadges, groupStream, readToolResultContent } from "~/client/session-stream";
 
 describe("getSessionHeaderBadges", () => {
 	test("puts the normalized model badge before usage badges", () => {
@@ -73,5 +73,86 @@ describe("getSessionHeaderBadges", () => {
 				visibility: "xl",
 			},
 		]);
+	});
+});
+
+describe("groupStream", () => {
+	test("pairs tool results by toolUseId across intervening events", () => {
+		const grouped = groupStream([
+			{
+				id: "call-1",
+				sessionId: "session-1",
+				sequence: 1,
+				kind: "tool-call",
+				summary: "Bash",
+				data: {
+					toolName: "Bash",
+					toolUseId: "tool-1",
+				},
+				rawProviderEvent: null,
+				createTime: 1,
+			},
+			{
+				id: "text-1",
+				sessionId: "session-1",
+				sequence: 2,
+				kind: "text",
+				summary: "Assistant message",
+				data: {
+					role: "assistant",
+					text: "Working...",
+				},
+				rawProviderEvent: null,
+				createTime: 2,
+			},
+			{
+				id: "result-1",
+				sessionId: "session-1",
+				sequence: 3,
+				kind: "tool-result",
+				summary: "Tool result",
+				data: {
+					toolUseId: "tool-1",
+					content: "ok",
+					isError: false,
+				},
+				rawProviderEvent: null,
+				createTime: 3,
+			},
+		]);
+
+		expect(grouped).toHaveLength(2);
+		expect(grouped[0]).toMatchObject({
+			type: "tool",
+			call: {
+				id: "call-1",
+			},
+			result: {
+				id: "result-1",
+			},
+		});
+		expect(grouped[1]).toMatchObject({
+			type: "assistant-text-run",
+			entries: [{ id: "text-1" }],
+		});
+	});
+});
+
+describe("readToolResultContent", () => {
+	test("reads stored tool-result content", () => {
+		expect(
+			readToolResultContent({
+				id: "result-1",
+				sessionId: "session-1",
+				sequence: 1,
+				kind: "tool-result",
+				summary: "Tool result",
+				data: {
+					content: "bash output",
+				},
+				rawProviderEvent: null,
+				createTime: 1,
+			}),
+		).toBe("bash output");
 	});
 });

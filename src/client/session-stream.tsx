@@ -767,8 +767,13 @@ function isAssistantTextEvent(event: HostEvent | undefined) {
 
 export function groupStream(entries: HostEvent[]): GroupedEntry[] {
 	const grouped: GroupedEntry[] = [];
+	const consumedResultIndexes = new Set<number>();
 
 	for (let index = 0; index < entries.length; index += 1) {
+		if (consumedResultIndexes.has(index)) {
+			continue;
+		}
+
 		const entry = entries[index];
 
 		if (entry.kind === "tool-call") {
@@ -787,21 +792,35 @@ export function groupStream(entries: HostEvent[]): GroupedEntry[] {
 				break;
 			}
 
-			const next = entries[index + 1];
+			let resultIndex = -1;
 
-			if (
-				next?.kind === "tool-result" &&
-				(!toolUseId || typeof next.data.toolUseId !== "string" || next.data.toolUseId === toolUseId)
-			) {
-				grouped.push({ call, result: next, type: "tool" });
-				index += 1;
+			for (let candidateIndex = index + 1; candidateIndex < entries.length; candidateIndex += 1) {
+				const candidate = entries[candidateIndex];
+
+				if (candidate.kind !== "tool-result") {
+					continue;
+				}
+
+				const candidateToolUseId =
+					typeof candidate.data.toolUseId === "string" ? candidate.data.toolUseId : null;
+
+				if (!toolUseId || !candidateToolUseId || candidateToolUseId === toolUseId) {
+					resultIndex = candidateIndex;
+					break;
+				}
+			}
+
+			if (resultIndex !== -1) {
+				consumedResultIndexes.add(resultIndex);
+				grouped.push({ call, result: entries[resultIndex], type: "tool" });
 			} else {
 				grouped.push({ call, result: null, type: "tool" });
 			}
+
 			continue;
 		}
 
-		if (entry.kind === "tool-result" && entries[index - 1]?.kind === "tool-call") {
+		if (entry.kind === "tool-result") {
 			continue;
 		}
 
@@ -821,6 +840,14 @@ export function groupStream(entries: HostEvent[]): GroupedEntry[] {
 	}
 
 	return grouped;
+}
+
+export function readToolResultContent(result: HostEvent | null) {
+	if (!result) {
+		return "";
+	}
+
+	return readString(result.data.output) || readString(result.data.content);
 }
 
 export function GroupedEntryRenderer({ group }: { group: GroupedEntry }) {
@@ -878,7 +905,7 @@ function UserMessageRenderer({ event }: { event: HostEvent }) {
 
 function ToolCard({ call, result }: { call: HostEvent; result: HostEvent | null }) {
 	const [shouldRenderCode, setShouldRenderCode] = useState(false);
-	const output = result ? readString(result.data.output) : "";
+	const output = readToolResultContent(result);
 	const hasOutput = output.length > 0;
 	const isRunning = result === null;
 	const fileName = getHighlightedFileName(call);
