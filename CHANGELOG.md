@@ -7,6 +7,7 @@ All notable changes to shelleport are documented here.
 ### Added
 
 - Idle, interrupted, and completed sessions now show relative update times in the sidebar instead of repeating the cwd path (#13) (thanks @kesava500)
+- Session views now page older events instead of loading the full event history at once, with a load-earlier control for older messages (#14) (thanks @kesava500)
 
 ## 0.0.22 - 2026-03-28
 

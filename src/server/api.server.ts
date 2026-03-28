@@ -310,6 +310,34 @@ function sessionIdFromSegments(segments: string[]) {
 	return sessionId;
 }
 
+function readPositiveIntegerQueryParam(
+	url: URL,
+	name: string,
+	options?: { max?: number },
+) {
+	const value = url.searchParams.get(name);
+
+	if (value === null) {
+		return undefined;
+	}
+
+	if (!/^\d+$/.test(value)) {
+		throw new ApiError(400, `invalid_${name}`, `${name} must be a positive integer`);
+	}
+
+	const parsed = Number(value);
+
+	if (!Number.isSafeInteger(parsed) || parsed < 1) {
+		throw new ApiError(400, `invalid_${name}`, `${name} must be a positive integer`);
+	}
+
+	if (options?.max !== undefined && parsed > options.max) {
+		throw new ApiError(400, `invalid_${name}`, `${name} must be at most ${options.max}`);
+	}
+
+	return parsed;
+}
+
 async function listDirectory(path: string): Promise<DirectoryListing> {
 	await assertDirectory(path, "path");
 
@@ -437,13 +465,9 @@ async function dispatchApiRequest(request: Request) {
 		const sessionId = sessionIdFromSegments(segments);
 
 		if (request.method === "GET" && segments.length === 3) {
-			const beforeParam = url.searchParams.get("before");
-			const limitParam = url.searchParams.get("limit");
-			const before = beforeParam !== null ? Number(beforeParam) : undefined;
-			const limit = limitParam !== null ? Number(limitParam) : undefined;
 			const detail = sessionBroker.getSessionDetail(sessionId, {
-				before: before !== undefined && Number.isFinite(before) ? before : undefined,
-				limit: limit !== undefined && Number.isFinite(limit) ? Math.min(limit, 500) : undefined,
+				before: readPositiveIntegerQueryParam(url, "before"),
+				limit: readPositiveIntegerQueryParam(url, "limit", { max: 500 }),
 			});
 			return detail
 				? Response.json(detail)

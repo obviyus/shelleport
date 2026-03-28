@@ -564,6 +564,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			const previousScrollHeight = scrollElement?.scrollHeight ?? 0;
 
 			setStream((previous) => [...detail.events, ...previous]);
+			setTotalEvents(detail.totalEvents);
 
 			requestAnimationFrame(() => {
 				if (scrollElement) {
