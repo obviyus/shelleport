@@ -78,8 +78,8 @@ function titleFromPrompt(prompt: string) {
 	return firstLine.length <= 60 ? firstLine : `${firstLine.slice(0, 57)}...`;
 }
 
-function isDefaultTitle(title: string) {
-	return /^(Claude Code|Codex) session$/.test(title);
+function defaultSessionTitle(providerId: CreateSessionInput["provider"]) {
+	return `${getProvider(providerId).label} session`;
 }
 
 function normalizeAllowedTools(allowedTools: string[]) {
@@ -469,7 +469,7 @@ export const sessionBroker = {
 		const session = sessionStore.createSession({
 			provider: input.provider,
 			cwd: input.cwd,
-			title: input.title?.trim() || autoTitle || `${provider.label} session`,
+			title: input.title?.trim() || autoTitle || defaultSessionTitle(input.provider),
 			permissionMode: input.permissionMode ?? getDefaultPermissionMode(input.provider),
 			allowedTools: normalizeAllowedTools(input.allowedTools ?? []),
 		});
@@ -523,7 +523,7 @@ export const sessionBroker = {
 			);
 		}
 
-		if (isDefaultTitle(session.title) && input.prompt.trim().length > 0) {
+		if (session.title === defaultSessionTitle(session.provider) && input.prompt.trim().length > 0) {
 			const updated = sessionStore.updateSession(sessionId, {
 				title: titleFromPrompt(input.prompt),
 			});

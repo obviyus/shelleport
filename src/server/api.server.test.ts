@@ -532,6 +532,29 @@ describe("handleApiRequest", () => {
 		).toEqual(expect.arrayContaining(["First prompt"]));
 	});
 
+	test("auto-titles sessions from the create-session prompt", async () => {
+		const createResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "claude",
+					cwd: testRoot,
+					prompt: "Ship the release\nWith details below",
+				}),
+			}),
+		);
+		expect(createResponse.status).toBe(201);
+		expect(await readJson<{ session: { title: string } }>(createResponse)).toMatchObject({
+			session: {
+				title: "Ship the release",
+			},
+		});
+	});
+
 	test("defaults Claude sessions to bypass permissions", async () => {
 		const createResponse = await handleApiRequest(
 			new Request("http://localhost/api/sessions", {
@@ -751,6 +774,78 @@ describe("handleApiRequest", () => {
 				.filter((event) => event.kind === "text" && event.data.role === "user")
 				.map((event) => event.data.text),
 		).toEqual(expect.arrayContaining(["Second prompt"]));
+	});
+
+	test("auto-titles default sessions on the first sent prompt", async () => {
+		const createResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "claude",
+					cwd: testRoot,
+				}),
+			}),
+		);
+		expect(createResponse.status).toBe(201);
+		const createJson = await readJson<{ session: { id: string; title: string } }>(createResponse);
+		expect(createJson.session.title).toBe("Claude Code session");
+
+		const formData = new FormData();
+		formData.set("prompt", "Investigate flaky test failures");
+
+		const inputResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${createJson.session.id}/input`, {
+				method: "POST",
+				headers: authHeader,
+				body: formData,
+			}),
+		);
+		expect(inputResponse.status).toBe(202);
+		expect(await readJson<{ session: { title: string } }>(inputResponse)).toMatchObject({
+			session: {
+				title: "Investigate flaky test failures",
+			},
+		});
+	});
+
+	test("does not overwrite manual session titles on sent prompts", async () => {
+		const createResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "claude",
+					cwd: testRoot,
+					title: "Pinned title",
+				}),
+			}),
+		);
+		expect(createResponse.status).toBe(201);
+		const createJson = await readJson<{ session: { id: string } }>(createResponse);
+
+		const formData = new FormData();
+		formData.set("prompt", "Try to replace the title");
+
+		const inputResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${createJson.session.id}/input`, {
+				method: "POST",
+				headers: authHeader,
+				body: formData,
+			}),
+		);
+		expect(inputResponse.status).toBe(202);
+		expect(await readJson<{ session: { title: string } }>(inputResponse)).toMatchObject({
+			session: {
+				title: "Pinned title",
+			},
+		});
 	});
 
 	test("paginates session events from newest to oldest", async () => {

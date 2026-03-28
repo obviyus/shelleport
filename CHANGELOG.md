@@ -12,6 +12,7 @@ All notable changes to shelleport are documented here.
 - Write and Edit tool cards now show the actual file content being written instead of only the result summary (#16) (thanks @kesava500)
 - Browser tabs now show the selected session title and status while you are viewing a session (#17) (thanks @kesava500)
 - Browser notifications now fire when a background session finishes or fails while you are viewing that session (#18) (thanks @kesava500)
+- Sessions now auto-title from the first prompt instead of keeping the generic provider title (#19) (thanks @kesava500)
 
 ## 0.0.22 - 2026-03-28
 
