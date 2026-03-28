@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+	copyToClipboard,
 	getSidebarMeta,
 	getSessionHeaderBadges,
 	groupStream,
@@ -229,5 +230,35 @@ describe("readToolResultContent", () => {
 				createTime: 1,
 			}),
 		).toBe("bash output");
+	});
+});
+
+describe("copyToClipboard", () => {
+	test("uses navigator clipboard directly", async () => {
+		const calls: string[] = [];
+		const originalNavigator = globalThis.navigator;
+
+		Object.defineProperty(globalThis, "navigator", {
+			configurable: true,
+			value: {
+				clipboard: {
+					writeText(text: string) {
+						calls.push(text);
+						return Promise.resolve();
+					},
+				},
+			},
+		});
+
+		try {
+			await copyToClipboard("copied text");
+		} finally {
+			Object.defineProperty(globalThis, "navigator", {
+				configurable: true,
+				value: originalNavigator,
+			});
+		}
+
+		expect(calls).toEqual(["copied text"]);
 	});
 });
