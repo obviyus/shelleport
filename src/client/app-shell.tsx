@@ -427,6 +427,28 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	}, [stream]);
 
 	useEffect(() => {
+		if (!sessionView) {
+			document.title = "shelleport";
+			return;
+		}
+
+		const statusIcon =
+			sessionView.status === "running" || sessionView.status === "retrying"
+				? "● "
+				: sessionView.status === "waiting"
+					? "◉ "
+					: sessionView.status === "failed"
+						? "✗ "
+						: "";
+
+		document.title = `${statusIcon}${sessionView.title} — shelleport`;
+
+		return () => {
+			document.title = "shelleport";
+		};
+	}, [sessionView?.id, sessionView?.status, sessionView?.title]);
+
+	useEffect(() => {
 		const timer = setInterval(() => setNow(Date.now()), 1000);
 		return () => clearInterval(timer);
 	}, []);
