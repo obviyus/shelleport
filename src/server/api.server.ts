@@ -478,6 +478,11 @@ async function dispatchApiRequest(request: Request) {
 			return Response.json({ session });
 		}
 
+		if (request.method === "DELETE" && segments.length === 3) {
+			const session = await sessionBroker.deleteSession(sessionId);
+			return Response.json({ session });
+		}
+
 		if (request.method === "POST" && segments[3] === "meta") {
 			const payload = await readJson<SessionMetaPayload>(request);
 			validateMetaInput(payload);

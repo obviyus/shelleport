@@ -131,6 +131,12 @@ export function controlSession(sessionId: string, action: "interrupt" | "termina
 	});
 }
 
+export function deleteSession(sessionId: string) {
+	return request<{ session: HostSession }>(`/api/sessions/${sessionId}`, {
+		method: "DELETE",
+	});
+}
+
 export function setSessionArchived(sessionId: string, archived: boolean) {
 	return request<{ session: HostSession }>(`/api/sessions/${sessionId}/archive`, {
 		method: "POST",
