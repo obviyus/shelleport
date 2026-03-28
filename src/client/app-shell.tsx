@@ -409,6 +409,8 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const renameDraft = isRenaming ? renameState.title : (sessionView?.title ?? "");
 	const editingQueuedInputId = queuedInputEdit?.id ?? null;
 	const queuedInputDraft = queuedInputEdit?.prompt ?? "";
+	const trimmedSessionQuery = deferredSessionQuery.trim();
+	const showsEmptySearchState = activeSessions.length === 0 && trimmedSessionQuery.length > 0;
 
 	function setDraftAttachments(
 		updater: DraftAttachment[] | ((previous: DraftAttachment[]) => DraftAttachment[]),
@@ -1018,24 +1020,22 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 								</div>
 							) : activeSessions.length === 0 ? (
 								<div className="py-8 text-center">
-									{deferredSessionQuery.trim().length > 0 ? (
-										<p className="text-[11px] text-muted-foreground">
-											No results for &ldquo;{deferredSessionQuery.trim()}&rdquo;
-										</p>
-									) : (
-										<>
-											<p className="text-[11px] text-muted-foreground">No sessions</p>
-											<button
-												type="button"
-												onClick={() => {
-													navigate("/");
-													setSidebarOpen(false);
-												}}
-												className="mt-2 text-[11px] text-foreground/68 transition hover:text-foreground"
-											>
-												Create one
-											</button>
-										</>
+									<p className="text-[11px] text-muted-foreground">
+										{showsEmptySearchState
+											? `No results for "${trimmedSessionQuery}"`
+											: "No sessions"}
+									</p>
+									{!showsEmptySearchState && (
+										<button
+											type="button"
+											onClick={() => {
+												navigate("/");
+												setSidebarOpen(false);
+											}}
+											className="mt-2 text-[11px] text-foreground/68 transition hover:text-foreground"
+										>
+											Create one
+										</button>
 									)}
 								</div>
 							) : (
