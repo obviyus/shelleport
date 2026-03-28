@@ -1,5 +1,5 @@
 import { basename } from "node:path";
-import { getClaudeBin } from "~/server/config.server";
+import { getClaudeBin, shouldUseClaudeBareMode } from "~/server/config.server";
 import type {
 	HistoricalSession,
 	HostSession,
@@ -156,6 +156,7 @@ function createClaudeCommand(input: ProviderAdapterRunInput) {
 		"--include-partial-messages",
 		"--output-format",
 		"stream-json",
+		...(shouldUseClaudeBareMode() ? ["--bare"] : []),
 		"--permission-mode",
 		session.permissionMode,
 	];

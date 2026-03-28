@@ -27,3 +27,7 @@ export function getDatabasePath() {
 export function getClaudeBin() {
 	return Bun.env.SHELLEPORT_CLAUDE_BIN ?? "claude";
 }
+
+export function shouldUseClaudeBareMode() {
+	return Bun.env.SHELLEPORT_CLAUDE_BARE === "1";
+}

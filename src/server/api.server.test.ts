@@ -1353,12 +1353,12 @@ describe("handleApiRequest", () => {
 					data: Record<string, unknown>;
 				}>;
 			}>(detailWhileQueuedResponse),
-			).toMatchObject({
-				session: {
-					queuedInputCount: 1,
-				},
-				queuedInputs: [{ prompt: "Edited prompt" }],
-			});
+		).toMatchObject({
+			session: {
+				queuedInputCount: 1,
+			},
+			queuedInputs: [{ prompt: "Edited prompt" }],
+		});
 
 		const deleteQueuedInputResponse = await handleApiRequest(
 			new Request(`http://localhost/api/sessions/${sessionId}/queued-inputs/${queuedInputId}`, {
@@ -1390,12 +1390,12 @@ describe("handleApiRequest", () => {
 					prompt: string;
 				}>;
 			}>(detailAfterDeleteResponse),
-			).toMatchObject({
-				session: {
-					queuedInputCount: 0,
-				},
-				queuedInputs: [],
-			});
+		).toMatchObject({
+			session: {
+				queuedInputCount: 0,
+			},
+			queuedInputs: [],
+		});
 
 		const finalQueuedFormData = new FormData();
 		finalQueuedFormData.set("prompt", "Final queued prompt");

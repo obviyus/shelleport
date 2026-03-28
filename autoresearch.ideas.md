@@ -1,0 +1,1 @@
+- Revisit persistent Claude subprocess reuse with a **longer multi-turn benchmark** (5-10 turns) or an authenticated fixture. Direct CLI measurements suggest warm turns can be materially cheaper than fresh spawns, but the current unauthenticated 3-turn benchmark is noisy enough that the architectural win did not show up cleanly.
