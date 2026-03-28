@@ -238,7 +238,9 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const editingQueuedInputId = queuedInputEdit?.id ?? null;
 	const queuedInputDraft = queuedInputEdit?.prompt ?? "";
 
-	function setDraftAttachments(updater: DraftAttachment[] | ((previous: DraftAttachment[]) => DraftAttachment[])) {
+	function setDraftAttachments(
+		updater: DraftAttachment[] | ((previous: DraftAttachment[]) => DraftAttachment[]),
+	) {
 		setDraftAttachmentsState((previous) => {
 			const nextDraftAttachments = typeof updater === "function" ? updater(previous) : updater;
 			draftAttachmentsRef.current = nextDraftAttachments;
@@ -1247,7 +1249,9 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 												<div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
 													{draftAttachments.map((attachment, index) => (
 														<DraftAttachmentPreview
-															key={attachment.isImage ? attachment.url : `${attachment.name}-${index}`}
+															key={
+																attachment.isImage ? attachment.url : `${attachment.name}-${index}`
+															}
 															attachment={attachment}
 															onRemove={() =>
 																setDraftAttachments((previous) => {
