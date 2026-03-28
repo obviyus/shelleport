@@ -4,6 +4,10 @@ All notable changes to shelleport are documented here.
 
 ## Unreleased
 
+### Fixed
+
+- Session launcher now keeps the actual selected directory highlighted instead of promoting the first child entry (#1) (thanks @kesava500)
+
 ## 0.0.18 - 2026-03-28
 
 ### Changed
