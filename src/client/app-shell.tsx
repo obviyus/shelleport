@@ -70,8 +70,7 @@ import {
 	formatSessionLimitLabel,
 	formatSessionLimitReset,
 	formatSessionLimitUsage,
-	getSessionModelLabel,
-	getSessionUsageBadges,
+	getSessionHeaderBadges,
 	getSidebarMeta,
 	getSidebarTitle,
 	getStatusMessage,
@@ -210,11 +209,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		};
 	}, [sessions]);
 	const grouped = useMemo(() => groupStream(stream), [stream]);
-	const sessionModelLabel = useMemo(() => getSessionModelLabel(sessionView), [sessionView]);
-	const usageBadges = useMemo(
-		() => getSessionUsageBadges(sessionView, stream, now),
-		[now, sessionView, stream],
-	);
+	const sessionHeaderBadges = useMemo(() => getSessionHeaderBadges(sessionView), [sessionView]);
 	const claudeLimits = useMemo(
 		() => orderSessionLimits(providerLimits.claude),
 		[providerLimits.claude],
@@ -1140,20 +1135,17 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											{permissionModeLabel}
 										</span>
 									)}
-									{sessionModelLabel && (
+									{sessionHeaderBadges.map((badge) => (
 										<span
-											className="hidden max-w-[18rem] truncate rounded border border-foreground/12 px-2 py-1 text-[9px] uppercase tracking-[0.08em] text-muted-foreground/80 lg:inline-flex"
-											title={sessionView?.usage?.model ?? sessionModelLabel}
+											key={badge.key}
+											title={badge.title}
+											className={`hidden rounded border border-foreground/12 px-2 py-1 text-[9px] uppercase tracking-[0.08em] text-muted-foreground/80 ${
+												badge.visibility === "lg"
+													? "max-w-[18rem] truncate lg:inline-flex"
+													: "xl:inline-flex"
+											}`}
 										>
-											{sessionModelLabel}
-										</span>
-									)}
-									{usageBadges.map((badge) => (
-										<span
-											key={badge}
-											className="hidden rounded border border-foreground/12 px-2 py-1 text-[9px] uppercase tracking-[0.08em] text-muted-foreground/80 xl:inline-flex"
-										>
-											{badge}
+											{badge.label}
 										</span>
 									))}
 									{sessionView && (
