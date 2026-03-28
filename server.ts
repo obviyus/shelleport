@@ -331,7 +331,7 @@ async function repairInstalledSystemdService() {
 
 function getEditDistance(left: string, right: string) {
 	const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
-	const current = new Array<number>(right.length + 1).fill(0);
+	const current = Array.from({ length: right.length + 1 }, () => 0);
 
 	for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
 		current[0] = leftIndex;

@@ -4,6 +4,18 @@ All notable changes to shelleport are documented here.
 
 ## Unreleased
 
+## 0.0.18 - 2026-03-28
+
+### Changed
+
+- Linux `install-service` now installs a canonical native binary at `/usr/local/lib/shelleport/shelleport` and creates `/usr/local/bin/shelleport`
+- Linux systemd units now run the canonical native binary with explicit `--host` and `--port` arguments instead of relying on wrapper-specific behavior
+
+### Fixed
+
+- Added a native `shelleport upgrade` command to packaged binaries
+- Linux upgrades now repair the installed `shelleport.service`, reload systemd, upgrade the binary, and restart the service in one step
+
 ## 0.0.17 - 2026-03-28
 
 ### Fixed
