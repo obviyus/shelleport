@@ -4,6 +4,10 @@ All notable changes to shelleport are documented here.
 
 ## Unreleased
 
+### Fixed
+
+- Sessions now accept general file attachments instead of only images, with image previews preserved where available (#5) (thanks @kesava500)
+
 ## 0.0.20 - 2026-03-28
 
 ### Fixed
