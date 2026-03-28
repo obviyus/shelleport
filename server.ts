@@ -208,6 +208,16 @@ async function getUpgradeBinaryPath() {
 	throw new Error("upgrade requires an installed shelleport binary");
 }
 
+function requireRootForSystemPaths(targetPath: string) {
+	if (
+		targetPath.startsWith("/usr/local/") &&
+		typeof process.getuid === "function" &&
+		process.getuid() !== 0
+	) {
+		throw new Error(`upgrade requires sudo to modify ${targetPath}`);
+	}
+}
+
 async function installReleaseBinary(version: string, targetPath: string) {
 	const assetName = getReleaseAssetName(version);
 	const tmpDir = await Bun.$`mktemp -d`.text();
@@ -216,6 +226,7 @@ async function installReleaseBinary(version: string, targetPath: string) {
 	const checksumsPath = join(normalizedTmpDir, "SHASUMS256.txt");
 
 	try {
+		console.log(`Downloading ${assetName}...`);
 		const binaryResponse = await fetch(getReleaseUrl(version, assetName), {
 			headers: {
 				"user-agent": "shelleport-upgrade",
@@ -241,6 +252,7 @@ async function installReleaseBinary(version: string, targetPath: string) {
 		}
 
 		await Bun.write(checksumsPath, await checksumsResponse.text());
+		console.log(`Verifying ${assetName}...`);
 
 		const expectedLine =
 			(await Bun.file(checksumsPath).text())
@@ -261,6 +273,7 @@ async function installReleaseBinary(version: string, targetPath: string) {
 			throw new Error(`Checksum mismatch for ${assetName}`);
 		}
 
+		console.log(`Installing ${assetName}...`);
 		await Bun.$`mkdir -p ${dirname(targetPath)}`.quiet();
 		await Bun.write(targetPath, Bun.file(downloadPath));
 		await Bun.$`chmod 755 ${targetPath}`.quiet();
@@ -305,6 +318,7 @@ async function repairInstalledSystemdService() {
 		return false;
 	}
 
+	console.log(`Repairing ${systemdServicePath}...`);
 	const serviceText = await Bun.file(systemdServicePath).text();
 	const serviceUser = readServiceValue(serviceText, "User") ?? "root";
 	const serviceHome =
@@ -693,27 +707,42 @@ async function runToken() {
 }
 
 async function runUpgrade() {
+	console.log("Checking latest release...");
 	const version = await fetchLatestReleaseVersion();
 	const targetPath = await getUpgradeBinaryPath();
+	const currentVersion = packageJson.version;
+
+	requireRootForSystemPaths(targetPath);
 
 	if (process.platform === "linux" && targetPath === linuxBinaryPath) {
 		const hasService = await repairInstalledSystemdService();
-		await installReleaseBinary(version, targetPath);
+
+		if (version !== currentVersion) {
+			await installReleaseBinary(version, targetPath);
+		} else {
+			console.log(`Already on shelleport ${version}.`);
+		}
+
 		await Bun.$`ln -sf ${linuxBinaryPath} ${linuxCliPath}`.quiet();
 
 		if (hasService) {
+			console.log("Restarting shelleport.service...");
 			await runCheckedCommand(["systemctl", "restart", "shelleport.service"]);
-			console.log(`Installed shelleport ${version}.`);
-			console.log("Restarted shelleport.service.");
+			console.log(`shelleport ${version} is ready.`);
 			return;
 		}
 
-		console.log(`Installed shelleport ${version}.`);
+		console.log(`shelleport ${version} is ready.`);
+		return;
+	}
+
+	if (version === currentVersion) {
+		console.log(`Already on shelleport ${version}.`);
 		return;
 	}
 
 	await installReleaseBinary(version, targetPath);
-	console.log(`Installed shelleport ${version}.`);
+	console.log(`shelleport ${version} is ready.`);
 }
 
 export async function createServerFetchHandler() {

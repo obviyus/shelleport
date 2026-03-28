@@ -4,6 +4,14 @@ All notable changes to shelleport are documented here.
 
 ## Unreleased
 
+## 0.0.20 - 2026-03-28
+
+### Fixed
+
+- `shelleport upgrade` now prints progress instead of appearing hung during release checks, downloads, installs, and service restarts
+- `shelleport upgrade` now exits early when the installed version already matches the latest release
+- `shelleport upgrade` now fails immediately with a clear sudo requirement when a system install needs root-owned paths
+
 ## 0.0.19 - 2026-03-28
 
 ### Fixed
