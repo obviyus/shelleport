@@ -7,6 +7,7 @@ All notable changes to shelleport are documented here.
 ### Fixed
 
 - Session headers can now export the current transcript as Markdown or JSON from the Actions menu, alongside copy-to-clipboard (#45) (thanks @kesava500)
+- Session views can now archive or delete the current session directly from the Actions menu without going back to the sidebar (#46) (thanks @kesava500)
 - Session headers now group pin, copy, and project actions under one mobile-friendlier Actions menu instead of spreading them across separate buttons (#43) (thanks @kesava500)
 - Mobile project buttons now center their folder icon, the composer placeholder no longer clips, and mobile attach/send controls stay aligned with the taller input field (#42) (thanks @kesava500)
 - Session views can now hide transcript thinking blocks per session without affecting other open sessions (#44) (thanks @kesava500)
