@@ -559,7 +559,6 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const [prompt, setPrompt] = useState("");
 	const [draftAttachments, setDraftAttachmentsState] = useState<DraftAttachment[]>([]);
 	const [isCreating, setIsCreating] = useState(false);
-	const [initialLoading, setInitialLoading] = useState(false);
 	const [streamState, setStreamState] = useState<"connected" | "reconnecting">("connected");
 	const [archiveConfirmId, setArchiveConfirmId] = useState<string | null>(null);
 	const [copiedConversation, setCopiedConversation] = useState(false);
@@ -723,23 +722,9 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	}, []);
 
 	useEffect(() => {
-		let cancelled = false;
-
 		refreshSessions(deferredSessionQuery)
-			.then(() => {
-				if (!cancelled) {
-					setInitialLoading(false);
-				}
-			})
-			.catch(() => {
-				if (!cancelled) {
-					setInitialLoading(false);
-				}
-			});
-
-		return () => {
-			cancelled = true;
-		};
+			.then(() => {})
+			.catch(() => {});
 	}, [deferredSessionQuery, refreshSessions]);
 
 	useLayoutEffect(() => {
@@ -1331,11 +1316,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 									/>
 								</div>
 							</div>
-							{initialLoading ? (
-								<div className="flex items-center justify-center py-8">
-									<Loader2 className="size-3.5 animate-spin text-muted-foreground" />
-								</div>
-							) : activeSessions.length === 0 ? (
+							{activeSessions.length === 0 ? (
 								(() => {
 									const emptyState = getSessionListEmptyState(sessionQuery);
 
