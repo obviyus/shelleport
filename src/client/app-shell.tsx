@@ -151,7 +151,7 @@ export function shouldInterruptOnCtrlC(
 	return session?.status === "running" || session?.status === "retrying";
 }
 
-export function shouldShowReconnectBanner(
+export function shouldShowReconnectIndicator(
 	isSessionPending: boolean,
 	streamState: "connected" | "reconnecting",
 ) {
@@ -1749,7 +1749,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const canSend = !!selectedId && (prompt.trim().length > 0 || draftAttachments.length > 0);
 	const permissionModeLabel = sessionView ? formatPermissionModeLabel(sessionView) : null;
 	const pendingRequest = pendingRequests[0] ?? null;
-	const showReconnectBanner = shouldShowReconnectBanner(isSessionPending, streamState);
+	const showReconnectIndicator = shouldShowReconnectIndicator(isSessionPending, streamState);
 	const statusMessage = sessionView ? getStatusMessage(sessionView) : null;
 	const firstRunReadiness = getFirstRunReadiness(providers);
 
@@ -2197,7 +2197,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 								</div>
 								<div className="flex shrink-0 items-center gap-1.5">
 									{sessionView && (
-										<SessionStatusBadge session={sessionView} reconnecting={showReconnectBanner} />
+										<SessionStatusBadge session={sessionView} reconnecting={showReconnectIndicator} />
 									)}
 
 									{permissionModeLabel && (

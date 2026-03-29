@@ -7,7 +7,7 @@ import {
 	getSessionCompletionNotificationBody,
 	getSessionListEmptyState,
 	pushPromptHistory,
-	shouldShowReconnectBanner,
+	shouldShowReconnectIndicator,
 	shouldInterruptOnCtrlC,
 	shouldNotifySessionCompletion,
 } from "~/client/app-shell";
@@ -260,13 +260,13 @@ describe("shouldInterruptOnCtrlC", () => {
 	});
 });
 
-describe("shouldShowReconnectBanner", () => {
-	test("shows the banner when a loaded session is reconnecting", () => {
-		expect(shouldShowReconnectBanner(false, "reconnecting")).toBe(true);
+describe("shouldShowReconnectIndicator", () => {
+	test("shows the indicator when a loaded session is reconnecting", () => {
+		expect(shouldShowReconnectIndicator(false, "reconnecting")).toBe(true);
 	});
 
-	test("hides the banner while the session is still pending", () => {
-		expect(shouldShowReconnectBanner(true, "reconnecting")).toBe(false);
+	test("hides the indicator while the session is still pending", () => {
+		expect(shouldShowReconnectIndicator(true, "reconnecting")).toBe(false);
 	});
 });
 
