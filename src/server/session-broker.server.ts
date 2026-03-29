@@ -729,4 +729,31 @@ export const sessionBroker = {
 
 		return resolvedRequest;
 	},
+	async deleteSession(sessionId: string) {
+		const session = sessionStore.getSession(sessionId);
+
+		if (!session) {
+			throw new ApiError(404, "session_not_found", `Unknown session: ${sessionId}`);
+		}
+
+		if (!session.archived) {
+			throw new ApiError(
+				409,
+				"session_not_archived",
+				"Session must be archived before it can be deleted",
+			);
+		}
+
+		if (activeRuns.has(sessionId)) {
+			throw new ApiError(409, "session_running", "Cannot delete a running session");
+		}
+
+		const uploadDir = `${session.cwd}/.shelleport/uploads/${sessionId}`;
+		await Bun.$`rm -rf ${uploadDir}`.quiet();
+
+		sessionStore.deleteSession(sessionId);
+		subscribers.delete(sessionId);
+
+		return session;
+	},
 };

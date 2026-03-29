@@ -528,6 +528,18 @@ const deleteSessionSearchStatement = database.query(
 	"DELETE FROM host_session_fts WHERE session_id = ?",
 );
 
+const deleteSessionStatement = database.query("DELETE FROM host_sessions WHERE id = ?");
+
+const deleteSessionEventsStatement = database.query("DELETE FROM host_events WHERE session_id = ?");
+
+const deleteSessionRequestsStatement = database.query(
+	"DELETE FROM pending_requests WHERE session_id = ?",
+);
+
+const deleteSessionQueuedInputsStatement = database.query(
+	"DELETE FROM queued_session_inputs WHERE session_id = ?",
+);
+
 function mapProviderLimit(row: SqlProviderLimitRow): SessionLimit {
 	return {
 		status: row.status,
@@ -964,5 +976,20 @@ export const sessionStore = {
 		}
 
 		return request;
+	},
+	deleteSession(sessionId: string) {
+		const session = this.getSession(sessionId);
+
+		if (!session) {
+			return null;
+		}
+
+		deleteSessionEventsStatement.run(sessionId);
+		deleteSessionRequestsStatement.run(sessionId);
+		deleteSessionQueuedInputsStatement.run(sessionId);
+		deleteSessionSearchStatement.run(sessionId);
+		deleteSessionStatement.run(sessionId);
+
+		return session;
 	},
 };

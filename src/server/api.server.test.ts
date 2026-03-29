@@ -1132,6 +1132,85 @@ describe("handleApiRequest", () => {
 		).toBe(false);
 	});
 
+	test("deletes archived sessions with full cleanup", async () => {
+		const createResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "claude",
+					cwd: testRoot,
+					title: "Delete me",
+				}),
+			}),
+		);
+		expect(createResponse.status).toBe(201);
+		const createJson = await readJson<{ session: { id: string } }>(createResponse);
+		const sessionId = createJson.session.id;
+
+		// Cannot delete a non-archived session
+		const earlyDeleteResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}`, {
+				method: "DELETE",
+				headers: authHeader,
+			}),
+		);
+		expect(earlyDeleteResponse.status).toBe(409);
+		expect(await readJson<{ code: string }>(earlyDeleteResponse)).toMatchObject({
+			code: "session_not_archived",
+		});
+
+		// Archive first
+		const archiveResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}/archive`, {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({ archived: true }),
+			}),
+		);
+		expect(archiveResponse.status).toBe(200);
+
+		const uploadedPath = join(testRoot, ".shelleport", "uploads", sessionId, "orphan.txt");
+		await Bun.$`mkdir -p ${join(testRoot, ".shelleport", "uploads", sessionId)}`;
+		await Bun.write(uploadedPath, "orphan");
+		expect(await Bun.file(uploadedPath).exists()).toBe(true);
+
+		// Now delete should succeed
+		const deleteResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}`, {
+				method: "DELETE",
+				headers: authHeader,
+			}),
+		);
+		expect(deleteResponse.status).toBe(200);
+		const deleteJson = await readJson<{ session: { id: string; title: string } }>(deleteResponse);
+		expect(deleteJson.session.id).toBe(sessionId);
+
+		// Session should be gone from the list
+		const listResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				headers: authHeader,
+			}),
+		);
+		const listJson = await readJson<{ sessions: Array<{ id: string }> }>(listResponse);
+		expect(listJson.sessions.find((session) => session.id === sessionId)).toBeUndefined();
+
+		// Fetching the deleted session should 404
+		const detailResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}`, {
+				headers: authHeader,
+			}),
+		);
+		expect(detailResponse.status).toBe(404);
+		expect(await Bun.file(uploadedPath).exists()).toBe(false);
+	});
+
 	test("renames and pins sessions", async () => {
 		const firstResponse = await handleApiRequest(
 			new Request("http://localhost/api/sessions", {
