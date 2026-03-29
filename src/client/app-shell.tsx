@@ -9,6 +9,7 @@ import {
 	Eye,
 	EyeOff,
 	FileDown,
+	Info,
 	Paperclip,
 	Folder,
 	Loader2,
@@ -90,6 +91,7 @@ import {
 	formatSessionLimitReset,
 	formatSessionLimitUsage,
 	getSessionHeaderBadges,
+	type SessionHeaderBadge,
 	getSidebarMeta,
 	getSidebarTitle,
 	getStatusMessage,
@@ -385,6 +387,66 @@ function sanitizeFilename(title: string) {
 			.replace(/[^a-z0-9]+/g, "-")
 			.replace(/^-+|-+$/g, "")
 			.slice(0, 60) || "session"
+	);
+}
+
+function SessionStatsPopover({ badges }: { badges: SessionHeaderBadge[] }) {
+	const [open, setOpen] = useState(false);
+	const buttonRef = useRef<HTMLButtonElement>(null);
+	const dropdownRef = useRef<HTMLDivElement>(null);
+	const [pos, setPos] = useState({ top: 0, right: 0 });
+	usePopoverDismiss(open, setOpen, buttonRef, dropdownRef);
+
+	function handleToggle() {
+		if (!open && buttonRef.current) {
+			const rect = buttonRef.current.getBoundingClientRect();
+			setPos({
+				top: rect.bottom + 4,
+				right: window.innerWidth - rect.right,
+			});
+		}
+
+		setOpen(!open);
+	}
+
+	return (
+		<>
+			<button
+				ref={buttonRef}
+				type="button"
+				onClick={handleToggle}
+				title="Session stats"
+				className="hidden lg:flex items-center justify-center gap-1 rounded border border-foreground/12 px-2 py-1 text-[10px] text-muted-foreground/80 transition hover:border-foreground/18 hover:text-foreground"
+			>
+				<Info className="size-2.5" />
+				<span>Stats</span>
+			</button>
+			{open &&
+				createPortal(
+					<div
+						ref={dropdownRef}
+						style={{ top: pos.top, right: pos.right }}
+						className="fixed z-[9999] min-w-[200px] max-w-[320px] rounded-md border border-foreground/12 bg-card p-3 shadow-lg"
+					>
+						<p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+							Session Stats
+						</p>
+						<div className="space-y-1.5">
+							{badges.map((badge) => (
+								<div key={badge.key} className="flex items-baseline justify-between gap-3">
+									<span className="shrink-0 text-[10px] uppercase tracking-[0.08em] text-muted-foreground/65">
+										{badge.key.split(":")[0] ?? badge.label}
+									</span>
+									<span className="truncate text-right text-[11px] tabular-nums text-foreground/90">
+										{badge.label}
+									</span>
+								</div>
+							))}
+						</div>
+					</div>,
+					document.body,
+				)}
+		</>
 	);
 }
 
@@ -2204,11 +2266,6 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											Loading session
 										</h1>
 									)}
-									{sessionView && (
-										<span className="hidden text-[10px] text-muted-foreground/65 lg:inline">
-											{sessionView.cwd}
-										</span>
-									)}
 								</div>
 								<div className="flex shrink-0 items-center gap-1.5">
 									{sessionView && <SessionStatusBadge session={sessionView} />}
@@ -2218,19 +2275,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											{permissionModeLabel}
 										</span>
 									)}
-									{sessionHeaderBadges.map((badge) => (
-										<span
-											key={badge.key}
-											title={badge.title}
-											className={`hidden rounded border border-foreground/12 px-2 py-1 text-[9px] uppercase tracking-[0.08em] text-muted-foreground/80 ${
-												badge.visibility === "lg"
-													? "max-w-[18rem] truncate lg:inline-flex"
-													: "xl:inline-flex"
-											}`}
-										>
-											{badge.label}
-										</span>
-									))}
+									{sessionHeaderBadges.length > 0 && <SessionStatsPopover badges={sessionHeaderBadges} />}
 									{sessionView && (sessionProvider?.models ?? []).length > 0 && (
 										<SessionModelPicker
 											session={sessionView}
@@ -2261,7 +2306,6 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 													return [...current, selectedId];
 												})
 											}
-<<<<<<< HEAD
 											onExportMarkdown={() => {
 												const markdown = `# ${sessionView.title}\n\n${streamToMarkdown(stream)}`;
 												downloadFile(
