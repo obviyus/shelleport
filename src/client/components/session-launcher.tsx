@@ -609,328 +609,295 @@ export function SessionLauncher({
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:overflow-hidden">
-			<div className="border-b border-border px-3 md:px-6 py-4 md:py-5">
-				<div className="mx-auto flex w-full max-w-[110rem] flex-col md:flex-row md:items-end md:justify-between gap-4 md:gap-6">
-					<div className="min-w-0 flex-1">
-						<p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-foreground/68">
-							New Session
-						</p>
-						<h1 className="mt-2 text-lg font-medium tracking-[-0.04em] text-foreground">
-							Pick a workspace. Launch from the path itself.
-						</h1>
-						<p className="mt-2 max-w-2xl text-[11px] leading-[1.8] text-muted-foreground/88">
-							Finder-style column browsing. Directories expand to the right. Files stay visible for
-							context.
-						</p>
-					</div>
-				</div>
-				<div className="mx-auto mt-4 flex w-full max-w-[110rem] flex-col md:flex-row md:items-start md:justify-between gap-4 md:gap-6 border-t border-foreground/12 pt-4">
-					<div className="min-w-0">
-						<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
-							Project
-						</p>
-						<p className="mt-1 max-w-2xl text-[11px] leading-[1.7] text-muted-foreground/84">
-							Organize sessions into projects for better management.
-						</p>
-					</div>
-					<div className="grid w-full max-w-xl grid-cols-2 md:grid-cols-4 gap-2">
+			<div className="border-b border-border px-3 md:px-6 py-3">
+				<div className="mx-auto w-full max-w-[110rem]">
+					<div className="flex items-center justify-between gap-4">
+						<div className="min-w-0">
+							<p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-foreground/68">
+								New Session
+							</p>
+							<h1 className="mt-1 text-sm font-medium tracking-[-0.02em] text-foreground">
+								Pick a workspace. Launch from the path itself.
+							</h1>
+						</div>
 						<button
 							type="button"
-							onClick={() => {
-								setSelectedProjectId(null);
-								setShowNewProject(false);
-								setCurrentPath(defaultPath);
-								setPermissionMode(
-									createProviderId ? getDefaultPermissionMode(createProviderId) : "default",
+							onClick={async () => {
+								let projectIdToUse = selectedProjectId;
+
+								if (saveAsProject && !selectedProjectId) {
+									try {
+										const result = await createProject({
+											name: saveAsProjectName.trim() || title.trim() || "Untitled Project",
+											cwd: currentPath,
+											permissionMode,
+										});
+										onProjectCreated(result.project);
+										projectIdToUse = result.project.id;
+									} catch {
+										showToast("error", "Failed to create project");
+										return;
+									}
+								}
+
+								await onCreate(
+									currentPath,
+									title.trim(),
+									permissionMode,
+									selectedModel ?? undefined,
+									projectIdToUse ?? undefined,
 								);
 							}}
-							className={`rounded-md border px-3 py-2.5 text-left transition ${
-								selectedProjectId === null && !showNewProject
-									? "border-foreground/20 bg-foreground text-background"
-									: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
-							}`}
+							disabled={isCreating || createDisabledReason !== null}
+							className="flex h-8 shrink-0 items-center gap-1.5 rounded-md bg-foreground px-3 text-[11px] font-medium text-background transition hover:bg-foreground/90 focus-visible:ring-2 focus-visible:ring-foreground/20 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-30"
 						>
-							<p className="text-[11px] font-medium">None</p>
-						</button>
-						{projects.map((project) => (
-							<button
-								key={project.id}
-								type="button"
-								onClick={() => {
-									setSelectedProjectId(project.id);
-									setShowNewProject(false);
-									setCurrentPath(project.cwd);
-									setPermissionMode(project.permissionMode);
-								}}
-								className={`rounded-md border px-3 py-2.5 text-left transition ${
-									selectedProjectId === project.id
-										? "border-foreground/20 bg-foreground text-background"
-										: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
-								}`}
-							>
-								<p className="text-[11px] font-medium truncate">{project.name}</p>
-							</button>
-						))}
-						<button
-							type="button"
-							onClick={() => {
-								setShowNewProject(!showNewProject);
-								setSelectedProjectId(null);
-							}}
-							className={`rounded-md border px-3 py-2.5 text-left transition ${
-								showNewProject
-									? "border-foreground/20 bg-foreground text-background"
-									: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
-							}`}
-						>
-							<p className="text-[11px] font-medium">+ New</p>
+							{isCreating ? (
+								<Loader2 aria-hidden="true" className="size-3 animate-spin" />
+							) : (
+								<Plus aria-hidden="true" className="size-3" />
+							)}
+							{`Create ${createLabel} session`}
 						</button>
 					</div>
-					{showNewProject && (
-						<div className="w-full max-w-xl">
-							<div className="flex gap-2">
-								<input
-									type="text"
-									value={newProjectName}
-									onChange={(event) => setNewProjectName(event.target.value)}
-									placeholder="Project name…"
-									className="h-10 flex-1 rounded-md border border-foreground/10 bg-card/90 px-3 text-xs text-foreground outline-none transition placeholder:text-muted-foreground/70 focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
-								/>
-								<button
-									type="button"
-									onClick={async () => {
-										if (!newProjectName.trim()) {
-											showToast("error", "Project name cannot be empty");
-											return;
-										}
-										setIsCreatingProject(true);
-										try {
-											const result = await createProject({
-												name: newProjectName.trim(),
-												cwd: currentPath,
-												permissionMode,
-											});
-											onProjectCreated(result.project);
-											setSelectedProjectId(result.project.id);
-											setNewProjectName("");
-											setShowNewProject(false);
-										} catch {
-											showToast("error", "Failed to create project");
-										} finally {
-											setIsCreatingProject(false);
-										}
-									}}
-									disabled={!newProjectName.trim() || isCreatingProject}
-									className="flex items-center gap-1 rounded-md bg-foreground px-3 text-xs font-medium text-background transition hover:bg-foreground/90 disabled:opacity-30"
-								>
-									{isCreatingProject ? (
-										<Loader2 className="size-3 animate-spin" />
-									) : (
-										<Plus className="size-3" />
-									)}
-									Create
-								</button>
-							</div>
-						</div>
-					)}
-				</div>
-				<div className="mx-auto mt-4 flex w-full max-w-[110rem] flex-col md:flex-row md:items-end md:justify-between gap-4 md:gap-6 border-t border-foreground/12 pt-4">
-					<div className="min-w-0 flex-1">
-						<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
-							Title
-						</p>
-					</div>
-					<div className="w-full max-w-sm shrink-0">
-						<input
-							id={titleInputId}
-							name="title"
-							type="text"
-							value={title}
-							onChange={(event) => setTitle(event.target.value)}
-							autoComplete="off"
-							placeholder="Optional session title…"
-							className="h-10 w-full rounded-md border border-foreground/10 bg-card/90 px-3 text-xs text-foreground outline-none transition placeholder:text-muted-foreground/70 focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
-						/>
-					</div>
-				</div>
-				{models.length > 0 && (
-					<div className="mx-auto mt-4 flex w-full max-w-[110rem] flex-col md:flex-row md:items-start md:justify-between gap-4 md:gap-6 border-t border-foreground/12 pt-4">
-						<div className="min-w-0">
+
+					{/* Compact config grid */}
+					<div className="mt-3 grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-x-4 gap-y-2.5">
+						{/* Row 1: Project */}
+						<div className="space-y-1.5">
 							<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
-								Model
+								Project
 							</p>
-							<p className="mt-1 max-w-2xl text-[11px] leading-[1.7] text-muted-foreground/84">
-								Leave on default or pick a specific model for this session.
-							</p>
-						</div>
-						<div className="grid w-full max-w-xl grid-cols-2 md:grid-cols-4 gap-2">
-							<button
-								type="button"
-								onClick={() => setSelectedModel(null)}
-								className={`rounded-md border px-3 py-2.5 text-left transition ${
-									selectedModel === null
-										? "border-foreground/20 bg-foreground text-background"
-										: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
-								}`}
-							>
-								<p className="text-[11px] font-medium">Default</p>
-							</button>
-							{models.map((model) => (
+							<div className="flex flex-wrap gap-1.5">
 								<button
-									key={model.id}
 									type="button"
-									onClick={() => setSelectedModel(model.id)}
-									className={`rounded-md border px-3 py-2.5 text-left transition ${
-										selectedModel === model.id
+									onClick={() => {
+										setSelectedProjectId(null);
+										setShowNewProject(false);
+										setCurrentPath(defaultPath);
+										setPermissionMode(
+											createProviderId ? getDefaultPermissionMode(createProviderId) : "default",
+										);
+									}}
+									className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+										selectedProjectId === null && !showNewProject
 											? "border-foreground/20 bg-foreground text-background"
 											: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
 									}`}
 								>
-									<p className="text-[11px] font-medium">{model.label}</p>
+									None
 								</button>
-							))}
+								{projects.map((project) => (
+									<button
+										key={project.id}
+										type="button"
+										onClick={() => {
+											setSelectedProjectId(project.id);
+											setShowNewProject(false);
+											setCurrentPath(project.cwd);
+											setPermissionMode(project.permissionMode);
+										}}
+										className={`max-w-32 truncate rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+											selectedProjectId === project.id
+												? "border-foreground/20 bg-foreground text-background"
+												: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
+										}`}
+									>
+										{project.name}
+									</button>
+								))}
+								<button
+									type="button"
+									onClick={() => {
+										setShowNewProject(!showNewProject);
+										setSelectedProjectId(null);
+									}}
+									className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+										showNewProject
+											? "border-foreground/20 bg-foreground text-background"
+											: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
+									}`}
+								>
+									+ New
+								</button>
+							</div>
+							{showNewProject && (
+								<div className="flex gap-1.5">
+									<input
+										type="text"
+										value={newProjectName}
+										onChange={(event) => setNewProjectName(event.target.value)}
+										placeholder="Project name…"
+										className="h-7 flex-1 rounded-md border border-foreground/10 bg-card/90 px-2.5 text-[10px] text-foreground outline-none transition placeholder:text-muted-foreground/70 focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
+									/>
+									<button
+										type="button"
+										onClick={async () => {
+											if (!newProjectName.trim()) {
+												showToast("error", "Project name cannot be empty");
+												return;
+											}
+											setIsCreatingProject(true);
+											try {
+												const result = await createProject({
+													name: newProjectName.trim(),
+													cwd: currentPath,
+													permissionMode,
+												});
+												onProjectCreated(result.project);
+												setSelectedProjectId(result.project.id);
+												setNewProjectName("");
+												setShowNewProject(false);
+											} catch {
+												showToast("error", "Failed to create project");
+											} finally {
+												setIsCreatingProject(false);
+											}
+										}}
+										disabled={!newProjectName.trim() || isCreatingProject}
+										className="flex h-7 items-center gap-1 rounded-md bg-foreground px-2.5 text-[10px] font-medium text-background transition hover:bg-foreground/90 disabled:opacity-30"
+									>
+										{isCreatingProject ? (
+											<Loader2 className="size-3 animate-spin" />
+										) : (
+											<Plus className="size-3" />
+										)}
+										Create
+									</button>
+								</div>
+							)}
 						</div>
-					</div>
-				)}
-				{showsPermissionMode && (
-					<div className="mx-auto mt-4 flex w-full max-w-[110rem] flex-col md:flex-row md:items-start md:justify-between gap-4 md:gap-6 border-t border-foreground/12 pt-4">
-						<div className="min-w-0">
+
+						{/* Row 1 right: Title */}
+						<div className="space-y-1.5">
 							<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
-								Claude permissions
+								Title
 							</p>
-							<p className="mt-1 max-w-2xl text-[11px] leading-[1.7] text-muted-foreground/84">
-								Bypass works best here. Claude approval prompts are unreliable in shelleport.
-							</p>
-						</div>
-						<div className="grid w-full max-w-xl grid-cols-1 md:grid-cols-2 gap-2">
-							<button
-								type="button"
-								onClick={() => setPermissionMode("bypassPermissions")}
-								className={`rounded-md border px-3 py-2.5 text-left transition ${
-									permissionMode === "bypassPermissions"
-										? "border-foreground/20 bg-foreground text-background"
-										: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
-								}`}
-							>
-								<p className="text-[11px] font-medium">Bypass permissions</p>
-								<p
-									className={`mt-1 text-[10px] leading-[1.5] ${
-										permissionMode === "bypassPermissions"
-											? "text-background/78"
-											: "text-muted-foreground/82"
-									}`}
-								>
-									Recommended. Runs best in shelleport.
-								</p>
-							</button>
-							<button
-								type="button"
-								onClick={() => setPermissionMode("default")}
-								className={`rounded-md border px-3 py-2.5 text-left transition ${
-									permissionMode === "default"
-										? "border-foreground/20 bg-foreground text-background"
-										: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
-								}`}
-							>
-								<p className="text-[11px] font-medium">Ask for approvals</p>
-								<p
-									className={`mt-1 text-[10px] leading-[1.5] ${
-										permissionMode === "default" ? "text-background/78" : "text-muted-foreground/82"
-									}`}
-								>
-									Available, but prompts do not work especially well yet.
-								</p>
-							</button>
-						</div>
-					</div>
-				)}
-			</div>
-
-			<div className="border-b border-border px-3 md:px-6 py-3">
-				<div className="mx-auto flex w-full max-w-[110rem] flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4">
-					<div className="min-w-0 flex-1 rounded-md border border-foreground/10 bg-card/86 px-3 py-2 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]">
-						<div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.14em] text-foreground/65">
-							<FolderOpen aria-hidden="true" className="size-3" />
-							Selected Directory
-						</div>
-						<p className="mt-1 truncate text-xs text-foreground/92">{currentPath}</p>
-					</div>
-					<button
-						type="button"
-						onClick={async () => {
-							let projectIdToUse = selectedProjectId;
-
-							// Create project if saveAsProject is enabled and no project selected
-							if (saveAsProject && !selectedProjectId) {
-								try {
-									const result = await createProject({
-										name: saveAsProjectName.trim() || title.trim() || "Untitled Project",
-										cwd: currentPath,
-										permissionMode,
-									});
-									onProjectCreated(result.project);
-									projectIdToUse = result.project.id;
-								} catch {
-									showToast("error", "Failed to create project");
-									return;
-								}
-							}
-
-							await onCreate(
-								currentPath,
-								title.trim(),
-								permissionMode,
-								selectedModel ?? undefined,
-								projectIdToUse ?? undefined,
-							);
-						}}
-						disabled={isCreating || createDisabledReason !== null}
-						className="flex h-12 md:h-10 w-full md:w-auto shrink-0 items-center justify-center gap-2 rounded-md bg-foreground px-4 text-xs font-medium text-background transition hover:bg-foreground/90 focus-visible:ring-2 focus-visible:ring-foreground/20 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-30"
-					>
-						{isCreating ? (
-							<Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
-						) : (
-							<Plus aria-hidden="true" className="size-3.5" />
-						)}
-						{`Create ${createLabel} session`}
-					</button>
-				</div>
-				{selectedProjectId === null && !showNewProject && (
-					<div className="mx-auto mt-3 w-full max-w-[110rem] flex items-center gap-2">
-						<input
-							type="checkbox"
-							id="saveAsProject"
-							checked={saveAsProject}
-							onChange={(event) => setSaveAsProject(event.target.checked)}
-							className="rounded border border-foreground/20 accent-foreground"
-						/>
-						<label htmlFor="saveAsProject" className="text-[11px] text-muted-foreground/80">
-							Save as project
-						</label>
-						{saveAsProject && (
 							<input
+								id={titleInputId}
+								name="title"
 								type="text"
-								value={saveAsProjectName}
-								onChange={(event) => setSaveAsProjectName(event.target.value)}
-								placeholder="Project name…"
-								className="h-8 flex-1 rounded-md border border-foreground/10 bg-card/90 px-2 text-[10px] text-foreground outline-none transition placeholder:text-muted-foreground/70 focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
+								value={title}
+								onChange={(event) => setTitle(event.target.value)}
+								autoComplete="off"
+								placeholder="Optional session title…"
+								className="h-7 w-full rounded-md border border-foreground/10 bg-card/90 px-2.5 text-[10px] text-foreground outline-none transition placeholder:text-muted-foreground/70 focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
 							/>
+						</div>
+
+						{/* Row 2: Model */}
+						{models.length > 0 && (
+							<div className="space-y-1.5">
+								<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+									Model
+								</p>
+								<div className="flex flex-wrap gap-1.5">
+									<button
+										type="button"
+										onClick={() => setSelectedModel(null)}
+										className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+											selectedModel === null
+												? "border-foreground/20 bg-foreground text-background"
+												: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
+										}`}
+									>
+										Default
+									</button>
+									{models.map((model) => (
+										<button
+											key={model.id}
+											type="button"
+											onClick={() => setSelectedModel(model.id)}
+											className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+												selectedModel === model.id
+													? "border-foreground/20 bg-foreground text-background"
+													: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
+											}`}
+										>
+											{model.label}
+										</button>
+									))}
+								</div>
+							</div>
+						)}
+
+						{/* Row 2 right: Permissions */}
+						{showsPermissionMode && (
+							<div className="space-y-1.5">
+								<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+									Permissions
+								</p>
+								<div className="flex gap-1.5">
+									<button
+										type="button"
+										onClick={() => setPermissionMode("bypassPermissions")}
+										className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+											permissionMode === "bypassPermissions"
+												? "border-foreground/20 bg-foreground text-background"
+												: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
+										}`}
+										title="Recommended. Runs best in shelleport."
+									>
+										Bypass
+									</button>
+									<button
+										type="button"
+										onClick={() => setPermissionMode("default")}
+										className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+											permissionMode === "default"
+												? "border-foreground/20 bg-foreground text-background"
+												: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
+										}`}
+										title="Available, but prompts do not work especially well yet."
+									>
+										Ask for approvals
+									</button>
+								</div>
+							</div>
 						)}
 					</div>
-				)}
-				{createDisabledReason && (
-					<div className="mx-auto mt-3 w-full max-w-[110rem] rounded-md border border-border bg-card/86 px-3 py-2 text-[11px] text-muted-foreground">
-						{createDisabledReason}
+
+					{/* Selected directory bar */}
+					<div className="mt-3 flex items-center gap-3 rounded-md border border-foreground/8 bg-card/60 px-2.5 py-1.5">
+						<FolderOpen aria-hidden="true" className="size-3 shrink-0 text-foreground/55" />
+						<p className="min-w-0 flex-1 truncate text-[10px] text-foreground/80">{currentPath}</p>
+						{selectedProjectId === null && !showNewProject && (
+							<div className="flex shrink-0 items-center gap-1.5">
+								<input
+									type="checkbox"
+									id="saveAsProject"
+									checked={saveAsProject}
+									onChange={(event) => setSaveAsProject(event.target.checked)}
+									className="rounded border border-foreground/20 accent-foreground"
+								/>
+								<label htmlFor="saveAsProject" className="text-[10px] text-muted-foreground/70">
+									Save as project
+								</label>
+								{saveAsProject && (
+									<input
+										type="text"
+										value={saveAsProjectName}
+										onChange={(event) => setSaveAsProjectName(event.target.value)}
+										placeholder="Name…"
+										className="h-6 w-28 rounded border border-foreground/10 bg-card/90 px-2 text-[10px] text-foreground outline-none placeholder:text-muted-foreground/70 focus-visible:border-foreground/22"
+									/>
+								)}
+							</div>
+						)}
 					</div>
-				)}
-				{error && (
-					<div className="mx-auto mt-3 w-full max-w-[110rem] rounded-md border border-destructive/25 bg-destructive/8 px-3 py-2 text-[11px] text-destructive">
-						{error}
-					</div>
-				)}
+					{createDisabledReason && (
+						<div className="mt-2 rounded-md border border-border bg-card/86 px-2.5 py-1.5 text-[10px] text-muted-foreground">
+							{createDisabledReason}
+						</div>
+					)}
+					{error && (
+						<div className="mt-2 rounded-md border border-destructive/25 bg-destructive/8 px-2.5 py-1.5 text-[10px] text-destructive">
+							{error}
+						</div>
+					)}
+				</div>
 			</div>
 
-			<div className="px-3 py-4 md:min-h-0 md:flex-1 md:px-6 md:py-5">
+			<div className="px-3 py-3 md:min-h-0 md:flex-1 md:px-6 md:py-4">
 				{isMobile && pathChain.length > 1 && (
 					<div className="mx-auto flex max-w-[110rem] items-center gap-2 mb-3">
 						<button
