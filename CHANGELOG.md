@@ -8,6 +8,7 @@ All notable changes to shelleport are documented here.
 
 - Desktop sidebars now show a keyboard shortcut legend above the Claude limits panel (#28) (thanks @kesava500)
 - Sidebar session rows now show cumulative session cost beside the relative update time when provider usage data is available (#33) (thanks @kesava500)
+- Browsers now warn before closing a tab while a session is still running or retrying (#34) (thanks @kesava500)
 
 ### Fixed
 
