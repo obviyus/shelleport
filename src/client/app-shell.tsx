@@ -41,6 +41,7 @@ import { useNow } from "~/client/use-now";
 import { SessionLauncher } from "~/client/components/session-launcher";
 import { SessionTranscript } from "~/client/components/session-transcript";
 import { useToast } from "~/client/components/toast";
+import { VoiceWaveform } from "~/client/components/voice-waveform";
 import { type VoiceInputState, createVoiceSession } from "~/client/voice-input";
 import { Sheet, SheetContent, SheetTitle } from "~/client/components/ui/sheet";
 import { matchAppRoute } from "~/client/routes";
@@ -2485,17 +2486,17 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 												</div>
 											)}
 											<div className="relative">
-												{voiceState.status === "recording" ? (
-													<div className="flex min-h-[72px] md:min-h-[92px] flex-col rounded-md border border-foreground/10 bg-foreground/[0.03] px-3 py-2.5">
-														<div className="flex flex-1 items-center text-xs text-muted-foreground/80">
-															Listening… tap confirm when you're done.
+												{voiceState.status === "recording" && voiceSessionRef.current?.analyser ? (
+													<div className="flex min-h-[84px] md:min-h-[100px] flex-col rounded-md border border-foreground/10 bg-foreground/[0.03] px-3 py-2.5">
+														<div className="flex min-h-[44px] flex-1 items-center">
+															<VoiceWaveform analyser={voiceSessionRef.current.analyser} />
 														</div>
 														<div className="flex shrink-0 items-center justify-end gap-2 pt-1">
 															<button
 																type="button"
 																onClick={handleVoiceCancel}
 																className="flex size-9 shrink-0 items-center justify-center rounded border border-foreground/10 text-muted-foreground/70 transition hover:text-foreground md:size-8"
-																title="Cancel voice input"
+																title="Cancel"
 															>
 																<X className="size-4" />
 															</button>
@@ -2503,7 +2504,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 																type="button"
 																onClick={() => void handleVoiceRecord()}
 																className="flex size-9 shrink-0 items-center justify-center rounded bg-foreground text-background transition hover:bg-foreground/85 md:size-8"
-																title="Stop recording and transcribe"
+																title="Stop recording & transcribe"
 															>
 																<Check className="size-4" />
 															</button>
