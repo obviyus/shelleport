@@ -4,6 +4,12 @@ All notable changes to shelleport are documented here.
 
 ## Unreleased
 
+## 0.0.24 - 2026-03-29
+
+### Fixed
+
+- Linux ARM64 native binaries no longer hang during `shelleport upgrade` after printing the download banner; upgrades now finish instead of spinning in Bun's streamed file writer path
+
 ## 0.0.23 - 2026-03-29
 
 ### Added

@@ -268,43 +268,43 @@ async function downloadFile(url: string, destinationPath: string, label: string)
 	}
 
 	const totalBytes = Number(response.headers.get("content-length") ?? "0");
-	const writer = Bun.file(destinationPath).writer({ highWaterMark: 1024 * 1024 });
 	const reader = response.body.getReader();
+	const chunks: Uint8Array[] = [];
 	let downloadedBytes = 0;
 	let lastRenderTime = 0;
 
-	try {
-		while (true) {
-			const { done, value } = await reader.read();
+	while (true) {
+		const { done, value } = await reader.read();
 
-			if (done) {
-				break;
-			}
-
-			if (!value) {
-				continue;
-			}
-
-			downloadedBytes += value.byteLength;
-			await writer.write(value);
-
-			const now = Date.now();
-			if (now - lastRenderTime >= 100) {
-				renderDownloadProgress(label, downloadedBytes, totalBytes);
-				lastRenderTime = now;
-			}
+		if (done) {
+			break;
 		}
 
-		renderDownloadProgress(label, downloadedBytes, totalBytes);
-		finishDownloadProgress();
-		await writer.end();
-	} catch (error) {
-		try {
-			await writer.end();
-		} catch {}
+		if (!value) {
+			continue;
+		}
 
-		throw error;
+		downloadedBytes += value.byteLength;
+		chunks.push(value);
+
+		const now = Date.now();
+		if (now - lastRenderTime >= 100) {
+			renderDownloadProgress(label, downloadedBytes, totalBytes);
+			lastRenderTime = now;
+		}
 	}
+
+	renderDownloadProgress(label, downloadedBytes, totalBytes);
+	finishDownloadProgress();
+	const output = new Uint8Array(downloadedBytes);
+	let offset = 0;
+
+	for (const chunk of chunks) {
+		output.set(chunk, offset);
+		offset += chunk.byteLength;
+	}
+
+	await Bun.write(destinationPath, output);
 }
 
 async function installReleaseBinary(version: string, targetPath: string) {
