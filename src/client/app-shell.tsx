@@ -689,93 +689,6 @@ function SessionActionsPopover({
 	);
 }
 
-function SessionProjectPicker({
-	session,
-	projects,
-	onMove,
-}: {
-	session: HostSession;
-	projects: Project[];
-	onMove: (projectId: string | null) => void;
-}) {
-	const [open, setOpen] = useState(false);
-	const buttonRef = useRef<HTMLButtonElement>(null);
-	const dropdownRef = useRef<HTMLDivElement>(null);
-	const currentProject = projects.find((p) => p.id === session.projectId) ?? null;
-	const projectName = currentProject?.name ?? "No project";
-	const [pos, setPos] = useState({ top: 0, right: 0 });
-
-	usePopoverDismiss(open, setOpen, buttonRef, dropdownRef);
-
-	function handleToggle() {
-		if (!open && buttonRef.current) {
-			const rect = buttonRef.current.getBoundingClientRect();
-			setPos({
-				top: rect.bottom + 4,
-				right: window.innerWidth - rect.right,
-			});
-		}
-
-		setOpen(!open);
-	}
-
-	return (
-		<>
-			<button
-				ref={buttonRef}
-				type="button"
-				onClick={handleToggle}
-				title={projectName}
-				className="flex items-center justify-center gap-1.5 rounded border border-foreground/12 px-2 py-1 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-[10px] text-muted-foreground/80 transition hover:border-foreground/18 hover:text-foreground"
-			>
-				<Folder className="size-3 md:size-2.5" />
-				<span className="hidden md:inline max-w-[120px] truncate">{projectName}</span>
-			</button>
-			{open &&
-				createPortal(
-					<div
-						ref={dropdownRef}
-						style={{ top: pos.top, right: pos.right }}
-						className="fixed z-[9999] min-w-[180px] rounded-md border border-foreground/12 bg-card p-1 shadow-lg"
-					>
-						<button
-							type="button"
-							onClick={() => {
-								void onMove(null);
-								setOpen(false);
-							}}
-							className={`flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-[11px] text-left transition ${
-								session.projectId === null
-									? "bg-accent text-foreground"
-									: "text-muted-foreground/80 hover:bg-accent/60 hover:text-foreground"
-							}`}
-						>
-							None
-						</button>
-						{projects.map((project) => (
-							<button
-								key={project.id}
-								type="button"
-								onClick={() => {
-									void onMove(project.id);
-									setOpen(false);
-								}}
-								className={`flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-[11px] text-left transition ${
-									session.projectId === project.id
-										? "bg-accent text-foreground"
-										: "text-muted-foreground/80 hover:bg-accent/60 hover:text-foreground"
-								}`}
-							>
-								{project.name}
-							</button>
-						))}
-					</div>,
-					document.body,
-				)}
-		</>
-	);
-}
-
 function SidebarSessionItem({
 	candidate,
 	selectedId,
@@ -834,7 +747,7 @@ function SidebarSessionItem({
 			</button>
 			<button
 				type="button"
-				onClick={() => void handlePinned(candidate.id, !candidate.pinned)}
+				onClick={() => handlePinned(candidate.id, !candidate.pinned)}
 				className={`mt-2 flex size-8 md:size-5 shrink-0 items-center justify-center rounded border transition ${
 					candidate.pinned
 						? "border-foreground/12 bg-accent text-foreground opacity-100"
@@ -849,7 +762,7 @@ function SidebarSessionItem({
 				type="button"
 				onClick={() => {
 					if (archiveConfirmId === candidate.id) {
-						void handleArchive(candidate.id, true);
+						handleArchive(candidate.id, true);
 						return;
 					}
 
@@ -2155,7 +2068,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 													</button>
 													<button
 														type="button"
-														onClick={() => void handleArchive(archivedSession.id, false)}
+														onClick={() => handleArchive(archivedSession.id, false)}
 														className="flex items-center gap-1.5 rounded bg-foreground px-3 py-2.5 md:py-1.5 text-[11px] font-medium text-background transition hover:bg-foreground/90"
 													>
 														<ArchiveRestore className="size-3" />
@@ -2275,7 +2188,9 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											{permissionModeLabel}
 										</span>
 									)}
-									{sessionHeaderBadges.length > 0 && <SessionStatsPopover badges={sessionHeaderBadges} />}
+									{sessionHeaderBadges.length > 0 && (
+										<SessionStatsPopover badges={sessionHeaderBadges} />
+									)}
 									{sessionView && (sessionProvider?.models ?? []).length > 0 && (
 										<SessionModelPicker
 											session={sessionView}
@@ -2290,7 +2205,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											stream={stream}
 											copiedConversation={copiedConversation}
 											hideThinking={hideThinking}
-											onPin={(id, pinned) => void handlePinned(id, pinned)}
+											onPin={(id, pinned) => handlePinned(id, pinned)}
 											onCopy={handleCopyConversation}
 											onMoveProject={(projectId) => void handleMoveSessionToProject(projectId)}
 											onToggleThinking={() =>
@@ -2336,7 +2251,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 													"application/json",
 												);
 											}}
-											onArchive={(id, archived) => void handleArchive(id, archived)}
+											onArchive={(id, archived) => handleArchive(id, archived)}
 											onDelete={(id) => void handleDelete(id)}
 										/>
 									)}

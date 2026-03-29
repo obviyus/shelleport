@@ -163,10 +163,7 @@ export const SessionTranscript = memo(function SessionTranscript({
 								</div>
 							)}
 							{grouped.map((group) => (
-								<GroupedEntryRenderer
-									key={getGroupedEntryKey(group)}
-									group={group}
-								/>
+								<GroupedEntryRenderer key={getGroupedEntryKey(group)} group={group} />
 							))}
 							{isRunning && (
 								<div className="animate-thinking mt-1 flex gap-1 py-2">
