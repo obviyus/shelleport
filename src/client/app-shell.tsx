@@ -6,6 +6,7 @@ import {
 	CircleX,
 	ClipboardCopy,
 	Paperclip,
+	Folder,
 	Loader2,
 	LogOut,
 	Menu,
@@ -49,6 +50,7 @@ import {
 	connectSSE,
 	controlSession,
 	createSession,
+	deleteProject as deleteProjectApi,
 	deleteQueuedInput,
 	deleteSession,
 	fetchProviders,
@@ -65,12 +67,14 @@ import type {
 	HostSession,
 	PendingRequest,
 	PermissionMode,
+	Project,
 	ProviderLimitState,
 	ProviderModel,
 	ProviderSummary,
 	QueuedSessionInput,
 	RequestResponsePayload,
 	SessionLimit,
+	SessionMetaPayload,
 	SessionStatus,
 } from "~/shared/shelleport";
 import { useCurrentRoute, useRouter } from "~/client/router";
@@ -206,7 +210,7 @@ function getSessionLimitTone(limit: SessionLimit) {
 		return "bg-amber-300 shadow-[0_0_18px_oklch(0.86_0.16_92_/_0.34)]";
 	}
 
-return "bg-white shadow-[0_0_18px_oklch(1_0_0_/_0.26)]";
+	return "bg-white shadow-[0_0_18px_oklch(1_0_0_/_0.26)]";
 }
 
 function formatSidebarCost(costUsd: number) {
@@ -336,6 +340,210 @@ function SidebarSessionMeta({ session }: { session: HostSession }) {
 			<span className="truncate">{getSidebarMeta(session, now)}</span>
 			{cost && <span className="shrink-0 tabular-nums text-muted-foreground/55">{cost}</span>}
 		</p>
+	);
+}
+
+function SessionProjectPicker({
+	session,
+	projects,
+	onMove,
+}: {
+	session: HostSession;
+	projects: Project[];
+	onMove: (projectId: string | null) => void;
+}) {
+	const [open, setOpen] = useState(false);
+	const buttonRef = useRef<HTMLButtonElement>(null);
+	const dropdownRef = useRef<HTMLDivElement>(null);
+	const currentProject = projects.find((p) => p.id === session.projectId) ?? null;
+	const projectName = currentProject?.name ?? "No project";
+	const [pos, setPos] = useState({ top: 0, right: 0 });
+
+	useEffect(() => {
+		if (!open) return;
+
+		function handleClick(event: MouseEvent) {
+			if (
+				buttonRef.current?.contains(event.target as Node) ||
+				dropdownRef.current?.contains(event.target as Node)
+			) {
+				return;
+			}
+
+			setOpen(false);
+		}
+
+		document.addEventListener("mousedown", handleClick);
+		return () => document.removeEventListener("mousedown", handleClick);
+	}, [open]);
+
+	function handleToggle() {
+		if (!open && buttonRef.current) {
+			const rect = buttonRef.current.getBoundingClientRect();
+			setPos({
+				top: rect.bottom + 4,
+				right: window.innerWidth - rect.right,
+			});
+		}
+
+		setOpen(!open);
+	}
+
+	return (
+		<>
+			<button
+				ref={buttonRef}
+				type="button"
+				onClick={handleToggle}
+				title={projectName}
+				className="flex items-center gap-1.5 rounded border border-foreground/12 px-2 py-1 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-[10px] text-muted-foreground/80 transition hover:border-foreground/18 hover:text-foreground"
+			>
+				<Folder className="size-3 md:size-2.5" />
+				<span className="hidden md:inline max-w-[120px] truncate">{projectName}</span>
+			</button>
+			{open &&
+				createPortal(
+					<div
+						ref={dropdownRef}
+						style={{ top: pos.top, right: pos.right }}
+						className="fixed z-[9999] min-w-[180px] rounded-md border border-foreground/12 bg-card p-1 shadow-lg"
+					>
+						<button
+							type="button"
+							onClick={() => {
+								void onMove(null);
+								setOpen(false);
+							}}
+							className={`flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-[11px] text-left transition ${
+								session.projectId === null
+									? "bg-accent text-foreground"
+									: "text-muted-foreground/80 hover:bg-accent/60 hover:text-foreground"
+							}`}
+						>
+							None
+						</button>
+						{projects.map((project) => (
+							<button
+								key={project.id}
+								type="button"
+								onClick={() => {
+									void onMove(project.id);
+									setOpen(false);
+								}}
+								className={`flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-[11px] text-left transition ${
+									session.projectId === project.id
+										? "bg-accent text-foreground"
+										: "text-muted-foreground/80 hover:bg-accent/60 hover:text-foreground"
+								}`}
+							>
+								{project.name}
+							</button>
+						))}
+					</div>,
+					document.body,
+				)}
+		</>
+	);
+}
+
+function SidebarSessionItem({
+	candidate,
+	selectedId,
+	archiveConfirmId,
+	setArchiveConfirmId,
+	navigate,
+	setSidebarOpen,
+	handlePinned,
+	handleArchive,
+}: {
+	candidate: HostSession;
+	selectedId: string | null;
+	archiveConfirmId: string | null;
+	setArchiveConfirmId: (id: string | null) => void;
+	navigate: (path: string) => void;
+	setSidebarOpen: (open: boolean) => void;
+	handlePinned: (sessionId: string, pinned: boolean) => void;
+	handleArchive: (sessionId: string, archived: boolean) => void;
+}) {
+	return (
+		<div
+			key={candidate.id}
+			onMouseLeave={() => {
+				if (archiveConfirmId === candidate.id) {
+					setArchiveConfirmId(null);
+				}
+			}}
+			className={`group flex items-start gap-1 rounded-md transition ${
+				candidate.status === "running" || candidate.status === "retrying"
+					? "sidebar-session-running"
+					: ""
+			} ${
+				selectedId === candidate.id
+					? "border border-foreground/10 bg-accent/90 text-foreground shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]"
+					: "text-foreground/82 hover:bg-accent/65 hover:text-foreground"
+			}`}
+		>
+			<button
+				type="button"
+				onClick={() => {
+					navigate(`/sessions/${candidate.id}`);
+					setSidebarOpen(false);
+				}}
+				title={getSidebarTitle(candidate)}
+				className="min-w-0 flex-1 px-2.5 py-2 text-left"
+			>
+				<div className="flex items-center gap-2">
+					<StatusDot status={candidate.status} />
+					{candidate.pinned && <Pin className="size-3 shrink-0 text-foreground/70" />}
+					<span className="line-clamp-1 min-w-0 flex-1 pr-1 text-xs">{candidate.title}</span>
+					{candidate.status === "failed" && (
+						<CircleX className="ml-auto size-3 shrink-0 text-destructive/70" />
+					)}
+				</div>
+				<SidebarSessionMeta session={candidate} />
+			</button>
+			<button
+				type="button"
+				onClick={() => void handlePinned(candidate.id, !candidate.pinned)}
+				className={`mt-2 flex size-8 md:size-5 shrink-0 items-center justify-center rounded border transition ${
+					candidate.pinned
+						? "border-foreground/12 bg-accent text-foreground opacity-100"
+						: "border-foreground/8 text-muted-foreground/50 active:bg-accent active:text-foreground md:border-transparent md:text-muted-foreground/0 md:opacity-0 md:group-hover:border-foreground/10 md:group-hover:text-muted-foreground/86 md:group-hover:opacity-100 md:hover:border-foreground/18 md:hover:text-foreground"
+				}`}
+				aria-label={candidate.pinned ? `Unpin ${candidate.title}` : `Pin ${candidate.title}`}
+				title={candidate.pinned ? "Unpin" : "Pin"}
+			>
+				<Pin className="size-3" />
+			</button>
+			<button
+				type="button"
+				onClick={() => {
+					if (archiveConfirmId === candidate.id) {
+						void handleArchive(candidate.id, true);
+						return;
+					}
+
+					setArchiveConfirmId(candidate.id);
+				}}
+				className={`mt-2 mr-2 flex size-8 md:size-5 shrink-0 items-center justify-center rounded border transition ${
+					archiveConfirmId === candidate.id
+						? "border-foreground/18 bg-accent text-foreground opacity-100"
+						: "border-foreground/8 text-muted-foreground/50 active:bg-accent active:text-foreground md:border-transparent md:text-muted-foreground/0 md:opacity-0 md:group-hover:border-foreground/10 md:group-hover:text-muted-foreground/86 md:group-hover:opacity-100 md:hover:border-foreground/18 md:hover:text-foreground"
+				}`}
+				aria-label={
+					archiveConfirmId === candidate.id
+						? `Confirm archive ${candidate.title}`
+						: `Archive ${candidate.title}`
+				}
+				title={archiveConfirmId === candidate.id ? "Confirm archive" : "Archive"}
+			>
+				{archiveConfirmId === candidate.id ? (
+					<Check className="size-3" />
+				) : (
+					<Archive className="size-3" />
+				)}
+			</button>
+		</div>
 	);
 }
 
@@ -546,6 +754,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 
 	const [providers, setProviders] = useState<ProviderSummary[]>(boot.providers);
 	const [providerLimits, setProviderLimits] = useState<ProviderLimitState>(boot.providerLimits);
+	const [projects, setProjects] = useState<Project[]>(boot.projects);
 	const [sessions, setSessions] = useState<HostSession[]>(boot.sessions);
 	const [session, setSession] = useState<HostSession | null>(initialDetail?.session ?? null);
 	const [stream, setStream] = useState<HostEvent[]>(initialDetail?.events ?? []);
@@ -565,6 +774,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const [renameState, setRenameState] = useState<{ sessionId: string; title: string } | null>(null);
 	const [sidebarOpen, setSidebarOpen] = useState(false);
 	const [sessionQuery, setSessionQuery] = useState("");
+	const [deleteProjectConfirmId, setDeleteProjectConfirmId] = useState<string | null>(null);
 	const [hasDismissedClaudeBypassWarning, setHasDismissedClaudeBypassWarning] = useState(
 		() =>
 			typeof window !== "undefined" &&
@@ -581,7 +791,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	);
 	const sessionView = session?.id === selectedId ? session : selectedSession;
 	const isSessionPending = isSessionRoute && (sessionView === null || session?.id !== selectedId);
-	const { activeSessions, archivedSessions } = useMemo(() => {
+	const { activeSessions, archivedSessions, projectGroups } = useMemo(() => {
 		const active: HostSession[] = [];
 		const archived: HostSession[] = [];
 
@@ -594,11 +804,54 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			active.push(candidate);
 		}
 
+		// Group active sessions by projectId
+		const groupMap = new Map<string | null, HostSession[]>();
+		for (const session of active) {
+			const key = session.projectId ?? null;
+			if (!groupMap.has(key)) {
+				groupMap.set(key, []);
+			}
+			groupMap.get(key)!.push(session);
+		}
+
+		// Create groups: named projects first (sorted by name), then ungrouped
+		const groups: Array<{
+			projectId: string | null;
+			projectName: string | null;
+			sessions: HostSession[];
+		}> = [];
+
+		// Add named projects first (sorted by name)
+		const namedProjects = projects
+			.filter((p) => p.id !== null)
+			.sort((a, b) => a.name.localeCompare(b.name));
+		for (const project of namedProjects) {
+			const sessions = groupMap.get(project.id) ?? [];
+			if (sessions.length > 0) {
+				groups.push({
+					projectId: project.id,
+					projectName: project.name,
+					sessions,
+				});
+			}
+		}
+
+		// Add ungrouped sessions
+		const ungrouped = groupMap.get(null) ?? [];
+		if (ungrouped.length > 0) {
+			groups.push({
+				projectId: null,
+				projectName: null,
+				sessions: ungrouped,
+			});
+		}
+
 		return {
 			activeSessions: active,
 			archivedSessions: archived,
+			projectGroups: groups,
 		};
-	}, [sessions]);
+	}, [sessions, projects]);
 	const grouped = useMemo(() => groupStream(stream), [stream]);
 	const sessionHeaderBadges = useMemo(() => getSessionHeaderBadges(sessionView), [sessionView]);
 	const claudeLimits = useMemo(
@@ -844,7 +1097,13 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	}, []);
 
 	const handleCreateSession = useCallback(
-		async (cwd: string, title: string, permissionMode: PermissionMode, model?: string) => {
+		async (
+			cwd: string,
+			title: string,
+			permissionMode: PermissionMode,
+			model?: string,
+			projectId?: string,
+		) => {
 			if (!cwd.trim() || !createProvider) {
 				return;
 			}
@@ -858,6 +1117,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 					permissionMode,
 					title: title || undefined,
 					model,
+					projectId,
 				});
 				await refreshSessions(sessionQuery);
 				navigate(`/sessions/${result.session.id}`);
@@ -986,6 +1246,24 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		[navigate, refreshSessions, selectedId, sessionQuery],
 	);
 
+	const handleDeleteProject = useCallback(
+		async (projectId: string) => {
+			try {
+				await deleteProjectApi(projectId);
+				setProjects((previous) => previous.filter((p) => p.id !== projectId));
+				setSessions((previous) =>
+					previous.map((session) =>
+						session.projectId === projectId ? { ...session, projectId: null } : session,
+					),
+				);
+				setDeleteProjectConfirmId(null);
+			} catch {
+				showToast("error", "Failed to delete project");
+			}
+		},
+		[showToast],
+	);
+
 	const handleCopyConversation = useCallback(() => {
 		void copyToClipboard(streamToMarkdown(stream)).then(() => {
 			setCopiedConversation(true);
@@ -1108,6 +1386,20 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			}
 		},
 		[applySessionMetaUpdate, showToast],
+	);
+
+	const handleMoveSessionToProject = useCallback(
+		async (projectId: string | null) => {
+			if (!selectedId) return;
+			try {
+				const result = await updateSessionMeta(selectedId, { projectId });
+				setSession((previous) => (previous?.id === result.session.id ? result.session : previous));
+				await refreshSessions(sessionQuery);
+			} catch {
+				showToast("error", "Failed to move session to project");
+			}
+		},
+		[selectedId, refreshSessions, sessionQuery, showToast],
 	);
 
 	const handleChangeModel = useCallback(
@@ -1338,90 +1630,52 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 								})()
 							) : (
 								<div className="space-y-1">
-									{activeSessions.map((candidate) => (
-										<div
-											key={candidate.id}
-											onMouseLeave={() => {
-												if (archiveConfirmId === candidate.id) {
-													setArchiveConfirmId(null);
-												}
-											}}
-											className={`group flex items-start gap-1 rounded-md transition ${
-												candidate.status === "running" || candidate.status === "retrying"
-													? "sidebar-session-running"
-													: ""
-											} ${
-												selectedId === candidate.id
-													? "border border-foreground/10 bg-accent/90 text-foreground shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]"
-													: "text-foreground/82 hover:bg-accent/65 hover:text-foreground"
-											}`}
-										>
-											<button
-												type="button"
-												onClick={() => {
-													navigate(`/sessions/${candidate.id}`);
-													setSidebarOpen(false);
-												}}
-												title={getSidebarTitle(candidate)}
-												className="min-w-0 flex-1 px-2.5 py-2 text-left"
-											>
-												<div className="flex items-center gap-2">
-													<StatusDot status={candidate.status} />
-													{candidate.pinned && (
-														<Pin className="size-3 shrink-0 text-foreground/70" />
-													)}
-													<span className="line-clamp-1 min-w-0 flex-1 pr-1 text-xs">
-														{candidate.title}
-													</span>
-													{candidate.status === "failed" && (
-														<CircleX className="ml-auto size-3 shrink-0 text-destructive/70" />
-													)}
+									{projectGroups.map((group) => (
+										<div key={group.projectId ?? "ungrouped"}>
+											{group.projectName && (
+												<div className="flex items-center justify-between gap-2 px-2.5 py-2 mb-1">
+													<div className="flex items-center gap-1.5">
+														<Folder className="size-3 text-muted-foreground/60" />
+														<span className="text-[11px] font-medium text-muted-foreground/75">
+															{group.projectName}
+														</span>
+														<span className="text-[10px] text-muted-foreground/50">
+															{group.sessions.length}
+														</span>
+													</div>
+													<button
+														type="button"
+														onClick={() => {
+															if (deleteProjectConfirmId === group.projectId) {
+																void handleDeleteProject(group.projectId!);
+																return;
+															}
+															setDeleteProjectConfirmId(group.projectId!);
+														}}
+														className={`flex size-5 items-center justify-center rounded text-muted-foreground/50 transition hover:text-destructive ${
+															deleteProjectConfirmId === group.projectId ? "text-destructive" : ""
+														}`}
+														title="Delete project"
+													>
+														<Trash2 className="size-3" />
+													</button>
 												</div>
-												<SidebarSessionMeta session={candidate} />
-											</button>
-											<button
-												type="button"
-												onClick={() => void handlePinned(candidate.id, !candidate.pinned)}
-												className={`mt-2 flex size-8 md:size-5 shrink-0 items-center justify-center rounded border transition ${
-													candidate.pinned
-														? "border-foreground/12 bg-accent text-foreground opacity-100"
-														: "border-foreground/8 text-muted-foreground/50 active:bg-accent active:text-foreground md:border-transparent md:text-muted-foreground/0 md:opacity-0 md:group-hover:border-foreground/10 md:group-hover:text-muted-foreground/86 md:group-hover:opacity-100 md:hover:border-foreground/18 md:hover:text-foreground"
-												}`}
-												aria-label={
-													candidate.pinned ? `Unpin ${candidate.title}` : `Pin ${candidate.title}`
-												}
-												title={candidate.pinned ? "Unpin" : "Pin"}
-											>
-												<Pin className="size-3" />
-											</button>
-											<button
-												type="button"
-												onClick={() => {
-													if (archiveConfirmId === candidate.id) {
-														void handleArchive(candidate.id, true);
-														return;
-													}
-
-													setArchiveConfirmId(candidate.id);
-												}}
-												className={`mt-2 mr-2 flex size-8 md:size-5 shrink-0 items-center justify-center rounded border transition ${
-													archiveConfirmId === candidate.id
-														? "border-foreground/18 bg-accent text-foreground opacity-100"
-														: "border-foreground/8 text-muted-foreground/50 active:bg-accent active:text-foreground md:border-transparent md:text-muted-foreground/0 md:opacity-0 md:group-hover:border-foreground/10 md:group-hover:text-muted-foreground/86 md:group-hover:opacity-100 md:hover:border-foreground/18 md:hover:text-foreground"
-												}`}
-												aria-label={
-													archiveConfirmId === candidate.id
-														? `Confirm archive ${candidate.title}`
-														: `Archive ${candidate.title}`
-												}
-												title={archiveConfirmId === candidate.id ? "Confirm archive" : "Archive"}
-											>
-												{archiveConfirmId === candidate.id ? (
-													<Check className="size-3" />
-												) : (
-													<Archive className="size-3" />
-												)}
-											</button>
+											)}
+											<div className={group.projectName ? "ml-3 space-y-1" : "space-y-1"}>
+												{group.sessions.map((candidate) => (
+													<SidebarSessionItem
+														key={candidate.id}
+														candidate={candidate}
+														selectedId={selectedId}
+														archiveConfirmId={archiveConfirmId}
+														setArchiveConfirmId={setArchiveConfirmId}
+														navigate={navigate}
+														setSidebarOpen={setSidebarOpen}
+														handlePinned={handlePinned}
+														handleArchive={handleArchive}
+													/>
+												))}
+											</div>
 										</div>
 									))}
 								</div>
@@ -1719,6 +1973,13 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											onChangeModel={(model) => handleChangeModel(sessionView.id, model)}
 										/>
 									)}
+									{sessionView && projects.length > 0 && (
+										<SessionProjectPicker
+											session={sessionView}
+											projects={projects}
+											onMove={handleMoveSessionToProject}
+										/>
+									)}
 									{sessionView &&
 										(sessionView.status === "running" || sessionView.status === "retrying") && (
 											<button
@@ -2007,6 +2268,8 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 							isCreating={isCreating}
 							models={createProvider?.models ?? []}
 							onCreate={handleCreateSession}
+							projects={projects}
+							onProjectCreated={(project) => setProjects((prev) => [...prev, project])}
 						/>
 					</>
 				)}

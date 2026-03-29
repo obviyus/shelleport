@@ -55,6 +55,7 @@ export async function buildAppBootData(
 				defaultCwd: options.defaultCwd,
 				providers: listProviders(),
 				providerLimits: sessionStore.getProviderLimits(),
+				projects: sessionStore.listProjects(),
 				route,
 				sessionDetail: route.kind === "session" ? sessionDetail : null,
 				sessions: sessionBroker.listSessions(),

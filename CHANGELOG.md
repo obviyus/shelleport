@@ -13,6 +13,7 @@ All notable changes to shelleport are documented here.
 - Browser actions now show visible toast errors instead of failing silently when session creation, metadata changes, or approval/queue actions fail (#32) (thanks @kesava500)
 - HTTP responses now include baseline security headers, and failed login attempts are rate-limited per client IP (#29) (thanks @kesava500)
 - Claude sessions can now choose a specific model at launch and switch models for later prompts from the session header (#39) (thanks @kesava500)
+- Sessions can now be organized into projects from the launcher and sidebar, with create, save-as-project, move, and delete flows in the browser (#38) (thanks @kesava500)
 
 ### Fixed
 
