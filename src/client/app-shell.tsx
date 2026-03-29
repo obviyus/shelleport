@@ -390,7 +390,8 @@ function SessionStatsPopover({ badges }: { badges: SessionHeaderBadge[] }) {
 	const [open, setOpen] = useState(false);
 	const buttonRef = useRef<HTMLButtonElement>(null);
 	const dropdownRef = useRef<HTMLDivElement>(null);
-	const [pos, setPos] = useState({ top: 0, right: 0 });
+	const [pos, setPos] = useState({ top: 0, right: 8 });
+	const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 	usePopoverDismiss(open, setOpen, buttonRef, dropdownRef);
 
 	function handleToggle() {
@@ -398,7 +399,7 @@ function SessionStatsPopover({ badges }: { badges: SessionHeaderBadge[] }) {
 			const rect = buttonRef.current.getBoundingClientRect();
 			setPos({
 				top: rect.bottom + 4,
-				right: window.innerWidth - rect.right,
+				right: isMobile ? 8 : window.innerWidth - rect.right,
 			});
 		}
 
@@ -412,16 +413,16 @@ function SessionStatsPopover({ badges }: { badges: SessionHeaderBadge[] }) {
 				type="button"
 				onClick={handleToggle}
 				title="Session stats"
-				className="hidden lg:flex items-center justify-center gap-1 rounded border border-foreground/12 px-2 py-1 text-xs text-muted-foreground/80 transition hover:border-foreground/18 hover:text-foreground"
+				className="flex items-center justify-center gap-1 rounded border border-foreground/12 px-2 py-1 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-xs text-muted-foreground/80 transition hover:border-foreground/18 hover:text-foreground"
 			>
-				<Info className="size-2.5" />
-				<span>Stats</span>
+				<Info className="size-3 md:size-2.5" />
+				<span className="hidden md:inline">Stats</span>
 			</button>
 			{open &&
 				createPortal(
 					<div
 						ref={dropdownRef}
-						style={{ top: pos.top, right: pos.right }}
+						style={{ top: pos.top, right: pos.right, left: isMobile ? 8 : "auto" }}
 						className="fixed z-[9999] min-w-[200px] max-w-[320px] rounded-md border border-foreground/12 bg-card p-3 shadow-lg"
 					>
 						<p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-foreground/68">
@@ -2238,15 +2239,15 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											{permissionModeLabel}
 										</span>
 									)}
-									{sessionHeaderBadges.length > 0 && (
-										<SessionStatsPopover badges={sessionHeaderBadges} />
-									)}
 									{sessionView && (sessionProvider?.models ?? []).length > 0 && (
 										<SessionModelPicker
 											session={sessionView}
 											models={sessionProvider?.models ?? []}
 											onChangeModel={(model) => handleChangeModel(sessionView.id, model)}
 										/>
+									)}
+									{sessionHeaderBadges.length > 0 && (
+										<SessionStatsPopover badges={sessionHeaderBadges} />
 									)}
 									{sessionView && (
 										<SessionActionsPopover
