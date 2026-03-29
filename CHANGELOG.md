@@ -4,6 +4,8 @@ All notable changes to shelleport are documented here.
 
 ## Unreleased
 
+## 0.0.23 - 2026-03-29
+
 ### Added
 
 - Idle, interrupted, and completed sessions now show relative update times in the sidebar instead of repeating the cwd path (#13) (thanks @kesava500)
@@ -19,6 +21,7 @@ All notable changes to shelleport are documented here.
 - The browser tab now uses an inline shell favicon instead of the default blank icon (#23) (thanks @kesava500)
 - The prompt composer now supports shell-style history recall with Up/Down arrow keys across page refreshes (#24) (thanks @kesava500)
 - Claude thinking/reasoning blocks now render as collapsible transcript sections and stay labeled as thinking in transcript exports (#25) (thanks @kesava500)
+- New installs now show a first-run readiness card in the browser so setup problems are explicit before you launch a session
 
 ### Fixed
 
@@ -27,6 +30,7 @@ All notable changes to shelleport are documented here.
 - Browser chat selection no longer risks clearing every second because time-based sidebar/header labels own their own local clock updates
 - Claude streamed thinking/tool deltas now only suppress duplicate assistant events for the current response instead of leaking into later assistant messages
 - Bun tests now preload an isolated `SHELLEPORT_DATA_DIR` so import-time store initialization cannot write fixture data into a real install
+- Session views now recover cleanly when their UI state or live stream gets out of sync instead of dropping you into a broken blank state
 
 ## 0.0.22 - 2026-03-28
 

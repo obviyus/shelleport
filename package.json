@@ -1,6 +1,6 @@
 {
 	"name": "shelleport",
-	"version": "0.0.22",
+	"version": "0.0.23",
 	"description": "Browser control plane for coding agent sessions",
 	"keywords": [
 		"agent",
