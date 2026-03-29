@@ -4,6 +4,10 @@ All notable changes to shelleport are documented here.
 
 ## Unreleased
 
+### Added
+
+- Desktop sidebars now show a keyboard shortcut legend above the Claude limits panel (#28) (thanks @kesava500)
+
 ## 0.0.24 - 2026-03-29
 
 ### Fixed
