@@ -852,8 +852,23 @@ function SidebarShortcutLegend() {
 	);
 }
 
-function SessionStatusBadge({ session }: { session: HostSession }) {
+function SessionStatusBadge({
+	session,
+	reconnecting,
+}: {
+	session: HostSession;
+	reconnecting?: boolean;
+}) {
 	const now = useNow();
+
+	if (reconnecting) {
+		return (
+			<div className="flex items-center gap-1.5 rounded border border-amber-500/25 bg-amber-500/8 px-2 py-1">
+				<Loader2 className="size-2.5 animate-spin text-amber-400/80" />
+				<span className="hidden sm:inline text-[10px] text-amber-300/80">Reconnecting…</span>
+			</div>
+		);
+	}
 
 	return (
 		<div className="flex items-center gap-1.5 rounded border border-foreground/12 px-2 py-1">
@@ -2181,7 +2196,9 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 									)}
 								</div>
 								<div className="flex shrink-0 items-center gap-1.5">
-									{sessionView && <SessionStatusBadge session={sessionView} />}
+									{sessionView && (
+										<SessionStatusBadge session={sessionView} reconnecting={showReconnectBanner} />
+									)}
 
 									{permissionModeLabel && (
 										<span className="hidden rounded border border-foreground/12 px-2 py-1 text-[9px] uppercase tracking-[0.08em] text-muted-foreground/80 md:inline-flex">
@@ -2281,7 +2298,6 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 							onRespond={handleRespond}
 							pendingRequest={pendingRequest}
 							session={sessionView}
-							showReconnectBanner={showReconnectBanner}
 							statusMessage={statusMessage}
 						/>
 

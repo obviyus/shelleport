@@ -36,7 +36,6 @@ export const SessionTranscript = memo(function SessionTranscript({
 	onRespond,
 	pendingRequest,
 	session,
-	showReconnectBanner,
 	statusMessage,
 }: {
 	firstSequence: number | null;
@@ -49,7 +48,6 @@ export const SessionTranscript = memo(function SessionTranscript({
 	onRespond: (id: string, payload: RequestResponsePayload) => void;
 	pendingRequest: PendingRequest | null;
 	session: HostSession | null;
-	showReconnectBanner: boolean;
 	statusMessage: string | null;
 }) {
 	const scrollRef = useRef<HTMLDivElement>(null);
@@ -121,13 +119,6 @@ export const SessionTranscript = memo(function SessionTranscript({
 
 	return (
 		<>
-			{showReconnectBanner && (
-				<div className="shrink-0 border-b border-amber-500/20 bg-amber-500/10 px-3 md:px-6 py-2 text-center text-[11px] text-amber-200/90">
-					<Loader2 className="mr-1.5 inline size-3 animate-spin align-[-2px]" />
-					Reconnecting to session stream…
-				</div>
-			)}
-
 			<div className="relative flex-1 overflow-hidden">
 				<div
 					ref={scrollRef}
