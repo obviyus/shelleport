@@ -10,7 +10,7 @@ import {
 } from "~/client/session-stream";
 
 describe("getSessionHeaderBadges", () => {
-	test("puts the normalized model badge before usage badges", () => {
+	test("skips model badge and shows usage badges", () => {
 		const badges = getSessionHeaderBadges({
 			usage: {
 				inputTokens: 12,
@@ -23,12 +23,6 @@ describe("getSessionHeaderBadges", () => {
 		});
 
 		expect(badges).toEqual([
-			{
-				key: "model:claude-opus-4-6[1m]",
-				label: "claude-opus-4-6",
-				title: "claude-opus-4-6[1m]",
-				visibility: "lg",
-			},
 			{
 				key: "in:12",
 				label: "in 12",
@@ -361,6 +355,7 @@ describe("getSidebarMeta", () => {
 					cwd: "/tmp/project",
 					id: "session-1",
 					imported: false,
+					model: null,
 					lastEventSequence: 0,
 					permissionMode: "default",
 					pid: null,
@@ -395,6 +390,7 @@ describe("getSidebarMeta", () => {
 					cwd: "/tmp/project",
 					id: "session-1",
 					imported: false,
+					model: null,
 					lastEventSequence: 0,
 					permissionMode: "default",
 					pid: null,

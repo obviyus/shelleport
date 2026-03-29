@@ -173,6 +173,7 @@ ensureColumn(
 	"utilization",
 	"ALTER TABLE app_provider_limits ADD COLUMN utilization REAL",
 );
+ensureColumn("host_sessions", "model", "ALTER TABLE host_sessions ADD COLUMN model TEXT");
 
 database.exec(`
 	UPDATE host_sessions
@@ -192,6 +193,7 @@ type SqlSessionRow = {
 	provider_session_ref: string | null;
 	pid: number | null;
 	imported: number;
+	model: string | null;
 	permission_mode: string;
 	allowed_tools_json: string;
 	queued_input_count: number;
@@ -311,6 +313,7 @@ function mapSession(row: SqlSessionRow): HostSession {
 		providerSessionRef: row.provider_session_ref,
 		pid: row.pid,
 		imported: row.imported === 1,
+		model: row.model,
 		permissionMode: row.permission_mode as PermissionMode,
 		allowedTools: parseAllowedTools(row.allowed_tools_json),
 		queuedInputCount: row.queued_input_count,
@@ -362,8 +365,8 @@ function mapQueuedInput(row: SqlQueuedInputRow): QueuedSessionInput {
 
 const insertSessionStatement = database.query(
 	`INSERT INTO host_sessions (
-		id, provider, title, cwd, pinned, archived, status, status_detail_json, provider_session_ref, pid, imported, permission_mode, allowed_tools_json, queued_input_count, usage_json, active_usage_json, last_event_sequence, create_time, update_time
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, provider, title, cwd, pinned, archived, status, status_detail_json, provider_session_ref, pid, imported, model, permission_mode, allowed_tools_json, queued_input_count, usage_json, active_usage_json, last_event_sequence, create_time, update_time
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 );
 
 const listSessionsStatement = database.query<SqlSessionRow, []>(
@@ -384,7 +387,7 @@ const searchSessionsStatement = database.query<SqlSessionRow, [string]>(
 
 const updateSessionStatement = database.query(
 	`UPDATE host_sessions
-		SET status = ?, status_detail_json = ?, provider_session_ref = ?, pid = ?, title = ?, pinned = ?, archived = ?, permission_mode = ?, allowed_tools_json = ?, queued_input_count = ?, update_time = ?
+		SET status = ?, status_detail_json = ?, provider_session_ref = ?, pid = ?, title = ?, pinned = ?, archived = ?, model = ?, permission_mode = ?, allowed_tools_json = ?, queued_input_count = ?, update_time = ?
 		WHERE id = ?`,
 );
 
@@ -606,6 +609,7 @@ export type CreateStoredSessionInput = {
 	title: string;
 	cwd: string;
 	imported?: boolean;
+	model?: string | null;
 	providerSessionRef?: string | null;
 	permissionMode: PermissionMode;
 	allowedTools: string[];
@@ -622,6 +626,7 @@ type SessionUpdate = Partial<
 		| "title"
 		| "pinned"
 		| "archived"
+		| "model"
 		| "permissionMode"
 		| "allowedTools"
 	>
@@ -645,6 +650,7 @@ export const sessionStore = {
 			providerSessionRef: input.providerSessionRef ?? null,
 			pid: null,
 			imported: input.imported ?? false,
+			model: input.model ?? null,
 			permissionMode: input.permissionMode,
 			allowedTools: input.allowedTools,
 			queuedInputCount: 0,
@@ -666,6 +672,7 @@ export const sessionStore = {
 			session.providerSessionRef,
 			session.pid,
 			session.imported ? 1 : 0,
+			session.model,
 			session.permissionMode,
 			JSON.stringify(session.allowedTools),
 			session.queuedInputCount,
@@ -812,6 +819,7 @@ export const sessionStore = {
 			title: update.title ?? current.title,
 			pinned: update.pinned ?? current.pinned,
 			archived: update.archived ?? current.archived,
+			model: update.model === undefined ? current.model : update.model,
 			permissionMode: update.permissionMode ?? current.permissionMode,
 			allowedTools: update.allowedTools ?? current.allowedTools,
 			queuedInputCount: current.queuedInputCount,
@@ -826,6 +834,7 @@ export const sessionStore = {
 			next.title,
 			next.pinned ? 1 : 0,
 			next.archived ? 1 : 0,
+			next.model,
 			next.permissionMode,
 			JSON.stringify(next.allowedTools),
 			next.queuedInputCount,

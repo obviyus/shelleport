@@ -25,6 +25,7 @@ import {
 	type DirectoryEntry,
 	type DirectoryListing,
 	type PermissionMode,
+	type ProviderModel,
 	type ProviderId,
 } from "~/shared/shelleport";
 
@@ -34,7 +35,13 @@ type SessionLauncherProps = {
 	createProviderId: ProviderId | null;
 	defaultPath: string;
 	isCreating: boolean;
-	onCreate: (cwd: string, title: string, permissionMode: PermissionMode) => void | Promise<void>;
+	models: ProviderModel[];
+	onCreate: (
+		cwd: string,
+		title: string,
+		permissionMode: PermissionMode,
+		model?: string,
+	) => void | Promise<void>;
 };
 
 const ROOT_PATH = "/";
@@ -405,6 +412,7 @@ export function SessionLauncher({
 	createProviderId,
 	defaultPath,
 	isCreating,
+	models,
 	onCreate,
 }: SessionLauncherProps) {
 	const titleInputId = useId();
@@ -419,6 +427,7 @@ export function SessionLauncher({
 	const browserRef = useRef<HTMLDivElement>(null);
 	const columnRefs = useRef<Record<string, HTMLElement | null>>({});
 	const [focusPath, setFocusPath] = useState<string | null>(null);
+	const [selectedModel, setSelectedModel] = useState<string | null>(null);
 	const [permissionMode, setPermissionMode] = useState<PermissionMode>(
 		createProviderId ? getDefaultPermissionMode(createProviderId) : "default",
 	);
@@ -619,6 +628,45 @@ export function SessionLauncher({
 						/>
 					</div>
 				</div>
+				{models.length > 0 && (
+					<div className="mx-auto mt-4 flex w-full max-w-[110rem] flex-col md:flex-row md:items-start md:justify-between gap-4 md:gap-6 border-t border-foreground/12 pt-4">
+						<div className="min-w-0">
+							<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+								Model
+							</p>
+							<p className="mt-1 max-w-2xl text-[11px] leading-[1.7] text-muted-foreground/84">
+								Leave on default or pick a specific model for this session.
+							</p>
+						</div>
+						<div className="grid w-full max-w-xl grid-cols-2 md:grid-cols-4 gap-2">
+							<button
+								type="button"
+								onClick={() => setSelectedModel(null)}
+								className={`rounded-md border px-3 py-2.5 text-left transition ${
+									selectedModel === null
+										? "border-foreground/20 bg-foreground text-background"
+										: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
+								}`}
+							>
+								<p className="text-[11px] font-medium">Default</p>
+							</button>
+							{models.map((model) => (
+								<button
+									key={model.id}
+									type="button"
+									onClick={() => setSelectedModel(model.id)}
+									className={`rounded-md border px-3 py-2.5 text-left transition ${
+										selectedModel === model.id
+											? "border-foreground/20 bg-foreground text-background"
+											: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
+									}`}
+								>
+									<p className="text-[11px] font-medium">{model.label}</p>
+								</button>
+							))}
+						</div>
+					</div>
+				)}
 				{showsPermissionMode && (
 					<div className="mx-auto mt-4 flex w-full max-w-[110rem] flex-col md:flex-row md:items-start md:justify-between gap-4 md:gap-6 border-t border-foreground/12 pt-4">
 						<div className="min-w-0">
@@ -684,7 +732,9 @@ export function SessionLauncher({
 					</div>
 					<button
 						type="button"
-						onClick={() => void onCreate(currentPath, title.trim(), permissionMode)}
+						onClick={() =>
+							void onCreate(currentPath, title.trim(), permissionMode, selectedModel ?? undefined)
+						}
 						disabled={isCreating || createDisabledReason !== null}
 						className="flex h-12 md:h-10 w-full md:w-auto shrink-0 items-center justify-center gap-2 rounded-md bg-foreground px-4 text-xs font-medium text-background transition hover:bg-foreground/90 focus-visible:ring-2 focus-visible:ring-foreground/20 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-30"
 					>

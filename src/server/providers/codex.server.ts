@@ -82,6 +82,7 @@ export class CodexProviderAdapter implements ProviderAdapter {
 			status: "planned",
 			statusDetail: "Historical import only in v1.",
 			capabilities: this.capabilities(),
+			models: [],
 		};
 	}
 

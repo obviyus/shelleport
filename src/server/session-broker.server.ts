@@ -491,6 +491,7 @@ export const sessionBroker = {
 			provider: input.provider,
 			cwd: input.cwd,
 			title: input.title?.trim() || autoTitle || defaultSessionTitle(input.provider),
+			model: input.model,
 			permissionMode: input.permissionMode ?? getDefaultPermissionMode(input.provider),
 			allowedTools: normalizeAllowedTools(input.allowedTools ?? []),
 		});
@@ -585,6 +586,7 @@ export const sessionBroker = {
 		const session = sessionStore.updateSession(sessionId, {
 			title: input.title?.trim(),
 			pinned: input.pinned,
+			model: input.model,
 		});
 
 		if (!session) {
