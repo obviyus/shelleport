@@ -6,6 +6,7 @@ All notable changes to shelleport are documented here.
 
 ### Fixed
 
+- Header popovers now dismiss on Escape consistently, including the session Actions menu (#47) (thanks @kesava500)
 - Session headers can now export the current transcript as Markdown or JSON from the Actions menu, alongside copy-to-clipboard (#45) (thanks @kesava500)
 - Session views can now archive or delete the current session directly from the Actions menu without going back to the sidebar (#46) (thanks @kesava500)
 - Session headers now group pin, copy, and project actions under one mobile-friendlier Actions menu instead of spreading them across separate buttons (#43) (thanks @kesava500)

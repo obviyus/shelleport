@@ -229,6 +229,41 @@ function formatSidebarCost(costUsd: number) {
 	return `$${costUsd.toFixed(4)}`;
 }
 
+function usePopoverDismiss(
+	open: boolean,
+	setOpen: (open: boolean) => void,
+	buttonRef: React.RefObject<HTMLElement | null>,
+	dropdownRef: React.RefObject<HTMLElement | null>,
+) {
+	useEffect(() => {
+		if (!open) return;
+
+		function handleClick(event: MouseEvent) {
+			if (
+				buttonRef.current?.contains(event.target as Node) ||
+				dropdownRef.current?.contains(event.target as Node)
+			) {
+				return;
+			}
+
+			setOpen(false);
+		}
+
+		function handleKeyDown(event: KeyboardEvent) {
+			if (event.key === "Escape") {
+				setOpen(false);
+			}
+		}
+
+		document.addEventListener("mousedown", handleClick);
+		document.addEventListener("keydown", handleKeyDown);
+		return () => {
+			document.removeEventListener("mousedown", handleClick);
+			document.removeEventListener("keydown", handleKeyDown);
+		};
+	}, [open, setOpen, buttonRef, dropdownRef]);
+}
+
 function SessionModelPicker({
 	session,
 	models,
@@ -245,23 +280,7 @@ function SessionModelPicker({
 	const shortLabel = currentModel?.label ?? "Default model";
 	const [pos, setPos] = useState({ top: 0, right: 0 });
 
-	useEffect(() => {
-		if (!open) return;
-
-		function handleClick(event: MouseEvent) {
-			if (
-				buttonRef.current?.contains(event.target as Node) ||
-				dropdownRef.current?.contains(event.target as Node)
-			) {
-				return;
-			}
-
-			setOpen(false);
-		}
-
-		document.addEventListener("mousedown", handleClick);
-		return () => document.removeEventListener("mousedown", handleClick);
-	}, [open]);
+	usePopoverDismiss(open, setOpen, buttonRef, dropdownRef);
 
 	function handleToggle() {
 		if (!open && buttonRef.current) {
@@ -405,24 +424,10 @@ function SessionActionsPopover({
 	const [pos, setPos] = useState({ top: 0, right: 8 });
 	const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 
+	usePopoverDismiss(open, setOpen, buttonRef, dropdownRef);
+
 	useEffect(() => {
-		if (!open) return;
-
 		setConfirmingDelete(false);
-
-		function handleClick(event: MouseEvent) {
-			if (
-				buttonRef.current?.contains(event.target as Node) ||
-				dropdownRef.current?.contains(event.target as Node)
-			) {
-				return;
-			}
-
-			setOpen(false);
-		}
-
-		document.addEventListener("mousedown", handleClick);
-		return () => document.removeEventListener("mousedown", handleClick);
 	}, [open]);
 
 	function handleToggle() {
@@ -638,23 +643,7 @@ function SessionProjectPicker({
 	const projectName = currentProject?.name ?? "No project";
 	const [pos, setPos] = useState({ top: 0, right: 0 });
 
-	useEffect(() => {
-		if (!open) return;
-
-		function handleClick(event: MouseEvent) {
-			if (
-				buttonRef.current?.contains(event.target as Node) ||
-				dropdownRef.current?.contains(event.target as Node)
-			) {
-				return;
-			}
-
-			setOpen(false);
-		}
-
-		document.addEventListener("mousedown", handleClick);
-		return () => document.removeEventListener("mousedown", handleClick);
-	}, [open]);
+	usePopoverDismiss(open, setOpen, buttonRef, dropdownRef);
 
 	function handleToggle() {
 		if (!open && buttonRef.current) {
