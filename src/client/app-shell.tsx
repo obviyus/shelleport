@@ -10,6 +10,7 @@ import {
 	EyeOff,
 	FileDown,
 	Info,
+	Mic,
 	Paperclip,
 	Folder,
 	Loader2,
@@ -41,6 +42,7 @@ import { useNow } from "~/client/use-now";
 import { SessionLauncher } from "~/client/components/session-launcher";
 import { SessionTranscript } from "~/client/components/session-transcript";
 import { useToast } from "~/client/components/toast";
+import { type VoiceInputState, createVoiceSession } from "~/client/voice-input";
 import { Sheet, SheetContent, SheetTitle } from "~/client/components/ui/sheet";
 import { matchAppRoute } from "~/client/routes";
 import {
@@ -1041,6 +1043,9 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	);
 	const sessionView = session?.id === selectedId ? session : selectedSession;
 	const hideThinking = !selectedId || !shownThinkingSessionIds.includes(selectedId);
+	const [voiceState, setVoiceState] = useState<VoiceInputState>({ status: "idle" });
+	const voiceSessionRef =
+		useRef<Awaited<ReturnType<ReturnType<typeof createVoiceSession>["start"]>>>(null);
 	const isSessionPending = isSessionRoute && (sessionView === null || session?.id !== selectedId);
 	const { activeSessions, archivedSessions, projectGroups } = useMemo(() => {
 		const active: HostSession[] = [];
@@ -1542,6 +1547,42 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			setTimeout(() => setCopiedConversation(false), 2000);
 		});
 	}, [stream]);
+
+	useEffect(() => {
+		if (voiceState.status === "error") {
+			showToast("error", voiceState.message);
+			setVoiceState({ status: "idle" });
+		}
+	}, [voiceState, showToast]);
+
+	async function handleVoiceRecord() {
+		if (voiceState.status === "recording" && voiceSessionRef.current) {
+			const text = await voiceSessionRef.current.stop();
+			voiceSessionRef.current = null;
+			if (text) {
+				setPrompt((previous) => (previous ? `${previous} ${text}` : text));
+			}
+			return;
+		}
+
+		if (voiceState.status !== "idle") return;
+
+		const session = createVoiceSession({
+			onStateChange: setVoiceState,
+		});
+		const recorder = await session.start();
+		if (recorder) {
+			voiceSessionRef.current = recorder;
+		}
+	}
+
+	function handleVoiceCancel() {
+		if (voiceSessionRef.current) {
+			voiceSessionRef.current.cancel();
+			voiceSessionRef.current = null;
+		}
+		setVoiceState({ status: "idle" });
+	}
 
 	const loadEarlierEvents = useCallback(
 		async (before: number) => {
@@ -2449,11 +2490,13 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 													onKeyDown={handleKeyDown}
 													onPaste={handlePaste}
 													placeholder={
-														isSessionBusy
-															? "Claude is working... press Enter to queue"
-															: canAttach
-																? "Message Claude... attach files or paste images"
-																: "Message Claude... (Enter to send)"
+														voiceState.status === "recording"
+															? "Listening… tap ✓ to transcribe"
+															: isSessionBusy
+																? "Claude is working... press Enter to queue"
+																: canAttach
+																	? "Message Claude... attach files or paste images"
+																	: "Message Claude... (Enter to send)"
 													}
 													className="min-h-[44px] md:min-h-[28px] flex-1 resize-none bg-transparent px-2 py-1.5 text-xs leading-[1.6] text-foreground outline-none placeholder:text-muted-foreground/80"
 												/>
@@ -2467,14 +2510,61 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 														<Paperclip className="size-3.5" />
 													</button>
 												)}
-												<button
-													type="button"
-													onClick={() => void handleSend()}
-													disabled={!canSend}
-													className="flex size-9 md:size-7 shrink-0 items-center justify-center rounded bg-foreground text-background shadow-[0_0_18px_oklch(1_0_0_/_0.12)] transition hover:bg-foreground/85 disabled:opacity-20"
-												>
-													<Send className="size-3.5" />
-												</button>
+												{voiceState.status === "recording" ? (
+													<>
+														<button
+															type="button"
+															onClick={handleVoiceCancel}
+															className="flex size-9 md:size-7 shrink-0 items-center justify-center rounded border border-foreground/10 bg-background text-muted-foreground/86 transition hover:border-foreground/22 hover:text-foreground"
+															title="Cancel voice input"
+														>
+															<X className="size-3.5" />
+														</button>
+														<button
+															type="button"
+															onClick={() => void handleVoiceRecord()}
+															className="flex size-9 md:size-7 shrink-0 items-center justify-center rounded bg-foreground text-background shadow-[0_0_18px_oklch(1_0_0_/_0.12)] transition hover:bg-foreground/85"
+															title="Stop recording and transcribe"
+														>
+															<Check className="size-3.5" />
+														</button>
+													</>
+												) : voiceState.status === "loading-model" ||
+												  voiceState.status === "transcribing" ? (
+													<button
+														type="button"
+														disabled
+														className="flex size-9 md:size-7 shrink-0 items-center justify-center rounded border border-foreground/10 text-muted-foreground/86"
+														title={
+															voiceState.status === "loading-model"
+																? `Loading voice model (${Math.round(voiceState.progress)}%)`
+																: "Transcribing voice input"
+														}
+													>
+														<Loader2 className="size-3.5 animate-spin" />
+													</button>
+												) : prompt.trim().length > 0 ||
+												  isSessionBusy ||
+												  typeof window === "undefined" ||
+												  !window.isSecureContext ? (
+													<button
+														type="button"
+														onClick={() => void handleSend()}
+														disabled={!canSend}
+														className="flex size-9 md:size-7 shrink-0 items-center justify-center rounded bg-foreground text-background shadow-[0_0_18px_oklch(1_0_0_/_0.12)] transition hover:bg-foreground/85 disabled:opacity-20"
+													>
+														<Send className="size-3.5" />
+													</button>
+												) : (
+													<button
+														type="button"
+														onClick={() => void handleVoiceRecord()}
+														className="flex size-9 md:size-7 shrink-0 items-center justify-center rounded border border-foreground/10 bg-background text-muted-foreground/86 transition hover:border-foreground/22 hover:text-foreground"
+														title="Voice input"
+													>
+														<Mic className="size-3.5" />
+													</button>
+												)}
 											</div>
 											{queuedInputCount > 0 && (
 												<div className="px-4 pb-1.5 text-[10px] text-muted-foreground/86">

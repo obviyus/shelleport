@@ -1,6 +1,6 @@
 {
 	"name": "shelleport",
-	"version": "0.0.29",
+	"version": "0.0.28",
 	"description": "Browser control plane for coding agent sessions",
 	"keywords": [
 		"agent",
@@ -58,6 +58,7 @@
 		"check": "bun run format && bun run lint && bun run typecheck"
 	},
 	"dependencies": {
+		"@huggingface/transformers": "^3.8.1",
 		"@pierre/diffs": "^1.1.5",
 		"class-variance-authority": "^0.7.1",
 		"clsx": "^2.1.1",
