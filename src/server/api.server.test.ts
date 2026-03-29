@@ -1132,6 +1132,55 @@ describe("handleApiRequest", () => {
 		).toBe(false);
 	});
 
+	test("deletes archived sessions through the sessions API route", async () => {
+		const createResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "claude",
+					cwd: testRoot,
+					title: "Delete me",
+				}),
+			}),
+		);
+		expect(createResponse.status).toBe(201);
+		const createJson = await readJson<{ session: { id: string } }>(createResponse);
+		const sessionId = createJson.session.id;
+
+		const activeDeleteResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}`, {
+				method: "DELETE",
+				headers: authHeader,
+			}),
+		);
+		expect(activeDeleteResponse.status).toBe(409);
+
+		const archiveResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}/archive`, {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({ archived: true }),
+			}),
+		);
+		expect(archiveResponse.status).toBe(200);
+
+		const deleteResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}`, {
+				method: "DELETE",
+				headers: authHeader,
+			}),
+		);
+		expect(deleteResponse.status).toBe(200);
+		expect(sessionStore.getSession(sessionId)).toBeNull();
+	});
+
 	test("renames and pins sessions", async () => {
 		const firstResponse = await handleApiRequest(
 			new Request("http://localhost/api/sessions", {
