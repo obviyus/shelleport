@@ -342,6 +342,41 @@ describe("groupStream", () => {
 			},
 		]);
 	});
+
+	test("hides Claude completion state events from the grouped transcript", () => {
+		const grouped = groupStream([
+			{
+				id: "state-1",
+				sessionId: "session-1",
+				sequence: 1,
+				kind: "state",
+				summary: "Claude run complete",
+				data: {},
+				rawProviderEvent: null,
+				createTime: 1,
+			},
+			{
+				id: "assistant-1",
+				sessionId: "session-1",
+				sequence: 2,
+				kind: "text",
+				summary: "Assistant message",
+				data: {
+					role: "assistant",
+					text: "still here",
+				},
+				rawProviderEvent: null,
+				createTime: 2,
+			},
+		]);
+
+		expect(grouped).toEqual([
+			{
+				type: "assistant-text-run",
+				entries: [expect.objectContaining({ id: "assistant-1" })],
+			},
+		]);
+	});
 });
 
 describe("getSidebarMeta", () => {
