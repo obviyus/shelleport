@@ -353,17 +353,24 @@ function SessionModelPicker({
 	);
 }
 
+function SidebarRunningDots() {
+	return (
+		<span className="inline-flex items-center gap-[3px]">
+			<span className="size-[5px] animate-[sidebar-dot_1.2s_ease-in-out_0ms_infinite] rounded-full bg-emerald-400" />
+			<span className="size-[5px] animate-[sidebar-dot_1.2s_ease-in-out_200ms_infinite] rounded-full bg-emerald-400" />
+			<span className="size-[5px] animate-[sidebar-dot_1.2s_ease-in-out_400ms_infinite] rounded-full bg-emerald-400" />
+		</span>
+	);
+}
+
 function SidebarSessionMeta({ session }: { session: HostSession }) {
 	const now = useNow();
-	const cost =
-		session.usage?.costUsd !== null && session.usage?.costUsd !== undefined
-			? formatSidebarCost(session.usage.costUsd)
-			: null;
+	const running = isActiveStatus(session.status);
 
 	return (
 		<p className="mt-0.5 ml-3.5 flex items-center gap-1.5 truncate text-[10px] text-muted-foreground/86">
 			<span className="truncate">{getSidebarMeta(session, now)}</span>
-			{cost && <span className="shrink-0 tabular-nums text-muted-foreground/55">{cost}</span>}
+			{running && <SidebarRunningDots />}
 		</p>
 	);
 }
@@ -717,10 +724,6 @@ function SidebarSessionItem({
 				}
 			}}
 			className={`group flex items-start gap-1 rounded-md transition ${
-				candidate.status === "running" || candidate.status === "retrying"
-					? "sidebar-session-running"
-					: ""
-			} ${
 				selectedId === candidate.id
 					? "border border-foreground/10 bg-accent/90 text-foreground shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]"
 					: "text-foreground/82 hover:bg-accent/65 hover:text-foreground"
@@ -1246,8 +1249,69 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	}, []);
 
 	useEffect(() => {
+		const link = document.querySelector<HTMLLinkElement>("link[rel='icon']");
+		if (!link) return;
+
+		const defaultHref = link.href;
+
+		if (!hasRunningSession) {
+			link.href = defaultHref;
+			return;
+		}
+
+		function renderFavicon(activeIndex: number) {
+			const canvas = document.createElement("canvas");
+			canvas.width = 64;
+			canvas.height = 64;
+			const ctx = canvas.getContext("2d");
+			if (!ctx) return "";
+
+			ctx.font = "56px serif";
+			ctx.textBaseline = "top";
+			ctx.fillText("🐚", 2, 2);
+
+			const dotPositions = [14, 32, 50];
+			const dotY = 56;
+			const radius = 7;
+
+			for (let i = 0; i < dotPositions.length; i++) {
+				ctx.fillStyle = i === activeIndex ? "#22c55e" : "rgba(34,197,94,0.25)";
+				ctx.beginPath();
+				ctx.arc(dotPositions[i]!, dotY, radius, 0, Math.PI * 2);
+				ctx.fill();
+			}
+
+			return canvas.toDataURL("image/png");
+		}
+
+		const frames = [0, 1, 2].map((i) => renderFavicon(i));
+		let frameIndex = 0;
+
+		link.href = frames[0]!;
+
+		const interval = setInterval(() => {
+			frameIndex = (frameIndex + 1) % frames.length;
+			link.href = frames[frameIndex]!;
+		}, 400);
+
+		return () => {
+			clearInterval(interval);
+			link.href = defaultHref;
+		};
+	}, [hasRunningSession]);
+	useEffect(() => {
 		void refreshSessions(deferredSessionQuery).catch(() => {});
-	}, [deferredSessionQuery, refreshSessions]);
+	}, [deferredSessionQuery, refreshSessions, selectedId]);
+
+	useEffect(() => {
+		if (!hasRunningSession) return;
+
+		const interval = setInterval(() => {
+			void refreshSessions(deferredSessionQuery).catch(() => {});
+		}, 3000);
+
+		return () => clearInterval(interval);
+	}, [hasRunningSession, deferredSessionQuery, refreshSessions]);
 
 	useLayoutEffect(() => {
 		if (selectedId === null) {
