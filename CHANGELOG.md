@@ -2,7 +2,7 @@
 
 All notable changes to shelleport are documented here.
 
-## Unreleased
+## 0.0.28 - 2026-03-29
 
 ### Fixed
 
