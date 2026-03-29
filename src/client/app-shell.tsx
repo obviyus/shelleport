@@ -2,6 +2,7 @@ import {
 	Archive,
 	ArchiveRestore,
 	Check,
+	ChevronDown,
 	CircleStop,
 	CircleX,
 	ClipboardCopy,
@@ -11,7 +12,6 @@ import {
 	FileDown,
 	Info,
 	Mic,
-	Paperclip,
 	Folder,
 	Loader2,
 	LogOut,
@@ -21,7 +21,6 @@ import {
 	Plus,
 	Search,
 	Send,
-	Sparkles,
 	Trash2,
 	X,
 } from "lucide-react";
@@ -256,6 +255,20 @@ function usePopoverDismiss(
 	}, [open, setOpen, buttonRef, dropdownRef]);
 }
 
+function InputPlusButton({ canAttach, onAttach }: { canAttach: boolean; onAttach: () => void }) {
+	return (
+		<button
+			type="button"
+			onClick={canAttach ? onAttach : undefined}
+			disabled={!canAttach}
+			className="flex size-7 items-center justify-center rounded border border-foreground/10 text-muted-foreground/70 transition hover:text-foreground hover:border-foreground/20 disabled:opacity-30"
+			title="Attach files"
+		>
+			<Plus className="size-3.5" />
+		</button>
+	);
+}
+
 function SessionModelPicker({
 	session,
 	models,
@@ -269,8 +282,8 @@ function SessionModelPicker({
 	const buttonRef = useRef<HTMLButtonElement>(null);
 	const dropdownRef = useRef<HTMLDivElement>(null);
 	const currentModel = models.find((model) => model.id === session.model) ?? null;
-	const shortLabel = currentModel?.label ?? "Default model";
-	const [pos, setPos] = useState({ top: 0, right: 0 });
+	const shortLabel = currentModel?.label ?? "Default";
+	const [pos, setPos] = useState({ bottom: 0, left: 0 });
 
 	usePopoverDismiss(open, setOpen, buttonRef, dropdownRef);
 
@@ -278,8 +291,8 @@ function SessionModelPicker({
 		if (!open && buttonRef.current) {
 			const rect = buttonRef.current.getBoundingClientRect();
 			setPos({
-				top: rect.bottom + 4,
-				right: window.innerWidth - rect.right,
+				bottom: window.innerHeight - rect.top + 4,
+				left: rect.left,
 			});
 		}
 
@@ -293,16 +306,16 @@ function SessionModelPicker({
 				type="button"
 				onClick={handleToggle}
 				title={currentModel?.label ?? "Default model"}
-				className="flex items-center justify-center gap-1 rounded border border-foreground/12 px-2 py-1 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-[10px] text-muted-foreground/80 transition hover:border-foreground/18 hover:text-foreground"
+				className="flex h-7 items-center gap-1 rounded border border-foreground/10 px-2 text-[10px] text-muted-foreground/70 transition hover:text-foreground hover:border-foreground/20"
 			>
-				<Sparkles className="size-3 md:size-2.5" />
-				<span className="hidden md:inline">{shortLabel}</span>
+				<span>{shortLabel}</span>
+				<ChevronDown className="size-2.5" />
 			</button>
 			{open &&
 				createPortal(
 					<div
 						ref={dropdownRef}
-						style={{ top: pos.top, right: pos.right }}
+						style={{ bottom: pos.bottom, left: pos.left }}
 						className="fixed z-[9999] min-w-[150px] rounded-md border border-foreground/12 bg-card p-1 shadow-lg"
 					>
 						<button
@@ -2253,13 +2266,6 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 									{sessionHeaderBadges.length > 0 && (
 										<SessionStatsPopover badges={sessionHeaderBadges} />
 									)}
-									{sessionView && (sessionProvider?.models ?? []).length > 0 && (
-										<SessionModelPicker
-											session={sessionView}
-											models={sessionProvider?.models ?? []}
-											onChangeModel={(model) => handleChangeModel(sessionView.id, model)}
-										/>
-									)}
 									{sessionView && (
 										<SessionActionsPopover
 											session={sessionView}
@@ -2478,92 +2484,108 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 													</div>
 												</div>
 											)}
-											<div className="flex items-center md:items-end gap-1.5 px-2 py-2">
-												<textarea
-													ref={textareaRef}
-													rows={1}
-													value={prompt}
-													onChange={(event) => {
-														setPrompt(event.target.value);
-														autoResize(event.currentTarget);
-													}}
-													onKeyDown={handleKeyDown}
-													onPaste={handlePaste}
-													placeholder={
-														voiceState.status === "recording"
-															? "Listening… tap ✓ to transcribe"
-															: isSessionBusy
-																? "Claude is working... press Enter to queue"
-																: canAttach
-																	? "Message Claude... attach files or paste images"
-																	: "Message Claude... (Enter to send)"
-													}
-													className="min-h-[44px] md:min-h-[28px] flex-1 resize-none bg-transparent px-2 py-1.5 text-xs leading-[1.6] text-foreground outline-none placeholder:text-muted-foreground/80"
-												/>
-												{canAttach && (
-													<button
-														type="button"
-														onClick={() => fileInputRef.current?.click()}
-														className="flex size-9 md:size-7 shrink-0 items-center justify-center rounded border border-foreground/10 bg-background text-muted-foreground/86 transition hover:border-foreground/22 hover:text-foreground"
-														title="Attach files"
-													>
-														<Paperclip className="size-3.5" />
-													</button>
-												)}
+											<div className="relative">
 												{voiceState.status === "recording" ? (
-													<>
-														<button
-															type="button"
-															onClick={handleVoiceCancel}
-															className="flex size-9 md:size-7 shrink-0 items-center justify-center rounded border border-foreground/10 bg-background text-muted-foreground/86 transition hover:border-foreground/22 hover:text-foreground"
-															title="Cancel voice input"
-														>
-															<X className="size-3.5" />
-														</button>
-														<button
-															type="button"
-															onClick={() => void handleVoiceRecord()}
-															className="flex size-9 md:size-7 shrink-0 items-center justify-center rounded bg-foreground text-background shadow-[0_0_18px_oklch(1_0_0_/_0.12)] transition hover:bg-foreground/85"
-															title="Stop recording and transcribe"
-														>
-															<Check className="size-3.5" />
-														</button>
-													</>
-												) : voiceState.status === "loading-model" ||
-												  voiceState.status === "transcribing" ? (
-													<button
-														type="button"
-														disabled
-														className="flex size-9 md:size-7 shrink-0 items-center justify-center rounded border border-foreground/10 text-muted-foreground/86"
-														title={
-															voiceState.status === "loading-model"
-																? `Loading voice model (${Math.round(voiceState.progress)}%)`
-																: "Transcribing voice input"
-														}
-													>
-														<Loader2 className="size-3.5 animate-spin" />
-													</button>
-												) : prompt.trim().length > 0 ||
-												  isSessionBusy ||
-												  typeof window === "undefined" ||
-												  !window.isSecureContext ? (
-													<button
-														type="button"
-														onClick={() => void handleSend()}
-														disabled={!canSend}
-														className="flex size-9 md:size-7 shrink-0 items-center justify-center rounded bg-foreground text-background shadow-[0_0_18px_oklch(1_0_0_/_0.12)] transition hover:bg-foreground/85 disabled:opacity-20"
-													>
-														<Send className="size-3.5" />
-													</button>
+													<div className="flex min-h-[72px] md:min-h-[92px] flex-col rounded-md border border-foreground/10 bg-foreground/[0.03] px-3 py-2.5">
+														<div className="flex flex-1 items-center text-xs text-muted-foreground/80">
+															Listening… tap confirm when you're done.
+														</div>
+														<div className="flex shrink-0 items-center justify-end gap-2 pt-1">
+															<button
+																type="button"
+																onClick={handleVoiceCancel}
+																className="flex size-9 shrink-0 items-center justify-center rounded border border-foreground/10 text-muted-foreground/70 transition hover:text-foreground md:size-8"
+																title="Cancel voice input"
+															>
+																<X className="size-4" />
+															</button>
+															<button
+																type="button"
+																onClick={() => void handleVoiceRecord()}
+																className="flex size-9 shrink-0 items-center justify-center rounded bg-foreground text-background transition hover:bg-foreground/85 md:size-8"
+																title="Stop recording and transcribe"
+															>
+																<Check className="size-4" />
+															</button>
+														</div>
+													</div>
 												) : (
-													<button
-														type="button"
-														onClick={() => void handleVoiceRecord()}
-														className="flex size-9 md:size-7 shrink-0 items-center justify-center rounded border border-foreground/10 bg-background text-muted-foreground/86 transition hover:border-foreground/22 hover:text-foreground"
-														title="Voice input"
-													>
-														<Mic className="size-3.5" />
-													</button>
+													<div>
+														<textarea
+															ref={textareaRef}
+															rows={1}
+															value={prompt}
+															onChange={(event) => {
+																setPrompt(event.target.value);
+																autoResize(event.currentTarget);
+															}}
+															onKeyDown={handleKeyDown}
+															onPaste={handlePaste}
+															placeholder={
+																isSessionBusy
+																	? "Claude is working... press Enter to queue"
+																	: canAttach
+																		? "Message Claude... attach files or paste images"
+																		: "Message Claude... (Enter to send)"
+															}
+															className="min-h-[48px] md:min-h-[64px] w-full resize-none bg-transparent px-3.5 py-3 text-xs leading-[1.7] text-foreground outline-none placeholder:text-muted-foreground/80"
+														/>
+														<div className="flex items-center justify-between px-1.5 pb-1.5">
+															<div className="flex items-center gap-1">
+																<InputPlusButton
+																	canAttach={canAttach}
+																	onAttach={() => fileInputRef.current?.click()}
+																/>
+																{sessionView && (sessionProvider?.models ?? []).length > 0 && (
+																	<SessionModelPicker
+																		session={sessionView}
+																		models={sessionProvider?.models ?? []}
+																		onChangeModel={(model) =>
+																			handleChangeModel(sessionView.id, model)
+																		}
+																	/>
+																)}
+															</div>
+															<div>
+																{voiceState.status === "loading-model" ||
+																voiceState.status === "transcribing" ? (
+																	<button
+																		type="button"
+																		disabled
+																		className="flex size-7 items-center justify-center rounded border border-foreground/10 text-muted-foreground/86"
+																		title={
+																			voiceState.status === "loading-model"
+																				? `Loading voice model (${Math.round(voiceState.progress)}%)`
+																				: "Transcribing voice input"
+																		}
+																	>
+																		<Loader2 className="size-3.5 animate-spin" />
+																	</button>
+																) : prompt.trim().length > 0 ||
+																  isSessionBusy ||
+																  typeof window === "undefined" ||
+																  !window.isSecureContext ? (
+																	<button
+																		type="button"
+																		onClick={() => void handleSend()}
+																		disabled={!canSend}
+																		className="flex size-7 items-center justify-center rounded bg-foreground text-background transition hover:bg-foreground/85 disabled:opacity-20"
+																	>
+																		<Send className="size-3.5" />
+																	</button>
+																) : (
+																	<button
+																		type="button"
+																		onClick={() => void handleVoiceRecord()}
+																		className="flex size-7 items-center justify-center rounded border border-foreground/10 text-muted-foreground/70 transition hover:text-foreground hover:border-foreground/20"
+																		title="Voice input"
+																	>
+																		<Mic className="size-3.5" />
+																	</button>
+																)}
+															</div>
+														</div>
+													</div>
 												)}
 											</div>
 											{queuedInputCount > 0 && (
