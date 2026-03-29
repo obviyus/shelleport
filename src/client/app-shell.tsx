@@ -1099,30 +1099,36 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		[editingQueuedInputId, selectedId, showToast],
 	);
 
+	const applySessionMetaUpdate = useCallback(
+		async (sessionId: string, payload: SessionMetaPayload) => {
+			const result = await updateSessionMeta(sessionId, payload);
+			await refreshSessions(sessionQuery);
+			setSession((previous) => (previous?.id === result.session.id ? result.session : previous));
+			return result.session;
+		},
+		[refreshSessions, sessionQuery],
+	);
+
 	const handlePinned = useCallback(
 		async (sessionId: string, pinned: boolean) => {
 			try {
-				const result = await updateSessionMeta(sessionId, { pinned });
-				await refreshSessions(sessionQuery);
-				setSession((previous) => (previous?.id === result.session.id ? result.session : previous));
+				await applySessionMetaUpdate(sessionId, { pinned });
 			} catch {
 				showToast("error", "Failed to update pin state");
 			}
 		},
-		[refreshSessions, sessionQuery, showToast],
+		[applySessionMetaUpdate, showToast],
 	);
 
 	const handleChangeModel = useCallback(
 		async (sessionId: string, model: string | null) => {
 			try {
-				const result = await updateSessionMeta(sessionId, { model });
-				await refreshSessions(sessionQuery);
-				setSession((previous) => (previous?.id === result.session.id ? result.session : previous));
+				await applySessionMetaUpdate(sessionId, { model });
 			} catch {
 				showToast("error", "Failed to update model");
 			}
 		},
-		[refreshSessions, sessionQuery, showToast],
+		[applySessionMetaUpdate, showToast],
 	);
 
 	const handleRename = useCallback(async () => {
@@ -1138,14 +1144,12 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		}
 
 		try {
-			const result = await updateSessionMeta(session.id, { title });
-			await refreshSessions(sessionQuery);
-			setSession(result.session);
+			await applySessionMetaUpdate(session.id, { title });
 			setRenameState(null);
 		} catch {
 			showToast("error", "Failed to rename session");
 		}
-	}, [isRenaming, refreshSessions, renameDraft, session, sessionQuery, showToast]);
+	}, [applySessionMetaUpdate, isRenaming, renameDraft, session, showToast]);
 
 	const addDraftAttachments = useCallback(async (files: File[]) => {
 		const normalized = await Promise.all(files.map(normalizeDraftAttachment));
