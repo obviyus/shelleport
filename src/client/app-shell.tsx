@@ -705,7 +705,7 @@ export function getDocumentTitle(session: HostSession | null) {
 
 	const statusIcon =
 		session.status === "running" || session.status === "retrying"
-			? "● "
+			? "● ● ● "
 			: session.status === "waiting"
 				? "◉ "
 				: session.status === "failed"
