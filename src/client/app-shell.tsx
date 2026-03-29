@@ -646,6 +646,28 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		}
 	}
 
+	function resetSessionViewState() {
+		previousSessionStatus.current = null;
+		setStream([]);
+		setTotalEvents(0);
+		setPendingRequests([]);
+		setQueuedInputs([]);
+		setQueuedInputEdit(null);
+		setBusyQueuedInputId(null);
+		setStreamState("connected");
+		setDraftAttachments((previous) => {
+			for (const attachment of previous) {
+				releaseDraftAttachment(attachment);
+			}
+
+			return [];
+		});
+
+		if (fileInputRef.current) {
+			fileInputRef.current.value = "";
+		}
+	}
+
 	function mergeClaudeLimit(previous: SessionLimit[], next: SessionLimit) {
 		if (!next.window) {
 			return previous;
@@ -721,7 +743,13 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	}, [deferredSessionQuery, refreshSessions]);
 
 	useLayoutEffect(() => {
-		if (!selectedId) {
+		if (selectedId === null) {
+			if (session === null) {
+				return;
+			}
+
+			setSession(null);
+			resetSessionViewState();
 			return;
 		}
 
@@ -730,26 +758,8 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		}
 
 		setSession(selectedSession);
-		previousSessionStatus.current = null;
-		setStream([]);
-		setTotalEvents(0);
-		setPendingRequests([]);
-		setQueuedInputs([]);
-		setQueuedInputEdit(null);
-		setBusyQueuedInputId(null);
-		setStreamState("connected");
-		setDraftAttachments((previous) => {
-			for (const attachment of previous) {
-				releaseDraftAttachment(attachment);
-			}
-
-			return [];
-		});
-
-		if (fileInputRef.current) {
-			fileInputRef.current.value = "";
-		}
-	}, [selectedId, selectedSession, session?.id]);
+		resetSessionViewState();
+	}, [selectedId, selectedSession, session, session?.id]);
 
 	useEffect(() => {
 		if (!selectedId) {
@@ -833,21 +843,6 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 
 		return () => controller.abort();
 	}, [replaceSession, selectedId]);
-
-	useEffect(() => {
-		if (selectedId) {
-			return;
-		}
-
-		setSession(null);
-		setStream([]);
-		setTotalEvents(0);
-		setPendingRequests([]);
-		setQueuedInputs([]);
-		setQueuedInputEdit(null);
-		setBusyQueuedInputId(null);
-		setStreamState("connected");
-	}, [selectedId]);
 
 	useEffect(() => {
 		document.title = getDocumentTitle(sessionView);
