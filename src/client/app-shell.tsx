@@ -716,15 +716,13 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	}, [hasRunningSession]);
 
 	useEffect(() => {
-		fetchProviders()
+		void fetchProviders()
 			.then(({ providers: nextProviders }) => setProviders(nextProviders))
 			.catch(() => {});
 	}, []);
 
 	useEffect(() => {
-		refreshSessions(deferredSessionQuery)
-			.then(() => {})
-			.catch(() => {});
+		void refreshSessions(deferredSessionQuery).catch(() => {});
 	}, [deferredSessionQuery, refreshSessions]);
 
 	useLayoutEffect(() => {
