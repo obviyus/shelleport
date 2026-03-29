@@ -74,6 +74,7 @@ import type {
 	QueuedSessionInput,
 	RequestResponsePayload,
 	SessionLimit,
+	SessionMetaPayload,
 	SessionStatus,
 } from "~/shared/shelleport";
 import { useCurrentRoute, useRouter } from "~/client/router";
