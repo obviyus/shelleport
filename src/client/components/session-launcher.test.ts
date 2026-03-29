@@ -1,29 +1,32 @@
 import { describe, expect, test } from "bun:test";
-import {
-	shouldShowProjectSection,
-	shouldShowSaveAsProject,
-} from "~/client/components/session-launcher";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { SessionLauncher } from "~/client/components/session-launcher";
+import { ToastProvider } from "~/client/components/toast";
 
-describe("shouldShowProjectSection", () => {
-	test("shows the project section even when no projects exist", () => {
-		expect(shouldShowProjectSection({ length: 0 })).toBe(true);
-	});
+describe("SessionLauncher", () => {
+	test("shows project controls on empty installs", () => {
+		const html = renderToStaticMarkup(
+			createElement(
+				ToastProvider,
+				null,
+				createElement(SessionLauncher, {
+					createDisabledReason: null,
+					createLabel: "managed",
+					createProviderId: null,
+					defaultPath: "/tmp/project",
+					isCreating: false,
+					models: [],
+					onCreate: () => {},
+					onProjectCreated: () => {},
+					projects: [],
+				}),
+			),
+		);
 
-	test("shows the project section when projects exist", () => {
-		expect(shouldShowProjectSection({ length: 3 })).toBe(true);
-	});
-});
-
-describe("shouldShowSaveAsProject", () => {
-	test("shows save-as-project when no project is selected and not creating new", () => {
-		expect(shouldShowSaveAsProject(null, false)).toBe(true);
-	});
-
-	test("hides save-as-project when a project is selected", () => {
-		expect(shouldShowSaveAsProject("project-1", false)).toBe(false);
-	});
-
-	test("hides save-as-project when creating a new project", () => {
-		expect(shouldShowSaveAsProject(null, true)).toBe(false);
+		expect(html).toContain("Project");
+		expect(html).toContain(">None<");
+		expect(html).toContain(">+ New<");
+		expect(html).toContain("Save as project");
 	});
 });

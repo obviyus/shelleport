@@ -411,14 +411,6 @@ function DirectoryColumn({
 	);
 }
 
-export function shouldShowProjectSection(_projects: { length: number }) {
-	return true;
-}
-
-export function shouldShowSaveAsProject(selectedProjectId: string | null, showNewProject: boolean) {
-	return selectedProjectId === null && !showNewProject;
-}
-
 export function SessionLauncher({
 	createDisabledReason,
 	createLabel,
