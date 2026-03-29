@@ -3,6 +3,7 @@ import type {
 	DirectoryListing,
 	HostSession,
 	PendingRequest,
+	Project,
 	ProviderSummary,
 	QueuedSessionInput,
 	QueuedSessionInputUpdatePayload,
@@ -134,6 +135,33 @@ export function controlSession(sessionId: string, action: "interrupt" | "termina
 	return request<{ ok: boolean }>(`/api/sessions/${sessionId}/control`, {
 		method: "POST",
 		body: JSON.stringify({ action }),
+	});
+}
+
+export function fetchProjects() {
+	return request<{ projects: Project[] }>("/api/projects");
+}
+
+export function createProject(input: { name: string; cwd: string; permissionMode?: string }) {
+	return request<{ project: Project }>("/api/projects", {
+		method: "POST",
+		body: JSON.stringify(input),
+	});
+}
+
+export function updateProject(
+	projectId: string,
+	input: { name?: string; cwd?: string; permissionMode?: string },
+) {
+	return request<{ project: Project }>(`/api/projects/${projectId}`, {
+		method: "PATCH",
+		body: JSON.stringify(input),
+	});
+}
+
+export function deleteProject(projectId: string) {
+	return request<{ project: Project }>(`/api/projects/${projectId}`, {
+		method: "DELETE",
 	});
 }
 

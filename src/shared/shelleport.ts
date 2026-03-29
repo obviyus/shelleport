@@ -1,5 +1,14 @@
 export type ProviderId = "claude" | "codex";
 
+export type Project = {
+	id: string;
+	name: string;
+	cwd: string;
+	permissionMode: PermissionMode;
+	createTime: number;
+	updateTime: number;
+};
+
 export type SessionStatus = "idle" | "running" | "waiting" | "retrying" | "failed" | "interrupted";
 
 export type HostEventKind = "text" | "tool-call" | "tool-result" | "state" | "error" | "system";
@@ -49,6 +58,7 @@ export type HostSession = {
 	providerSessionRef: string | null;
 	pid: number | null;
 	imported: boolean;
+	projectId: string | null;
 	model: string | null;
 	permissionMode: PermissionMode;
 	allowedTools: string[];
@@ -171,6 +181,7 @@ export type CreateSessionInput = {
 	prompt?: string;
 	title?: string;
 	model?: string;
+	projectId?: string;
 	permissionMode?: PermissionMode;
 	allowedTools?: string[];
 };
@@ -198,6 +209,7 @@ export type SessionMetaPayload = {
 	title?: string;
 	pinned?: boolean;
 	model?: string | null;
+	projectId?: string | null;
 };
 
 export type DirectoryEntry = {

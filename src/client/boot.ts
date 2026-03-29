@@ -1,6 +1,7 @@
 import type { AppRoute } from "~/client/routes";
 import type {
 	HostSession,
+	Project,
 	ProviderLimitState,
 	ProviderSummary,
 	SessionDetail,
@@ -17,6 +18,7 @@ type AuthenticatedBootData = {
 	defaultCwd: string;
 	providers: ProviderSummary[];
 	providerLimits: ProviderLimitState;
+	projects: Project[];
 	route: AppRoute;
 	sessionDetail: SessionDetail | null;
 	sessions: HostSession[];
