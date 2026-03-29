@@ -1924,22 +1924,38 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 															{group.sessions.length}
 														</span>
 													</div>
-													<button
-														type="button"
-														onClick={() => {
-															if (deleteProjectConfirmId === group.projectId) {
-																void handleDeleteProject(group.projectId!);
-																return;
-															}
-															setDeleteProjectConfirmId(group.projectId!);
-														}}
-														className={`flex size-5 items-center justify-center rounded text-muted-foreground/50 transition hover:text-destructive ${
-															deleteProjectConfirmId === group.projectId ? "text-destructive" : ""
-														}`}
-														title="Delete project"
-													>
-														<Trash2 className="size-3" />
-													</button>
+													{deleteProjectConfirmId === group.projectId ? (
+														<div className="flex items-center gap-1">
+															<span className="text-[9px] text-destructive">
+																{group.sessions.length > 0
+																	? `${group.sessions.length} session${group.sessions.length === 1 ? "" : "s"} will be ungrouped. Delete?`
+																	: "Delete?"}
+															</span>
+															<button
+																type="button"
+																onClick={() => void handleDeleteProject(group.projectId!)}
+																className="rounded bg-destructive/15 px-1.5 py-0.5 text-[9px] font-medium text-destructive transition hover:bg-destructive/25"
+															>
+																Yes
+															</button>
+															<button
+																type="button"
+																onClick={() => setDeleteProjectConfirmId(null)}
+																className="rounded bg-foreground/8 px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground transition hover:bg-foreground/15"
+															>
+																No
+															</button>
+														</div>
+													) : (
+														<button
+															type="button"
+															onClick={() => setDeleteProjectConfirmId(group.projectId!)}
+															className="flex size-5 items-center justify-center rounded text-muted-foreground/50 transition hover:text-destructive"
+															title="Delete project"
+														>
+															<Trash2 className="size-3" />
+														</button>
+													)}
 												</div>
 											)}
 											<div className={group.projectName ? "ml-3 space-y-1" : "space-y-1"}>
