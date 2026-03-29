@@ -396,7 +396,7 @@ function SessionProjectPicker({
 				type="button"
 				onClick={handleToggle}
 				title={projectName}
-				className="flex items-center gap-1.5 rounded border border-foreground/12 px-2 py-1 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-[10px] text-muted-foreground/80 transition hover:border-foreground/18 hover:text-foreground"
+				className="flex items-center justify-center gap-1.5 rounded border border-foreground/12 px-2 py-1 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-[10px] text-muted-foreground/80 transition hover:border-foreground/18 hover:text-foreground"
 			>
 				<Folder className="size-3 md:size-2.5" />
 				<span className="hidden md:inline max-w-[120px] truncate">{projectName}</span>
@@ -2142,7 +2142,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 													</div>
 												</div>
 											)}
-											<div className="flex items-end gap-1.5 px-2 py-2">
+											<div className="flex items-center md:items-end gap-1.5 px-2 py-2">
 												<textarea
 													ref={textareaRef}
 													rows={1}
@@ -2160,7 +2160,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 																? "Message Claude... attach files or paste images"
 																: "Message Claude... (Enter to send)"
 													}
-													className="min-h-[36px] md:min-h-[28px] flex-1 resize-none bg-transparent px-2 py-1.5 text-xs leading-[1.6] text-foreground outline-none placeholder:text-muted-foreground/80"
+													className="min-h-[44px] md:min-h-[28px] flex-1 resize-none bg-transparent px-2 py-1.5 text-xs leading-[1.6] text-foreground outline-none placeholder:text-muted-foreground/80"
 												/>
 												{canAttach && (
 													<button
