@@ -29,6 +29,23 @@ describe("createServerFetchHandler", () => {
 			error: "Unauthorized",
 		});
 	});
+
+	test("sets security headers on all responses", async () => {
+		const fetch = await createServerFetchHandler();
+
+		const healthResponse = await fetch(new Request("http://localhost/health"));
+		expect(healthResponse.headers.get("X-Content-Type-Options")).toBe("nosniff");
+		expect(healthResponse.headers.get("X-Frame-Options")).toBe("DENY");
+		expect(healthResponse.headers.get("Referrer-Policy")).toBe("strict-origin-when-cross-origin");
+		expect(healthResponse.headers.get("Permissions-Policy")).toContain("camera=()");
+		expect(healthResponse.headers.get("Content-Security-Policy")).toContain(
+			"frame-ancestors 'none'",
+		);
+
+		const authResponse = await fetch(new Request("http://localhost/api/providers"));
+		expect(authResponse.headers.get("X-Content-Type-Options")).toBe("nosniff");
+		expect(authResponse.headers.get("X-Frame-Options")).toBe("DENY");
+	});
 });
 
 describe("parseCliOptions", () => {

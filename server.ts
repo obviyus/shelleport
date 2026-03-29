@@ -268,43 +268,43 @@ async function downloadFile(url: string, destinationPath: string, label: string)
 	}
 
 	const totalBytes = Number(response.headers.get("content-length") ?? "0");
+	const writer = Bun.file(destinationPath).writer({ highWaterMark: 1024 * 1024 });
 	const reader = response.body.getReader();
-	const chunks: Uint8Array[] = [];
 	let downloadedBytes = 0;
 	let lastRenderTime = 0;
 
-	while (true) {
-		const { done, value } = await reader.read();
+	try {
+		while (true) {
+			const { done, value } = await reader.read();
 
-		if (done) {
-			break;
+			if (done) {
+				break;
+			}
+
+			if (!value) {
+				continue;
+			}
+
+			downloadedBytes += value.byteLength;
+			await writer.write(value);
+
+			const now = Date.now();
+			if (now - lastRenderTime >= 100) {
+				renderDownloadProgress(label, downloadedBytes, totalBytes);
+				lastRenderTime = now;
+			}
 		}
 
-		if (!value) {
-			continue;
-		}
+		renderDownloadProgress(label, downloadedBytes, totalBytes);
+		finishDownloadProgress();
+		await writer.end();
+	} catch (error) {
+		try {
+			await writer.end();
+		} catch {}
 
-		downloadedBytes += value.byteLength;
-		chunks.push(value);
-
-		const now = Date.now();
-		if (now - lastRenderTime >= 100) {
-			renderDownloadProgress(label, downloadedBytes, totalBytes);
-			lastRenderTime = now;
-		}
+		throw error;
 	}
-
-	renderDownloadProgress(label, downloadedBytes, totalBytes);
-	finishDownloadProgress();
-	const output = new Uint8Array(downloadedBytes);
-	let offset = 0;
-
-	for (const chunk of chunks) {
-		output.set(chunk, offset);
-		offset += chunk.byteLength;
-	}
-
-	await Bun.write(destinationPath, output);
 }
 
 async function installReleaseBinary(version: string, targetPath: string) {
@@ -814,6 +814,25 @@ async function runUpgrade() {
 	console.log(`shelleport ${version} is ready.`);
 }
 
+const securityHeaders: Record<string, string> = {
+	"X-Content-Type-Options": "nosniff",
+	"X-Frame-Options": "DENY",
+	"Referrer-Policy": "strict-origin-when-cross-origin",
+	"Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+	"Content-Security-Policy":
+		"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+};
+
+function applySecurityHeaders(response: Response) {
+	for (const [key, value] of Object.entries(securityHeaders)) {
+		if (!response.headers.has(key)) {
+			response.headers.set(key, value);
+		}
+	}
+
+	return response;
+}
+
 export async function createServerFetchHandler() {
 	const { sessionBroker } = await import("~/server/session-broker.server");
 	sessionBroker.recoverInterruptedRuns();
@@ -824,39 +843,45 @@ export async function createServerFetchHandler() {
 		try {
 			if (url.pathname.startsWith("/api/")) {
 				const { handleApiRequest } = await loadApiModule();
-				return await handleApiRequest(request);
+				return applySecurityHeaders(await handleApiRequest(request));
 			}
 
 			if (url.pathname === "/health") {
-				return Response.json({
-					name: config.appName,
-					status: "ok",
-				});
+				return applySecurityHeaders(
+					Response.json({
+						name: config.appName,
+						status: "ok",
+					}),
+				);
 			}
 
 			if (url.pathname === "/logout") {
 				const { clearAuthCookie } = await loadAuthModule();
-				return new Response(null, {
-					status: 302,
-					headers: {
-						Location: "/login",
-						"Set-Cookie": clearAuthCookie(),
-					},
-				});
+				return applySecurityHeaders(
+					new Response(null, {
+						status: 302,
+						headers: {
+							Location: "/login",
+							"Set-Cookie": clearAuthCookie(),
+						},
+					}),
+				);
 			}
 
 			return new Response("Not Found", { status: 404 });
 		} catch (error) {
 			if (error instanceof Response) {
-				return error;
+				return applySecurityHeaders(error);
 			}
 
 			console.error("Error processing request:", error);
-			return Response.json(
-				{
-					error: error instanceof Error ? error.message : "Internal Server Error",
-				},
-				{ status: 500 },
+			return applySecurityHeaders(
+				Response.json(
+					{
+						error: error instanceof Error ? error.message : "Internal Server Error",
+					},
+					{ status: 500 },
+				),
 			);
 		}
 	};
