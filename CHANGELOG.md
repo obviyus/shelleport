@@ -10,6 +10,7 @@ All notable changes to shelleport are documented here.
 - Sidebar session rows now show cumulative session cost beside the relative update time when provider usage data is available (#33) (thanks @kesava500)
 - Browsers now warn before closing a tab while a session is still running or retrying (#34) (thanks @kesava500)
 - Archived sessions can now be deleted permanently from the browser, including their stored event/request/input data and upload files (#31) (thanks @kesava500)
+- Browser actions now show visible toast errors instead of failing silently when session creation, metadata changes, or approval/queue actions fail (#32) (thanks @kesava500)
 
 ### Fixed
 
