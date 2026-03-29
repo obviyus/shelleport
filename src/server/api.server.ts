@@ -583,7 +583,7 @@ async function dispatchApiRequest(request: Request) {
 		}
 
 		if (request.method === "DELETE" && segments.length === 3) {
-			sessionBroker.deleteSession(sessionId);
+			await sessionBroker.deleteSession(sessionId);
 			return Response.json({ ok: true });
 		}
 
