@@ -203,12 +203,29 @@ function getSessionLimitTone(limit: SessionLimit) {
 	return "bg-white shadow-[0_0_18px_oklch(1_0_0_/_0.26)]";
 }
 
+function formatSidebarCost(costUsd: number) {
+	if (costUsd >= 1) {
+		return `$${costUsd.toFixed(2)}`;
+	}
+
+	if (costUsd >= 0.01) {
+		return `$${costUsd.toFixed(3)}`;
+	}
+
+	return `$${costUsd.toFixed(4)}`;
+}
+
 function SidebarSessionMeta({ session }: { session: HostSession }) {
 	const now = useNow();
+	const cost =
+		session.usage?.costUsd !== null && session.usage?.costUsd !== undefined
+			? formatSidebarCost(session.usage.costUsd)
+			: null;
 
 	return (
-		<p className="mt-0.5 ml-3.5 truncate text-[10px] text-muted-foreground/86">
-			{getSidebarMeta(session, now)}
+		<p className="mt-0.5 ml-3.5 flex items-center gap-1.5 truncate text-[10px] text-muted-foreground/86">
+			<span className="truncate">{getSidebarMeta(session, now)}</span>
+			{cost && <span className="shrink-0 tabular-nums text-muted-foreground/55">{cost}</span>}
 		</p>
 	);
 }
