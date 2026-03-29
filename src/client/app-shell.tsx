@@ -219,18 +219,6 @@ function getSessionLimitTone(limit: SessionLimit) {
 	return "bg-white shadow-[0_0_18px_oklch(1_0_0_/_0.26)]";
 }
 
-function formatSidebarCost(costUsd: number) {
-	if (costUsd >= 1) {
-		return `$${costUsd.toFixed(2)}`;
-	}
-
-	if (costUsd >= 0.01) {
-		return `$${costUsd.toFixed(3)}`;
-	}
-
-	return `$${costUsd.toFixed(4)}`;
-}
-
 function usePopoverDismiss(
 	open: boolean,
 	setOpen: (open: boolean) => void,
@@ -1249,59 +1237,8 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	}, []);
 
 	useEffect(() => {
-		const link = document.querySelector<HTMLLinkElement>("link[rel='icon']");
-		if (!link) return;
-
-		const defaultHref = link.href;
-
-		if (!hasRunningSession) {
-			link.href = defaultHref;
-			return;
-		}
-
-		function renderFavicon(activeIndex: number) {
-			const canvas = document.createElement("canvas");
-			canvas.width = 64;
-			canvas.height = 64;
-			const ctx = canvas.getContext("2d");
-			if (!ctx) return "";
-
-			ctx.font = "56px serif";
-			ctx.textBaseline = "top";
-			ctx.fillText("🐚", 2, 2);
-
-			const dotPositions = [14, 32, 50];
-			const dotY = 56;
-			const radius = 7;
-
-			for (let i = 0; i < dotPositions.length; i++) {
-				ctx.fillStyle = i === activeIndex ? "#22c55e" : "rgba(34,197,94,0.25)";
-				ctx.beginPath();
-				ctx.arc(dotPositions[i]!, dotY, radius, 0, Math.PI * 2);
-				ctx.fill();
-			}
-
-			return canvas.toDataURL("image/png");
-		}
-
-		const frames = [0, 1, 2].map((i) => renderFavicon(i));
-		let frameIndex = 0;
-
-		link.href = frames[0]!;
-
-		const interval = setInterval(() => {
-			frameIndex = (frameIndex + 1) % frames.length;
-			link.href = frames[frameIndex]!;
-		}, 400);
-
-		return () => {
-			clearInterval(interval);
-			link.href = defaultHref;
-		};
-	}, [hasRunningSession]);
-	useEffect(() => {
 		void refreshSessions(deferredSessionQuery).catch(() => {});
-	}, [deferredSessionQuery, refreshSessions, selectedId]);
+	}, [deferredSessionQuery, refreshSessions]);
 
 	useEffect(() => {
 		if (!hasRunningSession) return;
