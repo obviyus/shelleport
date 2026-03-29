@@ -24,12 +24,18 @@ export type ProviderCapabilities = {
 	liveResume: "none" | "managed-only" | "provider-managed";
 };
 
+export type ProviderModel = {
+	id: string;
+	label: string;
+};
+
 export type ProviderSummary = {
 	id: ProviderId;
 	label: string;
 	status: "ready" | "partial" | "planned";
 	statusDetail: string | null;
 	capabilities: ProviderCapabilities;
+	models: ProviderModel[];
 };
 
 export type HostSession = {
@@ -43,6 +49,7 @@ export type HostSession = {
 	providerSessionRef: string | null;
 	pid: number | null;
 	imported: boolean;
+	model: string | null;
 	permissionMode: PermissionMode;
 	allowedTools: string[];
 	queuedInputCount: number;
@@ -163,6 +170,7 @@ export type CreateSessionInput = {
 	cwd: string;
 	prompt?: string;
 	title?: string;
+	model?: string;
 	permissionMode?: PermissionMode;
 	allowedTools?: string[];
 };
@@ -189,6 +197,7 @@ export type SessionArchivePayload = {
 export type SessionMetaPayload = {
 	title?: string;
 	pinned?: boolean;
+	model?: string | null;
 };
 
 export type DirectoryEntry = {

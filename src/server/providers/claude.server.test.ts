@@ -417,6 +417,7 @@ describe("normalizeClaudeEvent", () => {
 			partialToolUseIds: new Set<string>(),
 			sawAssistantTextDelta: false,
 			sawThinkingBlock: false,
+			detectedModel: null,
 		};
 
 		updateClaudeStreamMergeState(mergeState, [

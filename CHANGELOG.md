@@ -12,6 +12,7 @@ All notable changes to shelleport are documented here.
 - Archived sessions can now be deleted permanently from the browser, including their stored event/request/input data and upload files (#31) (thanks @kesava500)
 - Browser actions now show visible toast errors instead of failing silently when session creation, metadata changes, or approval/queue actions fail (#32) (thanks @kesava500)
 - HTTP responses now include baseline security headers, and failed login attempts are rate-limited per client IP (#29) (thanks @kesava500)
+- Claude sessions can now choose a specific model at launch and switch models for later prompts from the session header (#39) (thanks @kesava500)
 
 ### Fixed
 

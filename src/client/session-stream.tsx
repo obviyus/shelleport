@@ -724,28 +724,6 @@ export function getSidebarMeta(session: HostSession, now: number) {
 	return formatRelativeTime(now, session.updateTime);
 }
 
-function formatSessionModelLabel(model: string) {
-	let stripped = model;
-
-	for (;;) {
-		const start = stripped.indexOf("\u001B[");
-
-		if (start === -1) {
-			break;
-		}
-
-		const end = stripped.indexOf("m", start + 2);
-
-		if (end === -1) {
-			break;
-		}
-
-		stripped = `${stripped.slice(0, start)}${stripped.slice(end + 1)}`;
-	}
-
-	return stripped.replace(/\[[0-9;]+m\]$/g, "").trim();
-}
-
 export type SessionHeaderBadge = {
 	key: string;
 	label: string;
@@ -761,18 +739,6 @@ export function getSessionHeaderBadges(session: Pick<HostSession, "usage"> | nul
 	}
 
 	const badges: SessionHeaderBadge[] = [];
-
-	if (usage.model) {
-		const modelLabel = formatSessionModelLabel(usage.model);
-		const label = modelLabel.length > 0 ? modelLabel : usage.model;
-
-		badges.push({
-			key: `model:${usage.model}`,
-			label,
-			title: usage.model,
-			visibility: "lg",
-		});
-	}
 
 	badges.push({
 		key: `in:${usage.inputTokens}`,
@@ -1041,6 +1007,16 @@ export function readToolResultContent(result: HostEvent | null) {
 	return readString(result.data.output) || readString(result.data.content);
 }
 
+function friendlyModelLabel(modelId: unknown): string {
+	if (typeof modelId !== "string") return "Claude";
+
+	if (modelId.includes("sonnet")) return "Claude Sonnet";
+	if (modelId.includes("opus")) return "Claude Opus";
+	if (modelId.includes("haiku")) return "Claude Haiku";
+
+	return `Claude (${modelId})`;
+}
+
 export function GroupedEntryRenderer({ group }: { group: GroupedEntry }) {
 	if (group.type === "tool") {
 		return <ToolCard call={group.call} result={group.result} />;
@@ -1214,10 +1190,12 @@ function ToolCard({ call, result }: { call: HostEvent; result: HostEvent | null 
 }
 
 function AssistantTextRunRenderer({ entries }: { entries: HostEvent[] }) {
+	const label = friendlyModelLabel(entries[0]?.data.model);
+
 	return (
 		<div className="animate-event-enter mb-4">
 			<div className="mb-1 px-1 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/68">
-				Claude
+				{label}
 			</div>
 			<div className="overflow-hidden rounded-xl rounded-tl-sm border border-foreground/10 bg-card/95 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]">
 				<div className="px-4 py-3 text-xs leading-[1.8] text-foreground/92">
@@ -1257,7 +1235,7 @@ function EventRenderer({ event }: { event: HostEvent }) {
 		return (
 			<div className="animate-event-enter mb-4">
 				<div className="mb-1 px-1 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/68">
-					Claude
+					{friendlyModelLabel(event.data.model)}
 				</div>
 				<div className="overflow-hidden rounded-xl rounded-tl-sm border border-foreground/10 bg-card/95 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]">
 					<div className="px-4 py-3 text-xs leading-[1.8] text-foreground/92">

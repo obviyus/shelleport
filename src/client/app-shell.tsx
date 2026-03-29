@@ -14,6 +14,7 @@ import {
 	Plus,
 	Search,
 	Send,
+	Sparkles,
 	Trash2,
 	X,
 } from "lucide-react";
@@ -27,6 +28,8 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { createPortal } from "react-dom";
+
 import type { AppBootData } from "~/client/boot";
 import { useNow } from "~/client/use-now";
 import { SessionLauncher } from "~/client/components/session-launcher";
@@ -63,6 +66,7 @@ import type {
 	PendingRequest,
 	PermissionMode,
 	ProviderLimitState,
+	ProviderModel,
 	ProviderSummary,
 	QueuedSessionInput,
 	RequestResponsePayload,
@@ -202,7 +206,7 @@ function getSessionLimitTone(limit: SessionLimit) {
 		return "bg-amber-300 shadow-[0_0_18px_oklch(0.86_0.16_92_/_0.34)]";
 	}
 
-	return "bg-white shadow-[0_0_18px_oklch(1_0_0_/_0.26)]";
+return "bg-white shadow-[0_0_18px_oklch(1_0_0_/_0.26)]";
 }
 
 function formatSidebarCost(costUsd: number) {
@@ -215,6 +219,109 @@ function formatSidebarCost(costUsd: number) {
 	}
 
 	return `$${costUsd.toFixed(4)}`;
+}
+
+function SessionModelPicker({
+	session,
+	models,
+	onChangeModel,
+}: {
+	session: HostSession;
+	models: ProviderModel[];
+	onChangeModel: (model: string | null) => Promise<void>;
+}) {
+	const [open, setOpen] = useState(false);
+	const buttonRef = useRef<HTMLButtonElement>(null);
+	const dropdownRef = useRef<HTMLDivElement>(null);
+	const currentModel = models.find((model) => model.id === session.model) ?? null;
+	const shortLabel = currentModel?.label ?? "Default model";
+	const [pos, setPos] = useState({ top: 0, right: 0 });
+
+	useEffect(() => {
+		if (!open) return;
+
+		function handleClick(event: MouseEvent) {
+			if (
+				buttonRef.current?.contains(event.target as Node) ||
+				dropdownRef.current?.contains(event.target as Node)
+			) {
+				return;
+			}
+
+			setOpen(false);
+		}
+
+		document.addEventListener("mousedown", handleClick);
+		return () => document.removeEventListener("mousedown", handleClick);
+	}, [open]);
+
+	function handleToggle() {
+		if (!open && buttonRef.current) {
+			const rect = buttonRef.current.getBoundingClientRect();
+			setPos({
+				top: rect.bottom + 4,
+				right: window.innerWidth - rect.right,
+			});
+		}
+
+		setOpen(!open);
+	}
+
+	return (
+		<>
+			<button
+				ref={buttonRef}
+				type="button"
+				onClick={handleToggle}
+				title={currentModel?.label ?? "Default model"}
+				className="flex items-center justify-center gap-1 rounded border border-foreground/12 px-2 py-1 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-[10px] text-muted-foreground/80 transition hover:border-foreground/18 hover:text-foreground"
+			>
+				<Sparkles className="size-3 md:size-2.5" />
+				<span className="hidden md:inline">{shortLabel}</span>
+			</button>
+			{open &&
+				createPortal(
+					<div
+						ref={dropdownRef}
+						style={{ top: pos.top, right: pos.right }}
+						className="fixed z-[9999] min-w-[150px] rounded-md border border-foreground/12 bg-card p-1 shadow-lg"
+					>
+						<button
+							type="button"
+							onClick={() => {
+								void onChangeModel(null);
+								setOpen(false);
+							}}
+							className={`flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-[11px] text-left transition ${
+								session.model === null
+									? "bg-accent text-foreground"
+									: "text-muted-foreground/80 hover:bg-accent/60 hover:text-foreground"
+							}`}
+						>
+							Default
+						</button>
+						{models.map((model) => (
+							<button
+								key={model.id}
+								type="button"
+								onClick={() => {
+									void onChangeModel(model.id);
+									setOpen(false);
+								}}
+								className={`flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-[11px] text-left transition ${
+									session.model === model.id
+										? "bg-accent text-foreground"
+										: "text-muted-foreground/80 hover:bg-accent/60 hover:text-foreground"
+								}`}
+							>
+								{model.label}
+							</button>
+						))}
+					</div>,
+					document.body,
+				)}
+		</>
+	);
 }
 
 function SidebarSessionMeta({ session }: { session: HostSession }) {
@@ -759,7 +866,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	}, []);
 
 	const handleCreateSession = useCallback(
-		async (cwd: string, title: string, permissionMode: PermissionMode) => {
+		async (cwd: string, title: string, permissionMode: PermissionMode, model?: string) => {
 			if (!cwd.trim() || !createProvider) {
 				return;
 			}
@@ -772,6 +879,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 					cwd: cwd.trim(),
 					permissionMode,
 					title: title || undefined,
+					model,
 				});
 				await refreshSessions(sessionQuery);
 				navigate(`/sessions/${result.session.id}`);
@@ -999,6 +1107,19 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 				setSession((previous) => (previous?.id === result.session.id ? result.session : previous));
 			} catch {
 				showToast("error", "Failed to update pin state");
+			}
+		},
+		[refreshSessions, sessionQuery, showToast],
+	);
+
+	const handleChangeModel = useCallback(
+		async (sessionId: string, model: string | null) => {
+			try {
+				const result = await updateSessionMeta(sessionId, { model });
+				await refreshSessions(sessionQuery);
+				setSession((previous) => (previous?.id === result.session.id ? result.session : previous));
+			} catch {
+				showToast("error", "Failed to update model");
 			}
 		},
 		[refreshSessions, sessionQuery, showToast],
@@ -1601,6 +1722,13 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											</span>
 										</button>
 									)}
+									{sessionView && (sessionProvider?.models ?? []).length > 0 && (
+										<SessionModelPicker
+											session={sessionView}
+											models={sessionProvider?.models ?? []}
+											onChangeModel={(model) => handleChangeModel(sessionView.id, model)}
+										/>
+									)}
 									{sessionView &&
 										(sessionView.status === "running" || sessionView.status === "retrying") && (
 											<button
@@ -1887,6 +2015,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 							createProviderId={createProvider?.id ?? null}
 							defaultPath={boot.defaultCwd}
 							isCreating={isCreating}
+							models={createProvider?.models ?? []}
 							onCreate={handleCreateSession}
 						/>
 					</>

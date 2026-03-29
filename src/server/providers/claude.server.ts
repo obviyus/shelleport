@@ -171,6 +171,10 @@ function createClaudeCommand(input: ProviderAdapterRunInput) {
 		session.permissionMode,
 	];
 
+	if (session.model) {
+		command.push("--model", session.model);
+	}
+
 	for (const toolRule of session.allowedTools) {
 		command.push("--allowedTools", toolRule);
 	}
@@ -416,6 +420,7 @@ type ClaudeStreamMergeState = {
 	partialToolUseIds: Set<string>;
 	sawAssistantTextDelta: boolean;
 	sawThinkingBlock: boolean;
+	detectedModel: string | null;
 };
 
 export function normalizeClaudeStreamEvent(
@@ -851,18 +856,52 @@ async function* streamClaudeProcess(
 		partialToolUseIds: new Set<string>(),
 		sawAssistantTextDelta: false,
 		sawThinkingBlock: false,
+		detectedModel: runInput.session.model,
 	};
 
 	try {
+		function detectModel(rawEvent: Record<string, unknown>) {
+			if (mergeState.detectedModel) return;
+
+			const message =
+				rawEvent.message && typeof rawEvent.message === "object"
+					? (rawEvent.message as Record<string, unknown>)
+					: null;
+
+			if (typeof message?.model === "string") {
+				mergeState.detectedModel = message.model;
+				return;
+			}
+
+			const usage = parseClaudeUsage(rawEvent);
+
+			if (usage?.model) {
+				mergeState.detectedModel = usage.model;
+			}
+		}
+
+		function stampModel(event: ProviderAdapterEvent): ProviderAdapterEvent {
+			if (event.type !== "host-event" || !mergeState.detectedModel) {
+				return event;
+			}
+
+			return {
+				...event,
+				data: { ...event.data, model: mergeState.detectedModel },
+			};
+		}
+
 		const emitClaudeStreamLine = function* (
 			rawEvent: Record<string, unknown>,
 		): Generator<ProviderAdapterEvent> {
+			detectModel(rawEvent);
+
 			if (rawEvent.type === "stream_event") {
 				const partialEvents = normalizeClaudeStreamEvent(rawEvent, mergeState.contentStateByIndex);
 				updateClaudeStreamMergeState(mergeState, partialEvents);
 
 				for (const event of partialEvents) {
-					yield event;
+					yield stampModel(event);
 				}
 
 				return;
@@ -876,7 +915,7 @@ async function* streamClaudeProcess(
 			resetClaudeStreamMergeStateAfterAssistant(rawEvent, mergeState);
 
 			for (const event of normalizedEvents) {
-				yield event;
+				yield stampModel(event);
 			}
 		};
 
@@ -1023,6 +1062,11 @@ export class ClaudeProviderAdapter implements ProviderAdapter {
 				? null
 				: "Claude CLI not found in PATH. Install it or set SHELLEPORT_CLAUDE_BIN.",
 			capabilities: this.capabilities(),
+			models: [
+				{ id: "sonnet", label: "Claude Sonnet" },
+				{ id: "opus", label: "Claude Opus" },
+				{ id: "haiku", label: "Claude Haiku" },
+			],
 		};
 	}
 

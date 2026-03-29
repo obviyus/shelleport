@@ -230,8 +230,15 @@ function validateMetaInput(payload: SessionMetaPayload) {
 		}
 	}
 
+	if (payload.model !== undefined) {
+		hasField = true;
+		if (payload.model !== null && typeof payload.model !== "string") {
+			throw new ApiError(400, "invalid_model", "model must be a string or null");
+		}
+	}
+
 	if (!hasField) {
-		throw new ApiError(400, "invalid_session_meta", "title or pinned is required");
+		throw new ApiError(400, "invalid_session_meta", "title, pinned, or model is required");
 	}
 }
 
