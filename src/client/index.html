@@ -1,6 +1,14 @@
 <!doctype html>
 <html lang="en" class="dark">
 	<head>
+		<script>
+			try {
+				const t = localStorage.getItem("shelleport.theme");
+				if (t === "light") {
+					document.documentElement.classList.replace("dark", "light");
+				}
+			} catch {}
+		</script>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<link

@@ -9,11 +9,13 @@ import {
 	Loader2,
 	LogOut,
 	Menu,
+	Moon,
 	Pencil,
 	Pin,
 	Plus,
 	Search,
 	Send,
+	Sun,
 	Trash2,
 	X,
 } from "lucide-react";
@@ -29,6 +31,7 @@ import {
 } from "react";
 import type { AppBootData } from "~/client/boot";
 import { useNow } from "~/client/use-now";
+import { useTheme } from "~/client/use-theme";
 import { SessionLauncher } from "~/client/components/session-launcher";
 import { SessionTranscript } from "~/client/components/session-transcript";
 import { Sheet, SheetContent, SheetTitle } from "~/client/components/ui/sheet";
@@ -200,7 +203,7 @@ function getSessionLimitTone(limit: SessionLimit) {
 		return "bg-amber-300 shadow-[0_0_18px_oklch(0.86_0.16_92_/_0.34)]";
 	}
 
-	return "bg-white shadow-[0_0_18px_oklch(1_0_0_/_0.26)]";
+	return "bg-foreground shadow-[0_0_18px_oklch(1_0_0_/_0.26)]";
 }
 
 function SidebarSessionMeta({ session }: { session: HostSession }) {
@@ -237,7 +240,7 @@ function SidebarLimitsPanel({ limits }: { limits: SessionLimit[] }) {
 							</span>
 						</div>
 						{getSessionLimitProgress(limit) !== null && (
-							<div className="h-1 overflow-hidden bg-white/6">
+							<div className="h-1 overflow-hidden bg-foreground/6">
 								<div
 									className={`h-full transition-[width,background-color,box-shadow] duration-300 ${getSessionLimitTone(limit)}`}
 									style={{ width: `${getSessionLimitProgress(limit)}%` }}
@@ -384,6 +387,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const renderRoute =
 		typeof window === "undefined" ? route : matchAppRoute(window.location.pathname);
 	const { navigate } = useRouter();
+	const { theme, toggleTheme } = useTheme();
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const draftAttachmentsRef = useRef<DraftAttachment[]>([]);
@@ -1257,6 +1261,14 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 								<span className="ml-auto text-[10px] text-muted-foreground/80">
 									{archivedSessions.length}
 								</span>
+							</button>
+							<button
+								type="button"
+								onClick={toggleTheme}
+								className="flex w-full items-center gap-2 rounded-md px-2.5 py-3 md:py-2 text-[11px] text-muted-foreground/88 transition hover:bg-accent hover:text-foreground"
+							>
+								{theme === "dark" ? <Sun className="size-3" /> : <Moon className="size-3" />}
+								{theme === "dark" ? "Light mode" : "Dark mode"}
 							</button>
 							<button
 								type="button"
