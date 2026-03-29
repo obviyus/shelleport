@@ -17,6 +17,14 @@ type EarlierEventPage = {
 	totalEvents: number;
 };
 
+function getGroupedEntryKey(group: GroupedEntry) {
+	return group.type === "tool"
+		? group.call.id
+		: group.type === "assistant-text-run"
+			? (group.entries[0]?.id ?? "assistant-text-run")
+			: group.entry.id;
+}
+
 export const SessionTranscript = memo(function SessionTranscript({
 	firstSequence,
 	grouped,
@@ -48,17 +56,21 @@ export const SessionTranscript = memo(function SessionTranscript({
 	const isAtBottom = useRef(true);
 	const [showScrollPill, setShowScrollPill] = useState(false);
 	const [loadingEarlier, setLoadingEarlier] = useState(false);
-	const previousGroupedLength = useRef(grouped.length);
+	const previousTailKey = useRef(
+		grouped.length > 0 ? getGroupedEntryKey(grouped[grouped.length - 1]!) : null,
+	);
 
 	useEffect(() => {
+		const tailKey = grouped.length > 0 ? getGroupedEntryKey(grouped[grouped.length - 1]!) : null;
+
 		if (isAtBottom.current && scrollRef.current) {
 			scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
 			setShowScrollPill(false);
-		} else if (grouped.length > previousGroupedLength.current) {
+		} else if (tailKey !== null && tailKey !== previousTailKey.current) {
 			setShowScrollPill(true);
 		}
 
-		previousGroupedLength.current = grouped.length;
+		previousTailKey.current = tailKey;
 	}, [grouped]);
 
 	const handleScroll = useCallback(() => {
@@ -152,13 +164,7 @@ export const SessionTranscript = memo(function SessionTranscript({
 							)}
 							{grouped.map((group) => (
 								<GroupedEntryRenderer
-									key={
-										group.type === "tool"
-											? group.call.id
-											: group.type === "assistant-text-run"
-												? (group.entries[0]?.id ?? "assistant-text-run")
-												: group.entry.id
-									}
+									key={getGroupedEntryKey(group)}
 									group={group}
 								/>
 							))}
