@@ -4,6 +4,12 @@ All notable changes to shelleport are documented here.
 
 ## Unreleased
 
+## 0.0.26 - 2026-03-29
+
+### Fixed
+
+- Linux native upgrades now install via a staged temp binary plus atomic rename, so `shelleport upgrade` no longer fails with `ETXTBSY` when replacing a running `/usr/local/lib/shelleport/shelleport`
+
 ## 0.0.25 - 2026-03-29
 
 ### Added

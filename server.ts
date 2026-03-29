@@ -313,6 +313,7 @@ async function installReleaseBinary(version: string, targetPath: string) {
 	const normalizedTmpDir = tmpDir.trim();
 	const downloadPath = join(normalizedTmpDir, assetName);
 	const checksumsPath = join(normalizedTmpDir, "SHASUMS256.txt");
+	const stagingPath = join(dirname(targetPath), `.tmp-${process.pid}-${Date.now()}`);
 
 	try {
 		await downloadFile(getReleaseUrl(version, assetName), downloadPath, `Downloading ${assetName}`);
@@ -344,9 +345,12 @@ async function installReleaseBinary(version: string, targetPath: string) {
 
 		console.log(`Installing ${assetName}...`);
 		await Bun.$`mkdir -p ${dirname(targetPath)}`.quiet();
-		await Bun.write(targetPath, Bun.file(downloadPath));
-		await Bun.$`chmod 755 ${targetPath}`.quiet();
+		await Bun.$`rm -f ${stagingPath}`.quiet();
+		await Bun.write(stagingPath, Bun.file(downloadPath));
+		await Bun.$`chmod 755 ${stagingPath}`.quiet();
+		await Bun.$`mv ${stagingPath} ${targetPath}`.quiet();
 	} finally {
+		await Bun.$`rm -f ${stagingPath}`.quiet();
 		if (normalizedTmpDir) {
 			await Bun.$`rm -rf ${normalizedTmpDir}`.quiet();
 		}
