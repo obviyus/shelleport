@@ -6,6 +6,7 @@ All notable changes to shelleport are documented here.
 
 ### Fixed
 
+- Session headers now collapse usage stats into a compact desktop popover instead of stretching the top bar with token and cost badges (#41) (thanks @kesava500)
 - Project deletion now shows an explicit Yes/No confirmation and warns when deleting will ungroup sessions (#49) (thanks @kesava500)
 - Header popovers now dismiss on Escape consistently, including the session Actions menu (#47) (thanks @kesava500)
 - Session transcripts now show a bottom pill when new messages arrive while you are scrolled up, without falsely firing when you load older history (#48) (thanks @kesava500)
