@@ -137,6 +137,12 @@ export function controlSession(sessionId: string, action: "interrupt" | "termina
 	});
 }
 
+export function forkSession(sessionId: string) {
+	return request<{ session: HostSession }>(`/api/sessions/${sessionId}/fork`, {
+		method: "POST",
+	});
+}
+
 export function setSessionArchived(sessionId: string, archived: boolean) {
 	return request<{ session: HostSession }>(`/api/sessions/${sessionId}/archive`, {
 		method: "POST",

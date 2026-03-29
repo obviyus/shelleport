@@ -43,6 +43,7 @@ export type HostSession = {
 	providerSessionRef: string | null;
 	pid: number | null;
 	imported: boolean;
+	forkedFrom: string | null;
 	permissionMode: PermissionMode;
 	allowedTools: string[];
 	queuedInputCount: number;

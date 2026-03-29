@@ -5,6 +5,7 @@ import {
 	CircleStop,
 	CircleX,
 	ClipboardCopy,
+	GitFork,
 	Paperclip,
 	Loader2,
 	LogOut,
@@ -47,6 +48,7 @@ import {
 	createSession,
 	deleteQueuedInput,
 	fetchProviders,
+	forkSession,
 	fetchSessionDetail,
 	fetchSessions,
 	respondToRequest,
@@ -824,6 +826,20 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		[isArchivedView, navigate, refreshSessions, selectedId, sessionQuery],
 	);
 
+	const handleFork = useCallback(async () => {
+		if (!selectedId) {
+			return;
+		}
+
+		try {
+			const result = await forkSession(selectedId);
+			await refreshSessions(sessionQuery);
+			navigate(`/sessions/${result.session.id}`);
+		} catch {
+			// fork failed silently for now
+		}
+	}, [navigate, refreshSessions, selectedId, sessionQuery]);
+
 	const handleCopyConversation = useCallback(() => {
 		void copyToClipboard(streamToMarkdown(stream)).then(() => {
 			setCopiedConversation(true);
@@ -1491,6 +1507,16 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											<span className="hidden md:inline">
 												{copiedConversation ? "Copied" : "Copy"}
 											</span>
+										</button>
+									)}
+									{sessionView && sessionView.providerSessionRef && (
+										<button
+											type="button"
+											onClick={() => void handleFork()}
+											className="flex items-center justify-center gap-1 rounded border border-foreground/12 px-2 py-1 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-[10px] text-muted-foreground/80 transition hover:border-foreground/18 hover:text-foreground"
+										>
+											<GitFork className="size-3 md:size-2.5" />
+											<span className="hidden md:inline">Fork</span>
 										</button>
 									)}
 									{sessionView &&

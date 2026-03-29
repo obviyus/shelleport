@@ -498,6 +498,11 @@ async function dispatchApiRequest(request: Request) {
 			return Response.json({ ok: true });
 		}
 
+		if (request.method === "POST" && segments[3] === "fork") {
+			const session = sessionBroker.forkSession(sessionId);
+			return Response.json({ session }, { status: 201 });
+		}
+
 		if (request.method === "POST" && segments[3] === "archive") {
 			const payload = await readJson<SessionArchivePayload>(request);
 			validateArchiveInput(payload);

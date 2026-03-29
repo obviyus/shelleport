@@ -571,6 +571,33 @@ export const sessionBroker = {
 
 		return updatedSession;
 	},
+	forkSession(sessionId: string) {
+		const source = sessionStore.getSession(sessionId);
+
+		if (!source) {
+			throw new ApiError(404, "session_not_found", `Unknown session: ${sessionId}`);
+		}
+
+		if (!source.providerSessionRef) {
+			throw new ApiError(
+				409,
+				"session_not_forkable",
+				"Session has no provider reference to fork from",
+			);
+		}
+
+		const forked = sessionStore.createSession({
+			provider: source.provider,
+			cwd: source.cwd,
+			title: `Fork of ${source.title}`,
+			providerSessionRef: source.providerSessionRef,
+			forkedFrom: source.providerSessionRef,
+			permissionMode: source.permissionMode,
+			allowedTools: source.allowedTools,
+		});
+
+		return forked;
+	},
 	setSessionArchived(sessionId: string, input: SessionArchivePayload) {
 		const session = sessionStore.updateSession(sessionId, { archived: input.archived });
 

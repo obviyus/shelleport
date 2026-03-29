@@ -173,6 +173,11 @@ ensureColumn(
 	"utilization",
 	"ALTER TABLE app_provider_limits ADD COLUMN utilization REAL",
 );
+ensureColumn(
+	"host_sessions",
+	"forked_from",
+	"ALTER TABLE host_sessions ADD COLUMN forked_from TEXT",
+);
 
 database.exec(`
 	UPDATE host_sessions
@@ -192,6 +197,7 @@ type SqlSessionRow = {
 	provider_session_ref: string | null;
 	pid: number | null;
 	imported: number;
+	forked_from: string | null;
 	permission_mode: string;
 	allowed_tools_json: string;
 	queued_input_count: number;
@@ -311,6 +317,7 @@ function mapSession(row: SqlSessionRow): HostSession {
 		providerSessionRef: row.provider_session_ref,
 		pid: row.pid,
 		imported: row.imported === 1,
+		forkedFrom: row.forked_from,
 		permissionMode: row.permission_mode as PermissionMode,
 		allowedTools: parseAllowedTools(row.allowed_tools_json),
 		queuedInputCount: row.queued_input_count,
@@ -362,8 +369,8 @@ function mapQueuedInput(row: SqlQueuedInputRow): QueuedSessionInput {
 
 const insertSessionStatement = database.query(
 	`INSERT INTO host_sessions (
-		id, provider, title, cwd, pinned, archived, status, status_detail_json, provider_session_ref, pid, imported, permission_mode, allowed_tools_json, queued_input_count, usage_json, active_usage_json, last_event_sequence, create_time, update_time
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, provider, title, cwd, pinned, archived, status, status_detail_json, provider_session_ref, pid, imported, forked_from, permission_mode, allowed_tools_json, queued_input_count, usage_json, active_usage_json, last_event_sequence, create_time, update_time
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 );
 
 const listSessionsStatement = database.query<SqlSessionRow, []>(
@@ -594,6 +601,7 @@ export type CreateStoredSessionInput = {
 	title: string;
 	cwd: string;
 	imported?: boolean;
+	forkedFrom?: string | null;
 	providerSessionRef?: string | null;
 	permissionMode: PermissionMode;
 	allowedTools: string[];
@@ -633,6 +641,7 @@ export const sessionStore = {
 			providerSessionRef: input.providerSessionRef ?? null,
 			pid: null,
 			imported: input.imported ?? false,
+			forkedFrom: input.forkedFrom ?? null,
 			permissionMode: input.permissionMode,
 			allowedTools: input.allowedTools,
 			queuedInputCount: 0,
@@ -654,6 +663,7 @@ export const sessionStore = {
 			session.providerSessionRef,
 			session.pid,
 			session.imported ? 1 : 0,
+			session.forkedFrom,
 			session.permissionMode,
 			JSON.stringify(session.allowedTools),
 			session.queuedInputCount,

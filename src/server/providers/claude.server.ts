@@ -177,6 +177,10 @@ function createClaudeCommand(input: ProviderAdapterRunInput) {
 
 	if (session.providerSessionRef) {
 		command.push("-r", session.providerSessionRef);
+
+		if (session.forkedFrom) {
+			command.push("--fork-session");
+		}
 	}
 
 	command.push(formatClaudePrompt(input.prompt, input.attachments));
