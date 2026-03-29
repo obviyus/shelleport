@@ -831,6 +831,10 @@ function isRateLimitSystemEvent(event: HostEvent) {
 	return event.kind === "system" && event.summary === "Rate limit update";
 }
 
+function isRunCompleteEvent(event: HostEvent) {
+	return event.kind === "state" && event.summary === "Claude run complete";
+}
+
 function pushPending(queue: PendingQueue, groupIndex: number) {
 	queue.indices.push(groupIndex);
 }
@@ -949,7 +953,7 @@ export function groupStream(entries: HostEvent[]): GroupedEntry[] {
 			}
 		}
 
-		if (isRateLimitSystemEvent(entry)) {
+		if (isRateLimitSystemEvent(entry) || isRunCompleteEvent(entry)) {
 			continue;
 		}
 
