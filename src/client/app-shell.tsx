@@ -46,6 +46,7 @@ import {
 	controlSession,
 	createSession,
 	deleteQueuedInput,
+	deleteSession,
 	fetchProviders,
 	fetchSessionDetail,
 	fetchSessions,
@@ -878,6 +879,25 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		[isArchivedView, navigate, refreshSessions, selectedId, sessionQuery],
 	);
 
+	const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+	const handleDelete = useCallback(
+		async (sessionId: string) => {
+			try {
+				await deleteSession(sessionId);
+				await refreshSessions(sessionQuery);
+				setDeleteConfirmId(null);
+
+				if (selectedId === sessionId) {
+					navigate("/");
+				}
+			} catch (error) {
+				console.error("Failed to delete session:", error);
+			}
+		},
+		[navigate, refreshSessions, selectedId, sessionQuery],
+	);
+
 	const handleCopyConversation = useCallback(() => {
 		void copyToClipboard(streamToMarkdown(stream)).then(() => {
 			setCopiedConversation(true);
@@ -1387,7 +1407,14 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 														{archivedSession.cwd}
 													</p>
 												</div>
-												<div className="flex shrink-0 items-center gap-2 self-end sm:self-auto">
+												<div
+													className="flex shrink-0 items-center gap-2 self-end sm:self-auto"
+													onMouseLeave={() => {
+														if (deleteConfirmId === archivedSession.id) {
+															setDeleteConfirmId(null);
+														}
+													}}
+												>
 													<button
 														type="button"
 														onClick={() => navigate(`/sessions/${archivedSession.id}`)}
@@ -1402,6 +1429,25 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 													>
 														<ArchiveRestore className="size-3" />
 														Unarchive
+													</button>
+													<button
+														type="button"
+														onClick={() => {
+															if (deleteConfirmId === archivedSession.id) {
+																void handleDelete(archivedSession.id);
+																return;
+															}
+
+															setDeleteConfirmId(archivedSession.id);
+														}}
+														className={`flex items-center gap-1.5 rounded border px-3 py-2.5 md:py-1.5 text-[11px] transition ${
+															deleteConfirmId === archivedSession.id
+																? "border-destructive/40 bg-destructive/10 text-destructive"
+																: "border-foreground/10 text-muted-foreground/88 hover:border-destructive/30 hover:text-destructive"
+														}`}
+													>
+														<Trash2 className="size-3" />
+														{deleteConfirmId === archivedSession.id ? "Confirm delete" : "Delete"}
 													</button>
 												</div>
 											</div>

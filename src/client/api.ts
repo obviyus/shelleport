@@ -144,6 +144,12 @@ export function setSessionArchived(sessionId: string, archived: boolean) {
 	});
 }
 
+export function deleteSession(sessionId: string) {
+	return request<{ session: HostSession }>(`/api/sessions/${sessionId}`, {
+		method: "DELETE",
+	});
+}
+
 export function updateSessionMeta(sessionId: string, payload: SessionMetaPayload) {
 	return request<{ session: HostSession }>(`/api/sessions/${sessionId}/meta`, {
 		method: "POST",
