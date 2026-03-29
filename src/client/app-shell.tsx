@@ -381,6 +381,8 @@ function SessionActionsPopover({
 	onToggleThinking,
 	onExportMarkdown,
 	onExportJson,
+	onArchive,
+	onDelete,
 }: {
 	session: HostSession;
 	projects: Project[];
@@ -393,8 +395,11 @@ function SessionActionsPopover({
 	onToggleThinking: () => void;
 	onExportMarkdown: () => void;
 	onExportJson: () => void;
+	onArchive: (id: string, archived: boolean) => void;
+	onDelete: (id: string) => void;
 }) {
 	const [open, setOpen] = useState(false);
+	const [confirmingDelete, setConfirmingDelete] = useState(false);
 	const buttonRef = useRef<HTMLButtonElement>(null);
 	const dropdownRef = useRef<HTMLDivElement>(null);
 	const [pos, setPos] = useState({ top: 0, right: 8 });
@@ -402,6 +407,8 @@ function SessionActionsPopover({
 
 	useEffect(() => {
 		if (!open) return;
+
+		setConfirmingDelete(false);
 
 		function handleClick(event: MouseEvent) {
 			if (
@@ -560,6 +567,53 @@ function SessionActionsPopover({
 							<div className="mt-0.5 px-2.5 py-1 text-[9px] text-muted-foreground/50">
 								Currently in: {projectName}
 							</div>
+						)}
+						<div className="my-1 border-t border-foreground/8" />
+						<button
+							type="button"
+							onClick={() => {
+								onArchive(session.id, !session.archived);
+								setOpen(false);
+							}}
+							className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-[11px] text-left transition text-muted-foreground/80 hover:bg-accent/60 hover:text-foreground"
+						>
+							{session.archived ? (
+								<ArchiveRestore className="size-3.5" />
+							) : (
+								<Archive className="size-3.5" />
+							)}
+							{session.archived ? "Unarchive" : "Archive"}
+						</button>
+						{confirmingDelete ? (
+							<div className="flex items-center gap-1.5 px-2.5 py-2">
+								<span className="text-[11px] text-destructive">Delete?</span>
+								<button
+									type="button"
+									onClick={() => {
+										onDelete(session.id);
+										setOpen(false);
+									}}
+									className="rounded bg-destructive/15 px-2 py-0.5 text-[10px] font-medium text-destructive transition hover:bg-destructive/25"
+								>
+									Yes
+								</button>
+								<button
+									type="button"
+									onClick={() => setConfirmingDelete(false)}
+									className="rounded bg-foreground/8 px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition hover:bg-foreground/15"
+								>
+									No
+								</button>
+							</div>
+						) : (
+							<button
+								type="button"
+								onClick={() => setConfirmingDelete(true)}
+								className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-[11px] text-left transition text-destructive/70 hover:bg-destructive/10 hover:text-destructive"
+							>
+								<Trash2 className="size-3.5" />
+								Delete
+							</button>
 						)}
 					</div>,
 					document.body,
@@ -2202,6 +2256,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 													return [...current, selectedId];
 												})
 											}
+<<<<<<< HEAD
 											onExportMarkdown={() => {
 												const markdown = `# ${sessionView.title}\n\n${streamToMarkdown(stream)}`;
 												downloadFile(
@@ -2232,6 +2287,8 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 													"application/json",
 												);
 											}}
+											onArchive={(id, archived) => void handleArchive(id, archived)}
+											onDelete={(id) => void handleDelete(id)}
 										/>
 									)}
 									{sessionView &&
