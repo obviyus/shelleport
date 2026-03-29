@@ -941,7 +941,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const [streamState, setStreamState] = useState<"connected" | "reconnecting">("connected");
 	const [archiveConfirmId, setArchiveConfirmId] = useState<string | null>(null);
 	const [copiedConversation, setCopiedConversation] = useState(false);
-	const [hideThinking, setHideThinking] = useState(true);
+	const [shownThinkingSessionIds, setShownThinkingSessionIds] = useState<string[]>([]);
 	const [renameState, setRenameState] = useState<{ sessionId: string; title: string } | null>(null);
 	const [sidebarOpen, setSidebarOpen] = useState(false);
 	const [sessionQuery, setSessionQuery] = useState("");
@@ -961,6 +961,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		[selectedId, sessions],
 	);
 	const sessionView = session?.id === selectedId ? session : selectedSession;
+	const hideThinking = !selectedId || !shownThinkingSessionIds.includes(selectedId);
 	const isSessionPending = isSessionRoute && (sessionView === null || session?.id !== selectedId);
 	const { activeSessions, archivedSessions, projectGroups } = useMemo(() => {
 		const active: HostSession[] = [];
@@ -2133,7 +2134,19 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											onPin={(id, pinned) => void handlePinned(id, pinned)}
 											onCopy={handleCopyConversation}
 											onMoveProject={(projectId) => void handleMoveSessionToProject(projectId)}
-											onToggleThinking={() => setHideThinking(!hideThinking)}
+											onToggleThinking={() =>
+												setShownThinkingSessionIds((current) => {
+													if (!selectedId) {
+														return current;
+													}
+
+													if (current.includes(selectedId)) {
+														return current.filter((id) => id !== selectedId);
+													}
+
+													return [...current, selectedId];
+												})
+											}
 										/>
 									)}
 									{sessionView &&
