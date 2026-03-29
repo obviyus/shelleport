@@ -31,6 +31,7 @@ import type { AppBootData } from "~/client/boot";
 import { useNow } from "~/client/use-now";
 import { SessionLauncher } from "~/client/components/session-launcher";
 import { SessionTranscript } from "~/client/components/session-transcript";
+import { useToast } from "~/client/components/toast";
 import { Sheet, SheetContent, SheetTitle } from "~/client/components/ui/sheet";
 import { matchAppRoute } from "~/client/routes";
 import {
@@ -423,6 +424,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const renderRoute =
 		typeof window === "undefined" ? route : matchAppRoute(window.location.pathname);
 	const { navigate } = useRouter();
+	const { showToast } = useToast();
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const draftAttachmentsRef = useRef<DraftAttachment[]>([]);
@@ -774,13 +776,13 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 				await refreshSessions(sessionQuery);
 				navigate(`/sessions/${result.session.id}`);
 				setTimeout(() => textareaRef.current?.focus(), 100);
-			} catch (error) {
-				console.error("Failed to create session:", error);
+			} catch {
+				showToast("error", "Failed to create session");
 			} finally {
 				setIsCreating(false);
 			}
 		},
-		[createProvider, navigate, refreshSessions, sessionQuery],
+		[createProvider, navigate, refreshSessions, sessionQuery, showToast],
 	);
 
 	function dismissClaudeBypassWarning() {
@@ -872,11 +874,11 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 				if (isArchivedView) {
 					navigate(`/sessions/${sessionId}`);
 				}
-			} catch (error) {
-				console.error("Failed to update archive state:", error);
+			} catch {
+				showToast("error", "Failed to update archive state");
 			}
 		},
-		[isArchivedView, navigate, refreshSessions, selectedId, sessionQuery],
+		[isArchivedView, navigate, refreshSessions, selectedId, sessionQuery, showToast],
 	);
 
 	const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -925,14 +927,19 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		setTotalEvents(page.totalEvents);
 	}, []);
 
-	const handleRespond = useCallback(async (requestId: string, payload: RequestResponsePayload) => {
-		setPendingRequests((previous) => previous.filter((request) => request.id !== requestId));
-		try {
-			await respondToRequest(requestId, payload);
-		} catch (error) {
-			console.error("Failed to respond:", error);
-		}
-	}, []);
+	const handleRespond = useCallback(
+		async (requestId: string, payload: RequestResponsePayload) => {
+			const previousPendingRequests = pendingRequests;
+			setPendingRequests((previous) => previous.filter((request) => request.id !== requestId));
+			try {
+				await respondToRequest(requestId, payload);
+			} catch {
+				setPendingRequests(previousPendingRequests);
+				showToast("error", "Failed to respond to request");
+			}
+		},
+		[pendingRequests, showToast],
+	);
 
 	const handleStartQueuedInputEdit = useCallback((queuedInput: QueuedSessionInput) => {
 		setQueuedInputEdit({ id: queuedInput.id, prompt: queuedInput.prompt });
@@ -954,12 +961,12 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 				prompt: queuedInputEdit.prompt.trim(),
 			});
 			setQueuedInputEdit(null);
-		} catch (error) {
-			console.error("Failed to update queued input:", error);
+		} catch {
+			showToast("error", "Failed to update queued message");
 		} finally {
 			setBusyQueuedInputId((current) => (current === queuedInputEdit.id ? null : current));
 		}
-	}, [queuedInputEdit, selectedId]);
+	}, [queuedInputEdit, selectedId, showToast]);
 
 	const handleDeleteQueuedInput = useCallback(
 		async (queuedInputId: string) => {
@@ -975,13 +982,13 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 				if (editingQueuedInputId === queuedInputId) {
 					setQueuedInputEdit(null);
 				}
-			} catch (error) {
-				console.error("Failed to delete queued input:", error);
+			} catch {
+				showToast("error", "Failed to delete queued message");
 			} finally {
 				setBusyQueuedInputId((current) => (current === queuedInputId ? null : current));
 			}
 		},
-		[editingQueuedInputId, selectedId],
+		[editingQueuedInputId, selectedId, showToast],
 	);
 
 	const handlePinned = useCallback(
@@ -990,11 +997,11 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 				const result = await updateSessionMeta(sessionId, { pinned });
 				await refreshSessions(sessionQuery);
 				setSession((previous) => (previous?.id === result.session.id ? result.session : previous));
-			} catch (error) {
-				console.error("Failed to update pinned state:", error);
+			} catch {
+				showToast("error", "Failed to update pin state");
 			}
 		},
-		[refreshSessions, sessionQuery],
+		[refreshSessions, sessionQuery, showToast],
 	);
 
 	const handleRename = useCallback(async () => {
@@ -1014,10 +1021,10 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			await refreshSessions(sessionQuery);
 			setSession(result.session);
 			setRenameState(null);
-		} catch (error) {
-			console.error("Failed to rename session:", error);
+		} catch {
+			showToast("error", "Failed to rename session");
 		}
-	}, [isRenaming, refreshSessions, renameDraft, session, sessionQuery]);
+	}, [isRenaming, refreshSessions, renameDraft, session, sessionQuery, showToast]);
 
 	const addDraftAttachments = useCallback(async (files: File[]) => {
 		const normalized = await Promise.all(files.map(normalizeDraftAttachment));

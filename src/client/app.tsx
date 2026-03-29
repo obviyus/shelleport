@@ -1,5 +1,6 @@
 import { AppShell } from "~/client/app-shell";
 import type { AppBootData } from "~/client/boot";
+import { ToastProvider } from "~/client/components/toast";
 import { LoginPage } from "~/client/login-page";
 import { NotFoundPage } from "~/client/not-found-page";
 import { useCurrentRoute } from "~/client/router";
@@ -19,5 +20,9 @@ export function App({ boot }: { boot: AppBootData }) {
 		return <LoginPage />;
 	}
 
-	return <AppShell boot={boot} />;
+	return (
+		<ToastProvider>
+			<AppShell boot={boot} />
+		</ToastProvider>
+	);
 }
