@@ -2198,7 +2198,10 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 								</div>
 								<div className="flex shrink-0 items-center gap-1.5">
 									{sessionView && (
-										<SessionStatusBadge session={sessionView} reconnecting={showReconnectIndicator} />
+										<SessionStatusBadge
+											session={sessionView}
+											reconnecting={showReconnectIndicator}
+										/>
 									)}
 
 									{permissionModeLabel && (
