@@ -568,6 +568,22 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		setSessions(orderSessions(nextSessions));
 	}, []);
 
+	const hasRunningSession = sessions.some((session) => isActiveStatus(session.status));
+
+	useEffect(() => {
+		if (!hasRunningSession) {
+			return;
+		}
+
+		function handleBeforeUnload(event: BeforeUnloadEvent) {
+			event.preventDefault();
+			event.returnValue = true;
+		}
+
+		window.addEventListener("beforeunload", handleBeforeUnload);
+		return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+	}, [hasRunningSession]);
+
 	useEffect(() => {
 		fetchProviders()
 			.then(({ providers: nextProviders }) => setProviders(nextProviders))
