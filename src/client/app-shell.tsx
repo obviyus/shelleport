@@ -5,6 +5,7 @@ import {
 	CircleStop,
 	CircleX,
 	ClipboardCopy,
+	EllipsisVertical,
 	Paperclip,
 	Folder,
 	Loader2,
@@ -340,6 +341,159 @@ function SidebarSessionMeta({ session }: { session: HostSession }) {
 			<span className="truncate">{getSidebarMeta(session, now)}</span>
 			{cost && <span className="shrink-0 tabular-nums text-muted-foreground/55">{cost}</span>}
 		</p>
+	);
+}
+
+function SessionActionsPopover({
+	session,
+	projects,
+	stream,
+	copiedConversation,
+	onPin,
+	onCopy,
+	onMoveProject,
+}: {
+	session: HostSession;
+	projects: Project[];
+	stream: HostEvent[];
+	copiedConversation: boolean;
+	onPin: (id: string, pinned: boolean) => void;
+	onCopy: () => void;
+	onMoveProject: (projectId: string | null) => void;
+}) {
+	const [open, setOpen] = useState(false);
+	const buttonRef = useRef<HTMLButtonElement>(null);
+	const dropdownRef = useRef<HTMLDivElement>(null);
+	const [pos, setPos] = useState({ top: 0, right: 8 });
+	const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+
+	useEffect(() => {
+		if (!open) return;
+
+		function handleClick(event: MouseEvent) {
+			if (
+				buttonRef.current?.contains(event.target as Node) ||
+				dropdownRef.current?.contains(event.target as Node)
+			) {
+				return;
+			}
+
+			setOpen(false);
+		}
+
+		document.addEventListener("mousedown", handleClick);
+		return () => document.removeEventListener("mousedown", handleClick);
+	}, [open]);
+
+	function handleToggle() {
+		if (!open && buttonRef.current) {
+			const rect = buttonRef.current.getBoundingClientRect();
+			setPos({
+				top: rect.bottom + 4,
+				right: isMobile ? 8 : window.innerWidth - rect.right,
+			});
+		}
+
+		setOpen(!open);
+	}
+
+	const projectName = projects.find((project) => project.id === session.projectId)?.name ?? null;
+
+	return (
+		<>
+			<button
+				ref={buttonRef}
+				type="button"
+				onClick={handleToggle}
+				title="Actions"
+				className="flex items-center justify-center gap-1 rounded border border-foreground/12 px-2 py-1 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-[10px] text-muted-foreground/80 transition hover:border-foreground/18 hover:text-foreground"
+			>
+				<EllipsisVertical className="size-3 md:size-2.5" />
+			</button>
+			{open &&
+				createPortal(
+					<div
+						ref={dropdownRef}
+						style={{ top: pos.top, right: pos.right, left: isMobile ? 8 : "auto" }}
+						className="fixed z-[9999] min-w-[180px] max-w-[260px] rounded-md border border-foreground/12 bg-card p-1 shadow-lg"
+					>
+						<button
+							type="button"
+							onClick={() => {
+								onPin(session.id, !session.pinned);
+								setOpen(false);
+							}}
+							className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-[11px] text-left transition text-muted-foreground/80 hover:bg-accent/60 hover:text-foreground"
+						>
+							<Pin className="size-3.5" />
+							{session.pinned ? "Unpin" : "Pin"}
+						</button>
+						{stream.length > 0 && (
+							<button
+								type="button"
+								onClick={() => {
+									onCopy();
+									setOpen(false);
+								}}
+								className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-[11px] text-left transition text-muted-foreground/80 hover:bg-accent/60 hover:text-foreground"
+							>
+								{copiedConversation ? (
+									<Check className="size-3.5" />
+								) : (
+									<ClipboardCopy className="size-3.5" />
+								)}
+								{copiedConversation ? "Copied" : "Copy conversation"}
+							</button>
+						)}
+						{projects.length > 0 && (
+							<>
+								<div className="my-1 border-t border-foreground/8" />
+								<p className="px-2.5 py-1 text-[9px] uppercase tracking-[0.12em] text-muted-foreground/55">
+									Move to project
+								</p>
+								<button
+									type="button"
+									onClick={() => {
+										onMoveProject(null);
+										setOpen(false);
+									}}
+									className={`flex w-full items-center gap-2.5 rounded px-2.5 py-1.5 text-[11px] text-left transition ${
+										session.projectId === null
+											? "bg-accent text-foreground"
+											: "text-muted-foreground/80 hover:bg-accent/60 hover:text-foreground"
+									}`}
+								>
+									None
+								</button>
+								{projects.map((project) => (
+									<button
+										key={project.id}
+										type="button"
+										onClick={() => {
+											onMoveProject(project.id);
+											setOpen(false);
+										}}
+										className={`flex w-full items-center gap-2.5 rounded px-2.5 py-1.5 text-[11px] text-left transition ${
+											session.projectId === project.id
+												? "bg-accent text-foreground"
+												: "text-muted-foreground/80 hover:bg-accent/60 hover:text-foreground"
+										}`}
+									>
+										<Folder className="size-3" />
+										{project.name}
+									</button>
+								))}
+							</>
+						)}
+						{projectName && (
+							<div className="mt-0.5 px-2.5 py-1 text-[9px] text-muted-foreground/50">
+								Currently in: {projectName}
+							</div>
+						)}
+					</div>,
+					document.body,
+				)}
+		</>
 	);
 }
 
@@ -1934,38 +2088,6 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											{badge.label}
 										</span>
 									))}
-									{sessionView && (
-										<button
-											type="button"
-											onClick={() => void handlePinned(sessionView.id, !sessionView.pinned)}
-											className={`flex items-center justify-center gap-1 rounded border px-2 py-1 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-[10px] transition ${
-												sessionView.pinned
-													? "border-foreground/15 bg-accent text-foreground"
-													: "border-foreground/12 text-muted-foreground/80 hover:border-foreground/18 hover:text-foreground"
-											}`}
-										>
-											<Pin className="size-3 md:size-2.5" />
-											<span className="hidden md:inline">
-												{sessionView.pinned ? "Pinned" : "Pin"}
-											</span>
-										</button>
-									)}
-									{sessionView && stream.length > 0 && (
-										<button
-											type="button"
-											onClick={handleCopyConversation}
-											className="flex items-center justify-center gap-1 rounded border border-foreground/12 px-2 py-1 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-[10px] text-muted-foreground/80 transition hover:border-foreground/18 hover:text-foreground"
-										>
-											{copiedConversation ? (
-												<Check className="size-3 md:size-2.5" />
-											) : (
-												<ClipboardCopy className="size-3 md:size-2.5" />
-											)}
-											<span className="hidden md:inline">
-												{copiedConversation ? "Copied" : "Copy"}
-											</span>
-										</button>
-									)}
 									{sessionView && (sessionProvider?.models ?? []).length > 0 && (
 										<SessionModelPicker
 											session={sessionView}
@@ -1973,11 +2095,15 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											onChangeModel={(model) => handleChangeModel(sessionView.id, model)}
 										/>
 									)}
-									{sessionView && projects.length > 0 && (
-										<SessionProjectPicker
+									{sessionView && (
+										<SessionActionsPopover
 											session={sessionView}
 											projects={projects}
-											onMove={handleMoveSessionToProject}
+											stream={stream}
+											copiedConversation={copiedConversation}
+											onPin={(id, pinned) => void handlePinned(id, pinned)}
+											onCopy={handleCopyConversation}
+											onMoveProject={(projectId) => void handleMoveSessionToProject(projectId)}
 										/>
 									)}
 									{sessionView &&
