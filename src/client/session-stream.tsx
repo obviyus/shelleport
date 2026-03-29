@@ -154,7 +154,6 @@ export async function copyToClipboard(text: string) {
 	if (navigator.clipboard) {
 		return navigator.clipboard.writeText(text);
 	}
-	// Fallback for HTTP contexts where navigator.clipboard is unavailable
 	const ta = document.createElement("textarea");
 	ta.value = text;
 	ta.style.position = "fixed";

@@ -4,6 +4,10 @@ All notable changes to shelleport are documented here.
 
 ## Unreleased
 
+### Fixed
+
+- Copy buttons now work over plain HTTP too by using a non-secure-context clipboard path when the browser withholds `navigator.clipboard` (#40) (thanks @kesava500)
+
 ## 0.0.27 - 2026-03-29
 
 ### Added
