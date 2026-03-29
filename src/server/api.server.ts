@@ -13,9 +13,12 @@ import type {
 	SessionStreamMessage,
 } from "~/shared/shelleport";
 import {
+	checkLoginRateLimit,
 	clearAuthCookie,
 	createAuthCookie,
 	isValidAdminToken,
+	recordFailedLoginAttempt,
+	resetLoginRateLimit,
 	requireApiAuth,
 } from "~/server/auth.server";
 import { storeSessionAttachments } from "~/server/attachments.server";
@@ -389,8 +392,17 @@ async function dispatchApiRequest(request: Request) {
 		}
 
 		if (request.method === "POST") {
+			checkLoginRateLimit(request);
 			const payload = await readJson<{ token: string }>(request);
-			assertAuthToken(payload.token);
+			try {
+				assertAuthToken(payload.token);
+			} catch (error) {
+				if (error instanceof ApiError && error.code === "unauthorized") {
+					recordFailedLoginAttempt(request);
+				}
+				throw error;
+			}
+			resetLoginRateLimit(request);
 			return Response.json(
 				{ authenticated: true },
 				{
@@ -502,11 +514,6 @@ async function dispatchApiRequest(request: Request) {
 			const payload = await readJson<SessionArchivePayload>(request);
 			validateArchiveInput(payload);
 			const session = sessionBroker.setSessionArchived(sessionId, payload);
-			return Response.json({ session });
-		}
-
-		if (request.method === "DELETE" && segments.length === 3) {
-			const session = await sessionBroker.deleteSession(sessionId);
 			return Response.json({ session });
 		}
 

@@ -1132,85 +1132,6 @@ describe("handleApiRequest", () => {
 		).toBe(false);
 	});
 
-	test("deletes archived sessions with full cleanup", async () => {
-		const createResponse = await handleApiRequest(
-			new Request("http://localhost/api/sessions", {
-				method: "POST",
-				headers: {
-					...authHeader,
-					"content-type": "application/json",
-				},
-				body: JSON.stringify({
-					provider: "claude",
-					cwd: testRoot,
-					title: "Delete me",
-				}),
-			}),
-		);
-		expect(createResponse.status).toBe(201);
-		const createJson = await readJson<{ session: { id: string } }>(createResponse);
-		const sessionId = createJson.session.id;
-
-		// Cannot delete a non-archived session
-		const earlyDeleteResponse = await handleApiRequest(
-			new Request(`http://localhost/api/sessions/${sessionId}`, {
-				method: "DELETE",
-				headers: authHeader,
-			}),
-		);
-		expect(earlyDeleteResponse.status).toBe(409);
-		expect(await readJson<{ code: string }>(earlyDeleteResponse)).toMatchObject({
-			code: "session_not_archived",
-		});
-
-		// Archive first
-		const archiveResponse = await handleApiRequest(
-			new Request(`http://localhost/api/sessions/${sessionId}/archive`, {
-				method: "POST",
-				headers: {
-					...authHeader,
-					"content-type": "application/json",
-				},
-				body: JSON.stringify({ archived: true }),
-			}),
-		);
-		expect(archiveResponse.status).toBe(200);
-
-		const uploadedPath = join(testRoot, ".shelleport", "uploads", sessionId, "orphan.txt");
-		await Bun.$`mkdir -p ${join(testRoot, ".shelleport", "uploads", sessionId)}`;
-		await Bun.write(uploadedPath, "orphan");
-		expect(await Bun.file(uploadedPath).exists()).toBe(true);
-
-		// Now delete should succeed
-		const deleteResponse = await handleApiRequest(
-			new Request(`http://localhost/api/sessions/${sessionId}`, {
-				method: "DELETE",
-				headers: authHeader,
-			}),
-		);
-		expect(deleteResponse.status).toBe(200);
-		const deleteJson = await readJson<{ session: { id: string; title: string } }>(deleteResponse);
-		expect(deleteJson.session.id).toBe(sessionId);
-
-		// Session should be gone from the list
-		const listResponse = await handleApiRequest(
-			new Request("http://localhost/api/sessions", {
-				headers: authHeader,
-			}),
-		);
-		const listJson = await readJson<{ sessions: Array<{ id: string }> }>(listResponse);
-		expect(listJson.sessions.find((session) => session.id === sessionId)).toBeUndefined();
-
-		// Fetching the deleted session should 404
-		const detailResponse = await handleApiRequest(
-			new Request(`http://localhost/api/sessions/${sessionId}`, {
-				headers: authHeader,
-			}),
-		);
-		expect(detailResponse.status).toBe(404);
-		expect(await Bun.file(uploadedPath).exists()).toBe(false);
-	});
-
 	test("renames and pins sessions", async () => {
 		const firstResponse = await handleApiRequest(
 			new Request("http://localhost/api/sessions", {
@@ -2031,6 +1952,44 @@ describe("handleApiRequest", () => {
 		expect(await uploadedFile.text()).toBe(textContent);
 
 		await reader.cancel();
+	});
+
+	test("rate-limits login attempts after threshold", async () => {
+		const { checkLoginRateLimit, recordFailedLoginAttempt, resetLoginRateLimit, setAdminToken } =
+			await import("~/server/auth.server");
+
+		// Exhaust the rate limit bucket from a unique IP
+		const ip = `10.99.99.${Math.floor(Math.random() * 200)}`;
+		const makeRequest = () =>
+			new Request("http://localhost/api/auth/session", {
+				method: "POST",
+				headers: { "x-forwarded-for": ip, "content-type": "application/json" },
+				body: JSON.stringify({ token: "wrong" }),
+			});
+
+		// First 10 attempts should pass the rate limit check
+		for (let i = 0; i < 10; i++) {
+			expect(() => checkLoginRateLimit(makeRequest())).not.toThrow();
+			recordFailedLoginAttempt(makeRequest());
+		}
+
+		// 11th should be rejected
+		expect(() => checkLoginRateLimit(makeRequest())).toThrow();
+
+		resetLoginRateLimit(makeRequest());
+
+		const token = setAdminToken("known-good-token");
+		const successResponse = await handleApiRequest(
+			new Request("http://localhost/api/auth/session", {
+				method: "POST",
+				headers: { "x-forwarded-for": ip, "content-type": "application/json" },
+				body: JSON.stringify({ token }),
+			}),
+		);
+		expect(successResponse.status).toBe(200);
+
+		expect(() => checkLoginRateLimit(makeRequest())).not.toThrow();
+		setAdminToken("test-token");
 	});
 
 	test("rejects missing auth", async () => {

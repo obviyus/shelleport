@@ -5,6 +5,75 @@ import { sessionStore } from "~/server/store.server";
 const ADMIN_COOKIE_NAME = "shelleport_session";
 const SESSION_MAX_AGE = 60 * 60 * 24 * 30;
 
+const LOGIN_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_RATE_LIMIT_MAX_ATTEMPTS = 10;
+
+type LoginAttemptBucket = {
+	count: number;
+	resetTime: number;
+};
+
+const loginAttempts = new Map<string, LoginAttemptBucket>();
+
+function getClientIp(request: Request): string {
+	return (
+		request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+		request.headers.get("x-real-ip") ||
+		"unknown"
+	);
+}
+
+function cleanupExpiredBuckets() {
+	const now = Date.now();
+	for (const [key, bucket] of loginAttempts) {
+		if (now >= bucket.resetTime) {
+			loginAttempts.delete(key);
+		}
+	}
+}
+
+export function checkLoginRateLimit(request: Request) {
+	const ip = getClientIp(request);
+	const now = Date.now();
+
+	cleanupExpiredBuckets();
+
+	const bucket = loginAttempts.get(ip);
+
+	if (!bucket || now >= bucket.resetTime) {
+		return;
+	}
+
+	if (bucket.count >= LOGIN_RATE_LIMIT_MAX_ATTEMPTS) {
+		const retryAfterSeconds = Math.ceil((bucket.resetTime - now) / 1000);
+		throw new ApiError(
+			429,
+			"rate_limited",
+			`Too many login attempts. Try again in ${retryAfterSeconds} seconds.`,
+		);
+	}
+}
+
+export function recordFailedLoginAttempt(request: Request) {
+	const ip = getClientIp(request);
+	const now = Date.now();
+	const bucket = loginAttempts.get(ip);
+
+	if (!bucket || now >= bucket.resetTime) {
+		loginAttempts.set(ip, {
+			count: 1,
+			resetTime: now + LOGIN_RATE_LIMIT_WINDOW_MS,
+		});
+		return;
+	}
+
+	bucket.count += 1;
+}
+
+export function resetLoginRateLimit(request: Request) {
+	loginAttempts.delete(getClientIp(request));
+}
+
 type AuthSetup = {
 	generatedToken: string | null;
 };
