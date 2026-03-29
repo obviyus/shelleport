@@ -424,24 +424,10 @@ function SessionActionsPopover({
 	const [pos, setPos] = useState({ top: 0, right: 8 });
 	const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 
+	usePopoverDismiss(open, setOpen, buttonRef, dropdownRef);
+
 	useEffect(() => {
-		if (!open) return;
-
 		setConfirmingDelete(false);
-
-		function handleClick(event: MouseEvent) {
-			if (
-				buttonRef.current?.contains(event.target as Node) ||
-				dropdownRef.current?.contains(event.target as Node)
-			) {
-				return;
-			}
-
-			setOpen(false);
-		}
-
-		document.addEventListener("mousedown", handleClick);
-		return () => document.removeEventListener("mousedown", handleClick);
 	}, [open]);
 
 	function handleToggle() {
