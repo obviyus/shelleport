@@ -8,6 +8,10 @@ All notable changes to shelleport are documented here.
 
 - Desktop sidebars now show a keyboard shortcut legend above the Claude limits panel (#28) (thanks @kesava500)
 
+### Fixed
+
+- Sidebar session rows now keep pin and archive actions visible on mobile instead of hiding them behind hover-only styles (#30) (thanks @kesava500)
+
 ## 0.0.24 - 2026-03-29
 
 ### Fixed

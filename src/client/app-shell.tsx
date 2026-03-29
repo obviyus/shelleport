@@ -1214,7 +1214,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 												className={`mt-2 flex size-8 md:size-5 shrink-0 items-center justify-center rounded border transition ${
 													candidate.pinned
 														? "border-foreground/12 bg-accent text-foreground opacity-100"
-														: "border-transparent text-muted-foreground/0 opacity-0 group-hover:border-foreground/10 group-hover:text-muted-foreground/86 group-hover:opacity-100 hover:border-foreground/18 hover:text-foreground"
+														: "border-foreground/8 text-muted-foreground/50 active:bg-accent active:text-foreground md:border-transparent md:text-muted-foreground/0 md:opacity-0 md:group-hover:border-foreground/10 md:group-hover:text-muted-foreground/86 md:group-hover:opacity-100 md:hover:border-foreground/18 md:hover:text-foreground"
 												}`}
 												aria-label={
 													candidate.pinned ? `Unpin ${candidate.title}` : `Pin ${candidate.title}`
@@ -1236,7 +1236,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 												className={`mt-2 mr-2 flex size-8 md:size-5 shrink-0 items-center justify-center rounded border transition ${
 													archiveConfirmId === candidate.id
 														? "border-foreground/18 bg-accent text-foreground opacity-100"
-														: "border-transparent text-muted-foreground/0 opacity-0 group-hover:border-foreground/10 group-hover:text-muted-foreground/86 group-hover:opacity-100 hover:border-foreground/18 hover:text-foreground"
+														: "border-foreground/8 text-muted-foreground/50 active:bg-accent active:text-foreground md:border-transparent md:text-muted-foreground/0 md:opacity-0 md:group-hover:border-foreground/10 md:group-hover:text-muted-foreground/86 md:group-hover:opacity-100 md:hover:border-foreground/18 md:hover:text-foreground"
 												}`}
 												aria-label={
 													archiveConfirmId === candidate.id
