@@ -6,6 +6,7 @@ All notable changes to shelleport are documented here.
 
 ### Fixed
 
+- Mobile project buttons now center their folder icon, the composer placeholder no longer clips, and mobile attach/send controls stay aligned with the taller input field (#42) (thanks @kesava500)
 - Copy buttons now work over plain HTTP too by using a non-secure-context clipboard path when the browser withholds `navigator.clipboard` (#40) (thanks @kesava500)
 
 ## 0.0.27 - 2026-03-29
