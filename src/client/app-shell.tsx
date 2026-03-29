@@ -6,6 +6,8 @@ import {
 	CircleX,
 	ClipboardCopy,
 	EllipsisVertical,
+	Eye,
+	EyeOff,
 	Paperclip,
 	Folder,
 	Loader2,
@@ -349,17 +351,21 @@ function SessionActionsPopover({
 	projects,
 	stream,
 	copiedConversation,
+	hideThinking,
 	onPin,
 	onCopy,
 	onMoveProject,
+	onToggleThinking,
 }: {
 	session: HostSession;
 	projects: Project[];
 	stream: HostEvent[];
 	copiedConversation: boolean;
+	hideThinking: boolean;
 	onPin: (id: string, pinned: boolean) => void;
 	onCopy: () => void;
 	onMoveProject: (projectId: string | null) => void;
+	onToggleThinking: () => void;
 }) {
 	const [open, setOpen] = useState(false);
 	const buttonRef = useRef<HTMLButtonElement>(null);
@@ -445,6 +451,16 @@ function SessionActionsPopover({
 								{copiedConversation ? "Copied" : "Copy conversation"}
 							</button>
 						)}
+						<button
+							type="button"
+							onClick={() => {
+								onToggleThinking();
+							}}
+							className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-[11px] text-left transition text-muted-foreground/80 hover:bg-accent/60 hover:text-foreground"
+						>
+							{hideThinking ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
+							{hideThinking ? "Show thinking" : "Hide thinking"}
+						</button>
 						{projects.length > 0 && (
 							<>
 								<div className="my-1 border-t border-foreground/8" />
@@ -925,6 +941,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const [streamState, setStreamState] = useState<"connected" | "reconnecting">("connected");
 	const [archiveConfirmId, setArchiveConfirmId] = useState<string | null>(null);
 	const [copiedConversation, setCopiedConversation] = useState(false);
+	const [shownThinkingSessionIds, setShownThinkingSessionIds] = useState<string[]>([]);
 	const [renameState, setRenameState] = useState<{ sessionId: string; title: string } | null>(null);
 	const [sidebarOpen, setSidebarOpen] = useState(false);
 	const [sessionQuery, setSessionQuery] = useState("");
@@ -944,6 +961,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		[selectedId, sessions],
 	);
 	const sessionView = session?.id === selectedId ? session : selectedSession;
+	const hideThinking = !selectedId || !shownThinkingSessionIds.includes(selectedId);
 	const isSessionPending = isSessionRoute && (sessionView === null || session?.id !== selectedId);
 	const { activeSessions, archivedSessions, projectGroups } = useMemo(() => {
 		const active: HostSession[] = [];
@@ -1006,7 +1024,18 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			projectGroups: groups,
 		};
 	}, [sessions, projects]);
-	const grouped = useMemo(() => groupStream(stream), [stream]);
+	const grouped = useMemo(() => {
+		const groups = groupStream(stream);
+		if (!hideThinking) return groups;
+		return groups.filter(
+			(group) =>
+				!(
+					group.type === "single" &&
+					group.entry.kind === "text" &&
+					group.entry.data.role === "thinking"
+				),
+		);
+	}, [stream, hideThinking]);
 	const sessionHeaderBadges = useMemo(() => getSessionHeaderBadges(sessionView), [sessionView]);
 	const claudeLimits = useMemo(
 		() => orderSessionLimits(providerLimits.claude),
@@ -2101,9 +2130,23 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											projects={projects}
 											stream={stream}
 											copiedConversation={copiedConversation}
+											hideThinking={hideThinking}
 											onPin={(id, pinned) => void handlePinned(id, pinned)}
 											onCopy={handleCopyConversation}
 											onMoveProject={(projectId) => void handleMoveSessionToProject(projectId)}
+											onToggleThinking={() =>
+												setShownThinkingSessionIds((current) => {
+													if (!selectedId) {
+														return current;
+													}
+
+													if (current.includes(selectedId)) {
+														return current.filter((id) => id !== selectedId);
+													}
+
+													return [...current, selectedId];
+												})
+											}
 										/>
 									)}
 									{sessionView &&
