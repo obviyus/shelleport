@@ -582,6 +582,11 @@ async function dispatchApiRequest(request: Request) {
 			return Response.json({ ok: true });
 		}
 
+		if (request.method === "DELETE" && segments.length === 3) {
+			sessionBroker.deleteSession(sessionId);
+			return Response.json({ ok: true });
+		}
+
 		if (request.method === "POST" && segments[3] === "archive") {
 			const payload = await readJson<SessionArchivePayload>(request);
 			validateArchiveInput(payload);
