@@ -613,7 +613,7 @@ describe("getToolOutput", () => {
 });
 
 describe("copyToClipboard", () => {
-	test("uses navigator clipboard directly", async () => {
+	test("uses navigator clipboard when available", async () => {
 		const calls: string[] = [];
 		const originalNavigator = globalThis.navigator;
 
@@ -639,5 +639,62 @@ describe("copyToClipboard", () => {
 		}
 
 		expect(calls).toEqual(["copied text"]);
+	});
+
+	test("falls back to execCommand when navigator.clipboard is unavailable", async () => {
+		const originalNavigator = globalThis.navigator;
+		const originalDocument = globalThis.document;
+
+		const appended: HTMLElement[] = [];
+		const removed: HTMLElement[] = [];
+		let execCalled = false;
+
+		Object.defineProperty(globalThis, "navigator", {
+			configurable: true,
+			value: { clipboard: undefined },
+		});
+
+		const mockTextarea = {
+			value: "",
+			style: {} as CSSStyleDeclaration,
+			select: () => {},
+		};
+
+		Object.defineProperty(globalThis, "document", {
+			configurable: true,
+			value: {
+				createElement: (tag: string) => {
+					expect(tag).toBe("textarea");
+					return mockTextarea;
+				},
+				body: {
+					appendChild: (el: HTMLElement) => appended.push(el),
+					removeChild: (el: HTMLElement) => removed.push(el),
+				},
+				execCommand: (cmd: string) => {
+					expect(cmd).toBe("copy");
+					execCalled = true;
+					return true;
+				},
+			},
+		});
+
+		try {
+			await copyToClipboard("fallback text");
+		} finally {
+			Object.defineProperty(globalThis, "navigator", {
+				configurable: true,
+				value: originalNavigator,
+			});
+			Object.defineProperty(globalThis, "document", {
+				configurable: true,
+				value: originalDocument,
+			});
+		}
+
+		expect(mockTextarea.value).toBe("fallback text");
+		expect(execCalled).toBe(true);
+		expect(appended.length).toBe(1);
+		expect(removed.length).toBe(1);
 	});
 });
