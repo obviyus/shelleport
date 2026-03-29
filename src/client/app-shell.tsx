@@ -1057,24 +1057,38 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		setQueuedInputEdit(null);
 	}, []);
 
+	const runQueuedInputAction = useCallback(
+		async (queuedInputId: string, action: () => Promise<void>, errorMessage: string) => {
+			setBusyQueuedInputId(queuedInputId);
+
+			try {
+				await action();
+			} catch {
+				showToast("error", errorMessage);
+			} finally {
+				setBusyQueuedInputId((current) => (current === queuedInputId ? null : current));
+			}
+		},
+		[showToast],
+	);
+
 	const handleSaveQueuedInput = useCallback(async () => {
 		if (!selectedId || !queuedInputEdit || queuedInputEdit.prompt.trim().length === 0) {
 			return;
 		}
 
-		setBusyQueuedInputId(queuedInputEdit.id);
-
-		try {
-			await updateQueuedInput(selectedId, queuedInputEdit.id, {
-				prompt: queuedInputEdit.prompt.trim(),
-			});
-			setQueuedInputEdit(null);
-		} catch {
-			showToast("error", "Failed to update queued message");
-		} finally {
-			setBusyQueuedInputId((current) => (current === queuedInputEdit.id ? null : current));
-		}
-	}, [queuedInputEdit, selectedId, showToast]);
+		const nextQueuedInputEdit = queuedInputEdit;
+		await runQueuedInputAction(
+			nextQueuedInputEdit.id,
+			async () => {
+				await updateQueuedInput(selectedId, nextQueuedInputEdit.id, {
+					prompt: nextQueuedInputEdit.prompt.trim(),
+				});
+				setQueuedInputEdit(null);
+			},
+			"Failed to update queued message",
+		);
+	}, [queuedInputEdit, runQueuedInputAction, selectedId]);
 
 	const handleDeleteQueuedInput = useCallback(
 		async (queuedInputId: string) => {
@@ -1082,21 +1096,19 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 				return;
 			}
 
-			setBusyQueuedInputId(queuedInputId);
+			await runQueuedInputAction(
+				queuedInputId,
+				async () => {
+					await deleteQueuedInput(selectedId, queuedInputId);
 
-			try {
-				await deleteQueuedInput(selectedId, queuedInputId);
-
-				if (editingQueuedInputId === queuedInputId) {
-					setQueuedInputEdit(null);
-				}
-			} catch {
-				showToast("error", "Failed to delete queued message");
-			} finally {
-				setBusyQueuedInputId((current) => (current === queuedInputId ? null : current));
-			}
+					if (editingQueuedInputId === queuedInputId) {
+						setQueuedInputEdit(null);
+					}
+				},
+				"Failed to delete queued message",
+			);
 		},
-		[editingQueuedInputId, selectedId, showToast],
+		[editingQueuedInputId, runQueuedInputAction, selectedId],
 	);
 
 	const applySessionMetaUpdate = useCallback(
