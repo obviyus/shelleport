@@ -8,6 +8,7 @@ import {
 	EllipsisVertical,
 	Eye,
 	EyeOff,
+	FileDown,
 	Paperclip,
 	Folder,
 	Loader2,
@@ -346,6 +347,28 @@ function SidebarSessionMeta({ session }: { session: HostSession }) {
 	);
 }
 
+function downloadFile(content: string, filename: string, mimeType: string) {
+	const blob = new Blob([content], { type: mimeType });
+	const url = URL.createObjectURL(blob);
+	const anchor = document.createElement("a");
+	anchor.href = url;
+	anchor.download = filename;
+	document.body.appendChild(anchor);
+	anchor.click();
+	document.body.removeChild(anchor);
+	URL.revokeObjectURL(url);
+}
+
+function sanitizeFilename(title: string) {
+	return (
+		title
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, "-")
+			.replace(/^-+|-+$/g, "")
+			.slice(0, 60) || "session"
+	);
+}
+
 function SessionActionsPopover({
 	session,
 	projects,
@@ -356,6 +379,8 @@ function SessionActionsPopover({
 	onCopy,
 	onMoveProject,
 	onToggleThinking,
+	onExportMarkdown,
+	onExportJson,
 }: {
 	session: HostSession;
 	projects: Project[];
@@ -366,6 +391,8 @@ function SessionActionsPopover({
 	onCopy: () => void;
 	onMoveProject: (projectId: string | null) => void;
 	onToggleThinking: () => void;
+	onExportMarkdown: () => void;
+	onExportJson: () => void;
 }) {
 	const [open, setOpen] = useState(false);
 	const buttonRef = useRef<HTMLButtonElement>(null);
@@ -435,21 +462,49 @@ function SessionActionsPopover({
 							{session.pinned ? "Unpin" : "Pin"}
 						</button>
 						{stream.length > 0 && (
-							<button
-								type="button"
-								onClick={() => {
-									onCopy();
-									setOpen(false);
-								}}
-								className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-[11px] text-left transition text-muted-foreground/80 hover:bg-accent/60 hover:text-foreground"
-							>
-								{copiedConversation ? (
-									<Check className="size-3.5" />
-								) : (
-									<ClipboardCopy className="size-3.5" />
-								)}
-								{copiedConversation ? "Copied" : "Copy conversation"}
-							</button>
+							<>
+								<div className="my-1 border-t border-foreground/8" />
+								<p className="px-2.5 py-1 text-[9px] uppercase tracking-[0.12em] text-muted-foreground/55">
+									Export
+								</p>
+								<button
+									type="button"
+									onClick={() => {
+										onCopy();
+										setOpen(false);
+									}}
+									className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-[11px] text-left transition text-muted-foreground/80 hover:bg-accent/60 hover:text-foreground"
+								>
+									{copiedConversation ? (
+										<Check className="size-3.5" />
+									) : (
+										<ClipboardCopy className="size-3.5" />
+									)}
+									{copiedConversation ? "Copied" : "Copy to clipboard"}
+								</button>
+								<button
+									type="button"
+									onClick={() => {
+										onExportMarkdown();
+										setOpen(false);
+									}}
+									className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-[11px] text-left transition text-muted-foreground/80 hover:bg-accent/60 hover:text-foreground"
+								>
+									<FileDown className="size-3.5" />
+									Export as Markdown
+								</button>
+								<button
+									type="button"
+									onClick={() => {
+										onExportJson();
+										setOpen(false);
+									}}
+									className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-[11px] text-left transition text-muted-foreground/80 hover:bg-accent/60 hover:text-foreground"
+								>
+									<FileDown className="size-3.5" />
+									Export as JSON
+								</button>
+							</>
 						)}
 						<button
 							type="button"
@@ -2147,6 +2202,36 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 													return [...current, selectedId];
 												})
 											}
+											onExportMarkdown={() => {
+												const markdown = `# ${sessionView.title}\n\n${streamToMarkdown(stream)}`;
+												downloadFile(
+													markdown,
+													`${sanitizeFilename(sessionView.title)}.md`,
+													"text/markdown",
+												);
+											}}
+											onExportJson={() => {
+												const data = {
+													id: sessionView.id,
+													title: sessionView.title,
+													cwd: sessionView.cwd,
+													provider: sessionView.provider,
+													model: sessionView.model,
+													createdAt: sessionView.createTime,
+													usage: sessionView.usage,
+													events: stream.map((event) => ({
+														id: event.id,
+														kind: event.kind,
+														sequence: event.sequence,
+														data: event.data,
+													})),
+												};
+												downloadFile(
+													JSON.stringify(data, null, 2),
+													`${sanitizeFilename(sessionView.title)}.json`,
+													"application/json",
+												);
+											}}
 										/>
 									)}
 									{sessionView &&
