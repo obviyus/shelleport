@@ -5,6 +5,7 @@ import {
 	CircleStop,
 	CircleX,
 	ClipboardCopy,
+	Folder,
 	Paperclip,
 	Loader2,
 	LogOut,
@@ -211,6 +212,106 @@ function SidebarSessionMeta({ session }: { session: HostSession }) {
 		<p className="mt-0.5 ml-3.5 truncate text-[10px] text-muted-foreground/86">
 			{getSidebarMeta(session, now)}
 		</p>
+	);
+}
+
+function SidebarSessionItem({
+	candidate,
+	selectedId,
+	archiveConfirmId,
+	setArchiveConfirmId,
+	navigate,
+	setSidebarOpen,
+	handlePinned,
+	handleArchive,
+}: {
+	candidate: HostSession;
+	selectedId: string | null;
+	archiveConfirmId: string | null;
+	setArchiveConfirmId: (id: string | null) => void;
+	navigate: (path: string) => void;
+	setSidebarOpen: (open: boolean) => void;
+	handlePinned: (id: string, pinned: boolean) => Promise<void>;
+	handleArchive: (id: string, archived: boolean) => Promise<void>;
+}) {
+	return (
+		<div
+			onMouseLeave={() => {
+				if (archiveConfirmId === candidate.id) {
+					setArchiveConfirmId(null);
+				}
+			}}
+			className={`group flex items-start gap-1 rounded-md transition ${
+				candidate.status === "running" || candidate.status === "retrying"
+					? "sidebar-session-running"
+					: ""
+			} ${
+				selectedId === candidate.id
+					? "border border-foreground/10 bg-accent/90 text-foreground shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]"
+					: "text-foreground/82 hover:bg-accent/65 hover:text-foreground"
+			}`}
+		>
+			<button
+				type="button"
+				onClick={() => {
+					navigate(`/sessions/${candidate.id}`);
+					setSidebarOpen(false);
+				}}
+				title={getSidebarTitle(candidate)}
+				className="min-w-0 flex-1 px-2.5 py-2 text-left"
+			>
+				<div className="flex items-center gap-2">
+					<StatusDot status={candidate.status} />
+					{candidate.pinned && <Pin className="size-3 shrink-0 text-foreground/70" />}
+					<span className="line-clamp-1 min-w-0 flex-1 pr-1 text-xs">{candidate.title}</span>
+					{candidate.status === "failed" && (
+						<CircleX className="ml-auto size-3 shrink-0 text-destructive/70" />
+					)}
+				</div>
+				<SidebarSessionMeta session={candidate} />
+			</button>
+			<button
+				type="button"
+				onClick={() => void handlePinned(candidate.id, !candidate.pinned)}
+				className={`mt-2 flex size-8 md:size-5 shrink-0 items-center justify-center rounded border transition ${
+					candidate.pinned
+						? "border-foreground/12 bg-accent text-foreground opacity-100"
+						: "border-transparent text-muted-foreground/0 opacity-0 group-hover:border-foreground/10 group-hover:text-muted-foreground/86 group-hover:opacity-100 hover:border-foreground/18 hover:text-foreground"
+				}`}
+				aria-label={candidate.pinned ? `Unpin ${candidate.title}` : `Pin ${candidate.title}`}
+				title={candidate.pinned ? "Unpin" : "Pin"}
+			>
+				<Pin className="size-3" />
+			</button>
+			<button
+				type="button"
+				onClick={() => {
+					if (archiveConfirmId === candidate.id) {
+						void handleArchive(candidate.id, true);
+						return;
+					}
+
+					setArchiveConfirmId(candidate.id);
+				}}
+				className={`mt-2 mr-2 flex size-8 md:size-5 shrink-0 items-center justify-center rounded border transition ${
+					archiveConfirmId === candidate.id
+						? "border-foreground/18 bg-accent text-foreground opacity-100"
+						: "border-transparent text-muted-foreground/0 opacity-0 group-hover:border-foreground/10 group-hover:text-muted-foreground/86 group-hover:opacity-100 hover:border-foreground/18 hover:text-foreground"
+				}`}
+				aria-label={
+					archiveConfirmId === candidate.id
+						? `Confirm archive ${candidate.title}`
+						: `Archive ${candidate.title}`
+				}
+				title={archiveConfirmId === candidate.id ? "Confirm archive" : "Archive"}
+			>
+				{archiveConfirmId === candidate.id ? (
+					<Check className="size-3" />
+				) : (
+					<Archive className="size-3" />
+				)}
+			</button>
+		</div>
 	);
 }
 
@@ -435,7 +536,8 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	);
 	const sessionView = session?.id === selectedId ? session : selectedSession;
 	const isSessionPending = isSessionRoute && (sessionView === null || session?.id !== selectedId);
-	const { activeSessions, archivedSessions } = useMemo(() => {
+	const [projects] = useState<Project[]>(boot.projects);
+	const { activeSessions, archivedSessions, projectGroups } = useMemo(() => {
 		const active: HostSession[] = [];
 		const archived: HostSession[] = [];
 
@@ -448,11 +550,52 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			active.push(candidate);
 		}
 
+		const projectMap = new Map<string, Project>();
+
+		for (const project of projects) {
+			projectMap.set(project.id, project);
+		}
+
+		const groups: { project: Project | null; sessions: HostSession[] }[] = [];
+		const byProject = new Map<string | null, HostSession[]>();
+
+		for (const session of active) {
+			const key = session.projectId;
+			const list = byProject.get(key);
+
+			if (list) {
+				list.push(session);
+			} else {
+				byProject.set(key, [session]);
+			}
+		}
+
+		// Named projects first (sorted by project name)
+		const projectEntries = [...byProject.entries()]
+			.filter((entry): entry is [string, HostSession[]] => entry[0] !== null)
+			.sort((a, b) => {
+				const nameA = projectMap.get(a[0])?.name ?? "";
+				const nameB = projectMap.get(b[0])?.name ?? "";
+				return nameA.localeCompare(nameB);
+			});
+
+		for (const [projectId, projectSessions] of projectEntries) {
+			groups.push({ project: projectMap.get(projectId) ?? null, sessions: projectSessions });
+		}
+
+		// Ungrouped sessions last
+		const ungrouped = byProject.get(null);
+
+		if (ungrouped?.length) {
+			groups.push({ project: null, sessions: ungrouped });
+		}
+
 		return {
 			activeSessions: active,
 			archivedSessions: archived,
+			projectGroups: groups,
 		};
-	}, [sessions]);
+	}, [sessions, projects]);
 	const grouped = useMemo(() => groupStream(stream), [stream]);
 	const sessionHeaderBadges = useMemo(() => getSessionHeaderBadges(sessionView), [sessionView]);
 	const claudeLimits = useMemo(
@@ -701,8 +844,6 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			}
 		};
 	}, []);
-
-	const [projects] = useState<Project[]>(boot.projects);
 
 	const handleCreateSession = useCallback(
 		async (cwd: string, title: string, permissionMode: PermissionMode, projectId?: string) => {
@@ -1150,90 +1291,32 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 								})()
 							) : (
 								<div className="space-y-1">
-									{activeSessions.map((candidate) => (
-										<div
-											key={candidate.id}
-											onMouseLeave={() => {
-												if (archiveConfirmId === candidate.id) {
-													setArchiveConfirmId(null);
-												}
-											}}
-											className={`group flex items-start gap-1 rounded-md transition ${
-												candidate.status === "running" || candidate.status === "retrying"
-													? "sidebar-session-running"
-													: ""
-											} ${
-												selectedId === candidate.id
-													? "border border-foreground/10 bg-accent/90 text-foreground shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]"
-													: "text-foreground/82 hover:bg-accent/65 hover:text-foreground"
-											}`}
-										>
-											<button
-												type="button"
-												onClick={() => {
-													navigate(`/sessions/${candidate.id}`);
-													setSidebarOpen(false);
-												}}
-												title={getSidebarTitle(candidate)}
-												className="min-w-0 flex-1 px-2.5 py-2 text-left"
-											>
-												<div className="flex items-center gap-2">
-													<StatusDot status={candidate.status} />
-													{candidate.pinned && (
-														<Pin className="size-3 shrink-0 text-foreground/70" />
-													)}
-													<span className="line-clamp-1 min-w-0 flex-1 pr-1 text-xs">
-														{candidate.title}
+									{projectGroups.map((group) => (
+										<div key={group.project?.id ?? "__ungrouped"}>
+											{(projectGroups.length > 1 || group.project !== null) && (
+												<div className="flex items-center gap-2 px-2.5 pt-3 pb-1.5 first:pt-0">
+													<Folder className="size-3 text-muted-foreground/60" />
+													<span className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/70">
+														{group.project?.name ?? "General"}
 													</span>
-													{candidate.status === "failed" && (
-														<CircleX className="ml-auto size-3 shrink-0 text-destructive/70" />
-													)}
+													<span className="text-[9px] text-muted-foreground/46">
+														{group.sessions.length}
+													</span>
 												</div>
-												<SidebarSessionMeta session={candidate} />
-											</button>
-											<button
-												type="button"
-												onClick={() => void handlePinned(candidate.id, !candidate.pinned)}
-												className={`mt-2 flex size-8 md:size-5 shrink-0 items-center justify-center rounded border transition ${
-													candidate.pinned
-														? "border-foreground/12 bg-accent text-foreground opacity-100"
-														: "border-transparent text-muted-foreground/0 opacity-0 group-hover:border-foreground/10 group-hover:text-muted-foreground/86 group-hover:opacity-100 hover:border-foreground/18 hover:text-foreground"
-												}`}
-												aria-label={
-													candidate.pinned ? `Unpin ${candidate.title}` : `Pin ${candidate.title}`
-												}
-												title={candidate.pinned ? "Unpin" : "Pin"}
-											>
-												<Pin className="size-3" />
-											</button>
-											<button
-												type="button"
-												onClick={() => {
-													if (archiveConfirmId === candidate.id) {
-														void handleArchive(candidate.id, true);
-														return;
-													}
-
-													setArchiveConfirmId(candidate.id);
-												}}
-												className={`mt-2 mr-2 flex size-8 md:size-5 shrink-0 items-center justify-center rounded border transition ${
-													archiveConfirmId === candidate.id
-														? "border-foreground/18 bg-accent text-foreground opacity-100"
-														: "border-transparent text-muted-foreground/0 opacity-0 group-hover:border-foreground/10 group-hover:text-muted-foreground/86 group-hover:opacity-100 hover:border-foreground/18 hover:text-foreground"
-												}`}
-												aria-label={
-													archiveConfirmId === candidate.id
-														? `Confirm archive ${candidate.title}`
-														: `Archive ${candidate.title}`
-												}
-												title={archiveConfirmId === candidate.id ? "Confirm archive" : "Archive"}
-											>
-												{archiveConfirmId === candidate.id ? (
-													<Check className="size-3" />
-												) : (
-													<Archive className="size-3" />
-												)}
-											</button>
+											)}
+											{group.sessions.map((candidate) => (
+												<SidebarSessionItem
+													key={candidate.id}
+													candidate={candidate}
+													selectedId={selectedId}
+													archiveConfirmId={archiveConfirmId}
+													setArchiveConfirmId={setArchiveConfirmId}
+													navigate={navigate}
+													setSidebarOpen={setSidebarOpen}
+													handlePinned={handlePinned}
+													handleArchive={handleArchive}
+												/>
+											))}
 										</div>
 									))}
 								</div>
