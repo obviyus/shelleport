@@ -150,8 +150,19 @@ function MarkdownMessage({ text }: { text: string }) {
 	);
 }
 
-export function copyToClipboard(text: string) {
-	return navigator.clipboard.writeText(text);
+export async function copyToClipboard(text: string) {
+	if (navigator.clipboard) {
+		return navigator.clipboard.writeText(text);
+	}
+	// Fallback for HTTP contexts where navigator.clipboard is unavailable
+	const ta = document.createElement("textarea");
+	ta.value = text;
+	ta.style.position = "fixed";
+	ta.style.opacity = "0";
+	document.body.appendChild(ta);
+	ta.select();
+	document.execCommand("copy");
+	document.body.removeChild(ta);
 }
 
 function CopyButton({ text, className }: { text: string; className?: string }) {
