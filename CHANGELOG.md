@@ -7,6 +7,7 @@ All notable changes to shelleport are documented here.
 ### Added
 
 - Desktop sidebars now show a keyboard shortcut legend above the Claude limits panel (#28) (thanks @kesava500)
+- Sidebar session rows now show cumulative session cost beside the relative update time when provider usage data is available (#33) (thanks @kesava500)
 
 ### Fixed
 
