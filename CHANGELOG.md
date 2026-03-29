@@ -18,6 +18,10 @@ All notable changes to shelleport are documented here.
 - Copy buttons now work over plain HTTP too by using a non-secure-context clipboard path when the browser withholds `navigator.clipboard` (#40) (thanks @kesava500)
 - Reconnect state now lives in the session header badge instead of inserting a transcript banner that shifts chat content (#52) (thanks @kesava500)
 
+### Breaking
+
+- Sidebar session rows no longer show accumulated cost; use the session header Stats popover instead. Running rows now use animated activity dots, and the list refreshes while work is active so those indicators stay current (#51) (thanks @kesava500)
+
 ## 0.0.27 - 2026-03-29
 
 ### Added

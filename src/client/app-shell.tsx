@@ -219,18 +219,6 @@ function getSessionLimitTone(limit: SessionLimit) {
 	return "bg-white shadow-[0_0_18px_oklch(1_0_0_/_0.26)]";
 }
 
-function formatSidebarCost(costUsd: number) {
-	if (costUsd >= 1) {
-		return `$${costUsd.toFixed(2)}`;
-	}
-
-	if (costUsd >= 0.01) {
-		return `$${costUsd.toFixed(3)}`;
-	}
-
-	return `$${costUsd.toFixed(4)}`;
-}
-
 function usePopoverDismiss(
 	open: boolean,
 	setOpen: (open: boolean) => void,
@@ -353,17 +341,24 @@ function SessionModelPicker({
 	);
 }
 
+function SidebarRunningDots() {
+	return (
+		<span className="inline-flex items-center gap-[3px]">
+			<span className="size-[5px] animate-[sidebar-dot_1.2s_ease-in-out_0ms_infinite] rounded-full bg-emerald-400" />
+			<span className="size-[5px] animate-[sidebar-dot_1.2s_ease-in-out_200ms_infinite] rounded-full bg-emerald-400" />
+			<span className="size-[5px] animate-[sidebar-dot_1.2s_ease-in-out_400ms_infinite] rounded-full bg-emerald-400" />
+		</span>
+	);
+}
+
 function SidebarSessionMeta({ session }: { session: HostSession }) {
 	const now = useNow();
-	const cost =
-		session.usage?.costUsd !== null && session.usage?.costUsd !== undefined
-			? formatSidebarCost(session.usage.costUsd)
-			: null;
+	const running = isActiveStatus(session.status);
 
 	return (
 		<p className="mt-0.5 ml-3.5 flex items-center gap-1.5 truncate text-[10px] text-muted-foreground/86">
 			<span className="truncate">{getSidebarMeta(session, now)}</span>
-			{cost && <span className="shrink-0 tabular-nums text-muted-foreground/55">{cost}</span>}
+			{running && <SidebarRunningDots />}
 		</p>
 	);
 }
@@ -717,10 +712,6 @@ function SidebarSessionItem({
 				}
 			}}
 			className={`group flex items-start gap-1 rounded-md transition ${
-				candidate.status === "running" || candidate.status === "retrying"
-					? "sidebar-session-running"
-					: ""
-			} ${
 				selectedId === candidate.id
 					? "border border-foreground/10 bg-accent/90 text-foreground shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]"
 					: "text-foreground/82 hover:bg-accent/65 hover:text-foreground"
@@ -1248,6 +1239,16 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	useEffect(() => {
 		void refreshSessions(deferredSessionQuery).catch(() => {});
 	}, [deferredSessionQuery, refreshSessions]);
+
+	useEffect(() => {
+		if (!hasRunningSession) return;
+
+		const interval = setInterval(() => {
+			void refreshSessions(deferredSessionQuery).catch(() => {});
+		}, 3000);
+
+		return () => clearInterval(interval);
+	}, [hasRunningSession, deferredSessionQuery, refreshSessions]);
 
 	useLayoutEffect(() => {
 		if (selectedId === null) {
