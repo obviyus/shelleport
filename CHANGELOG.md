@@ -4,6 +4,12 @@ All notable changes to shelleport are documented here.
 
 ## Unreleased
 
+## 0.0.27 - 2026-03-29
+
+### Added
+
+- The new session launcher now uses a denser two-column layout with compact controls, an inline directory bar, and a header-level create action so more of the directory browser stays visible
+
 ## 0.0.26 - 2026-03-29
 
 ### Fixed
