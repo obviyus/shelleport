@@ -6,6 +6,7 @@ All notable changes to shelleport are documented here.
 
 ### Fixed
 
+- Project deletion now shows an explicit Yes/No confirmation and warns when deleting will ungroup sessions (#49) (thanks @kesava500)
 - Header popovers now dismiss on Escape consistently, including the session Actions menu (#47) (thanks @kesava500)
 - Session transcripts now show a bottom pill when new messages arrive while you are scrolled up, without falsely firing when you load older history (#48) (thanks @kesava500)
 - Session headers can now export the current transcript as Markdown or JSON from the Actions menu, alongside copy-to-clipboard (#45) (thanks @kesava500)
