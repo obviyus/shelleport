@@ -254,6 +254,27 @@ function SidebarLimitsPanel({ limits }: { limits: SessionLimit[] }) {
 	);
 }
 
+const SIDEBAR_SHORTCUTS = [
+	{ key: "Ctrl/\u2318K", label: "search" },
+	{ key: "Ctrl+C", label: "interrupt" },
+	{ key: "\u2191\u2193", label: "history" },
+] as const;
+
+function SidebarShortcutLegend() {
+	return (
+		<div className="mb-3 hidden flex-wrap items-center justify-center gap-x-3 gap-y-1.5 text-[9px] text-muted-foreground/70 md:flex">
+			{SIDEBAR_SHORTCUTS.map((shortcut) => (
+				<span key={shortcut.key} className="inline-flex items-center gap-1">
+					<kbd className="rounded border border-foreground/14 bg-background/60 px-1.5 py-0.5 font-mono text-[8px] text-muted-foreground/80">
+						{shortcut.key}
+					</kbd>
+					{shortcut.label}
+				</span>
+			))}
+		</div>
+	);
+}
+
 function SessionStatusBadge({ session }: { session: HostSession }) {
 	const now = useNow();
 
@@ -1237,6 +1258,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 						</div>
 
 						<div className="shrink-0 px-3 pt-3">
+							<SidebarShortcutLegend />
 							<SidebarLimitsPanel limits={claudeLimits} />
 						</div>
 						<div className="shrink-0 border-t border-border px-3 py-3">
