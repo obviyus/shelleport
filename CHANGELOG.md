@@ -6,6 +6,7 @@ All notable changes to shelleport are documented here.
 
 ### Fixed
 
+- Session headers now group pin, copy, and project actions under one mobile-friendlier Actions menu instead of spreading them across separate buttons (#43) (thanks @kesava500)
 - Mobile project buttons now center their folder icon, the composer placeholder no longer clips, and mobile attach/send controls stay aligned with the taller input field (#42) (thanks @kesava500)
 - Copy buttons now work over plain HTTP too by using a non-secure-context clipboard path when the browser withholds `navigator.clipboard` (#40) (thanks @kesava500)
 
