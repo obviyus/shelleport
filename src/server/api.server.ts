@@ -4,6 +4,7 @@ import type {
 	CreateSessionInput,
 	DirectoryListing,
 	ImportSessionPayload,
+	PermissionMode,
 	QueuedSessionInputUpdatePayload,
 	RequestResponsePayload,
 	SessionArchivePayload,
@@ -437,6 +438,70 @@ async function dispatchApiRequest(request: Request) {
 	) {
 		const providerId = assertProviderId(segments[2], "provider");
 		return Response.json({ sessions: await getProvider(providerId).listHistoricalSessions() });
+	}
+
+	if (request.method === "GET" && url.pathname === "/api/projects") {
+		return Response.json({ projects: sessionStore.listProjects() });
+	}
+
+	if (request.method === "POST" && url.pathname === "/api/projects") {
+		const payload = await readJson<{ name: string; cwd: string; permissionMode?: string }>(request);
+
+		if (typeof payload.name !== "string" || payload.name.trim().length === 0) {
+			throw new ApiError(400, "invalid_name", "name must be a non-empty string");
+		}
+
+		await assertDirectory(payload.cwd, "cwd");
+
+		const project = sessionStore.createProject({
+			name: payload.name.trim(),
+			cwd: payload.cwd,
+			permissionMode: assertPermissionMode(payload.permissionMode) ?? "bypassPermissions",
+		});
+
+		return Response.json({ project }, { status: 201 });
+	}
+
+	if (segments[0] === "api" && segments[1] === "projects" && segments[2]) {
+		const projectId = segments[2];
+
+		if (request.method === "PATCH") {
+			const payload = await readJson<{
+				name?: string;
+				cwd?: string;
+				permissionMode?: string;
+			}>(request);
+
+			if (payload.cwd !== undefined) {
+				await assertDirectory(payload.cwd, "cwd");
+			}
+
+			if (payload.permissionMode !== undefined) {
+				assertPermissionMode(payload.permissionMode);
+			}
+
+			const project = sessionStore.updateProject(projectId, {
+				name: payload.name?.trim(),
+				cwd: payload.cwd,
+				permissionMode: payload.permissionMode as PermissionMode | undefined,
+			});
+
+			if (!project) {
+				throw new ApiError(404, "project_not_found", "Project not found");
+			}
+
+			return Response.json({ project });
+		}
+
+		if (request.method === "DELETE") {
+			const project = sessionStore.deleteProject(projectId);
+
+			if (!project) {
+				throw new ApiError(404, "project_not_found", "Project not found");
+			}
+
+			return Response.json({ project });
+		}
 	}
 
 	if (request.method === "GET" && url.pathname === "/api/sessions") {

@@ -491,6 +491,7 @@ export const sessionBroker = {
 			provider: input.provider,
 			cwd: input.cwd,
 			title: input.title?.trim() || autoTitle || defaultSessionTitle(input.provider),
+			projectId: input.projectId,
 			permissionMode: input.permissionMode ?? getDefaultPermissionMode(input.provider),
 			allowedTools: normalizeAllowedTools(input.allowedTools ?? []),
 		});

@@ -60,6 +60,7 @@ import type {
 	HostSession,
 	PendingRequest,
 	PermissionMode,
+	Project,
 	ProviderLimitState,
 	ProviderSummary,
 	QueuedSessionInput,
@@ -701,8 +702,10 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		};
 	}, []);
 
+	const [projects] = useState<Project[]>(boot.projects);
+
 	const handleCreateSession = useCallback(
-		async (cwd: string, title: string, permissionMode: PermissionMode) => {
+		async (cwd: string, title: string, permissionMode: PermissionMode, projectId?: string) => {
 			if (!cwd.trim() || !createProvider) {
 				return;
 			}
@@ -715,12 +718,13 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 					cwd: cwd.trim(),
 					permissionMode,
 					title: title || undefined,
+					projectId,
 				});
 				await refreshSessions(sessionQuery);
 				navigate(`/sessions/${result.session.id}`);
 				setTimeout(() => textareaRef.current?.focus(), 100);
-			} catch (error) {
-				console.error("Failed to create session:", error);
+			} catch {
+				// handled by toast in future
 			} finally {
 				setIsCreating(false);
 			}
@@ -1779,6 +1783,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 							createProviderId={createProvider?.id ?? null}
 							defaultPath={boot.defaultCwd}
 							isCreating={isCreating}
+							projects={projects}
 							onCreate={handleCreateSession}
 						/>
 					</>

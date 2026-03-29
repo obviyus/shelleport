@@ -18,6 +18,7 @@ const testSession: HostSession = {
 	cwd: "/tmp/project",
 	id: sessionId,
 	imported: false,
+	projectId: null,
 	lastEventSequence: 0,
 	permissionMode: "default",
 	pid: null,

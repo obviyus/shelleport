@@ -25,6 +25,7 @@ import {
 	type DirectoryEntry,
 	type DirectoryListing,
 	type PermissionMode,
+	type Project,
 	type ProviderId,
 } from "~/shared/shelleport";
 
@@ -34,7 +35,13 @@ type SessionLauncherProps = {
 	createProviderId: ProviderId | null;
 	defaultPath: string;
 	isCreating: boolean;
-	onCreate: (cwd: string, title: string, permissionMode: PermissionMode) => void | Promise<void>;
+	projects: Project[];
+	onCreate: (
+		cwd: string,
+		title: string,
+		permissionMode: PermissionMode,
+		projectId?: string,
+	) => void | Promise<void>;
 };
 
 const ROOT_PATH = "/";
@@ -405,10 +412,12 @@ export function SessionLauncher({
 	createProviderId,
 	defaultPath,
 	isCreating,
+	projects,
 	onCreate,
 }: SessionLauncherProps) {
 	const titleInputId = useId();
 	const [title, setTitle] = useState("");
+	const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 	const [currentPath, setCurrentPath] = useState(defaultPath);
 	const [activeColumnPath, setActiveColumnPath] = useState(defaultPath);
 	const [directoryMap, setDirectoryMap] = useState<Record<string, DirectoryListing>>({});
@@ -600,23 +609,66 @@ export function SessionLauncher({
 							context.
 						</p>
 					</div>
-					<div className="w-full max-w-sm shrink-0">
-						<label
-							htmlFor={titleInputId}
-							className="mb-1.5 block text-[10px] font-medium uppercase tracking-[0.14em] text-foreground/68"
-						>
-							Title
-						</label>
-						<input
-							id={titleInputId}
-							name="title"
-							type="text"
-							value={title}
-							onChange={(event) => setTitle(event.target.value)}
-							autoComplete="off"
-							placeholder="Optional session title…"
-							className="h-10 w-full rounded-md border border-foreground/10 bg-card/90 px-3 text-xs text-foreground outline-none transition placeholder:text-muted-foreground/70 focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
-						/>
+					<div className="flex w-full max-w-sm shrink-0 flex-col gap-3">
+						{projects.length > 0 && (
+							<div>
+								<p className="mb-1.5 text-[10px] font-medium uppercase tracking-[0.14em] text-foreground/68">
+									Project
+								</p>
+								<div className="flex flex-wrap gap-1.5">
+									<button
+										type="button"
+										onClick={() => {
+											setSelectedProjectId(null);
+											setCurrentPath(defaultPath);
+										}}
+										className={`rounded-md border px-2.5 py-1.5 text-[11px] transition ${
+											selectedProjectId === null
+												? "border-foreground/20 bg-foreground text-background"
+												: "border-foreground/10 text-muted-foreground/80 hover:border-foreground/18 hover:text-foreground"
+										}`}
+									>
+										None
+									</button>
+									{projects.map((project) => (
+										<button
+											key={project.id}
+											type="button"
+											onClick={() => {
+												setSelectedProjectId(project.id);
+												setCurrentPath(project.cwd);
+												setPermissionMode(project.permissionMode);
+											}}
+											className={`rounded-md border px-2.5 py-1.5 text-[11px] transition ${
+												selectedProjectId === project.id
+													? "border-foreground/20 bg-foreground text-background"
+													: "border-foreground/10 text-muted-foreground/80 hover:border-foreground/18 hover:text-foreground"
+											}`}
+										>
+											{project.name}
+										</button>
+									))}
+								</div>
+							</div>
+						)}
+						<div>
+							<label
+								htmlFor={titleInputId}
+								className="mb-1.5 block text-[10px] font-medium uppercase tracking-[0.14em] text-foreground/68"
+							>
+								Title
+							</label>
+							<input
+								id={titleInputId}
+								name="title"
+								type="text"
+								value={title}
+								onChange={(event) => setTitle(event.target.value)}
+								autoComplete="off"
+								placeholder="Optional session title…"
+								className="h-10 w-full rounded-md border border-foreground/10 bg-card/90 px-3 text-xs text-foreground outline-none transition placeholder:text-muted-foreground/70 focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
+							/>
+						</div>
 					</div>
 				</div>
 				{showsPermissionMode && (
@@ -684,7 +736,14 @@ export function SessionLauncher({
 					</div>
 					<button
 						type="button"
-						onClick={() => void onCreate(currentPath, title.trim(), permissionMode)}
+						onClick={() =>
+							void onCreate(
+								currentPath,
+								title.trim(),
+								permissionMode,
+								selectedProjectId ?? undefined,
+							)
+						}
 						disabled={isCreating || createDisabledReason !== null}
 						className="flex h-12 md:h-10 w-full md:w-auto shrink-0 items-center justify-center gap-2 rounded-md bg-foreground px-4 text-xs font-medium text-background transition hover:bg-foreground/90 focus-visible:ring-2 focus-visible:ring-foreground/20 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-30"
 					>

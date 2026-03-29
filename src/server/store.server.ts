@@ -3,6 +3,7 @@ import type {
 	HostEvent,
 	HostEventKind,
 	HostSession,
+	Project,
 	PendingRequest,
 	BlockReason,
 	PendingRequestKind,
@@ -96,6 +97,14 @@ database.exec(`
 		attachments_json TEXT NOT NULL,
 		create_time INTEGER NOT NULL
 	);
+	CREATE TABLE IF NOT EXISTS projects (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		cwd TEXT NOT NULL,
+		permission_mode TEXT NOT NULL DEFAULT 'bypassPermissions',
+		create_time INTEGER NOT NULL,
+		update_time INTEGER NOT NULL
+	);
 `);
 
 database.exec(`
@@ -173,6 +182,7 @@ ensureColumn(
 	"utilization",
 	"ALTER TABLE app_provider_limits ADD COLUMN utilization REAL",
 );
+ensureColumn("host_sessions", "project_id", "ALTER TABLE host_sessions ADD COLUMN project_id TEXT");
 
 database.exec(`
 	UPDATE host_sessions
@@ -192,6 +202,7 @@ type SqlSessionRow = {
 	provider_session_ref: string | null;
 	pid: number | null;
 	imported: number;
+	project_id: string | null;
 	permission_mode: string;
 	allowed_tools_json: string;
 	queued_input_count: number;
@@ -311,6 +322,7 @@ function mapSession(row: SqlSessionRow): HostSession {
 		providerSessionRef: row.provider_session_ref,
 		pid: row.pid,
 		imported: row.imported === 1,
+		projectId: row.project_id,
 		permissionMode: row.permission_mode as PermissionMode,
 		allowedTools: parseAllowedTools(row.allowed_tools_json),
 		queuedInputCount: row.queued_input_count,
@@ -362,8 +374,8 @@ function mapQueuedInput(row: SqlQueuedInputRow): QueuedSessionInput {
 
 const insertSessionStatement = database.query(
 	`INSERT INTO host_sessions (
-		id, provider, title, cwd, pinned, archived, status, status_detail_json, provider_session_ref, pid, imported, permission_mode, allowed_tools_json, queued_input_count, usage_json, active_usage_json, last_event_sequence, create_time, update_time
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, provider, title, cwd, pinned, archived, status, status_detail_json, provider_session_ref, pid, imported, project_id, permission_mode, allowed_tools_json, queued_input_count, usage_json, active_usage_json, last_event_sequence, create_time, update_time
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 );
 
 const listSessionsStatement = database.query<SqlSessionRow, []>(
@@ -528,6 +540,48 @@ const deleteSessionSearchStatement = database.query(
 	"DELETE FROM host_session_fts WHERE session_id = ?",
 );
 
+type SqlProjectRow = {
+	id: string;
+	name: string;
+	cwd: string;
+	permission_mode: string;
+	create_time: number;
+	update_time: number;
+};
+
+const listProjectsStatement = database.query<SqlProjectRow, []>(
+	"SELECT * FROM projects ORDER BY name ASC",
+);
+
+const getProjectStatement = database.query<SqlProjectRow, [string]>(
+	"SELECT * FROM projects WHERE id = ? LIMIT 1",
+);
+
+const insertProjectStatement = database.query(
+	`INSERT INTO projects (id, name, cwd, permission_mode, create_time, update_time) VALUES (?, ?, ?, ?, ?, ?)`,
+);
+
+const updateProjectStatement = database.query(
+	"UPDATE projects SET name = ?, cwd = ?, permission_mode = ?, update_time = ? WHERE id = ?",
+);
+
+const deleteProjectStatement = database.query("DELETE FROM projects WHERE id = ?");
+
+const clearProjectSessionsStatement = database.query(
+	"UPDATE host_sessions SET project_id = NULL WHERE project_id = ?",
+);
+
+function mapProject(row: SqlProjectRow): Project {
+	return {
+		id: row.id,
+		name: row.name,
+		cwd: row.cwd,
+		permissionMode: row.permission_mode as PermissionMode,
+		createTime: row.create_time,
+		updateTime: row.update_time,
+	};
+}
+
 function mapProviderLimit(row: SqlProviderLimitRow): SessionLimit {
 	return {
 		status: row.status,
@@ -594,6 +648,7 @@ export type CreateStoredSessionInput = {
 	title: string;
 	cwd: string;
 	imported?: boolean;
+	projectId?: string | null;
 	providerSessionRef?: string | null;
 	permissionMode: PermissionMode;
 	allowedTools: string[];
@@ -633,6 +688,7 @@ export const sessionStore = {
 			providerSessionRef: input.providerSessionRef ?? null,
 			pid: null,
 			imported: input.imported ?? false,
+			projectId: input.projectId ?? null,
 			permissionMode: input.permissionMode,
 			allowedTools: input.allowedTools,
 			queuedInputCount: 0,
@@ -654,6 +710,7 @@ export const sessionStore = {
 			session.providerSessionRef,
 			session.pid,
 			session.imported ? 1 : 0,
+			session.projectId,
 			session.permissionMode,
 			JSON.stringify(session.allowedTools),
 			session.queuedInputCount,
@@ -964,5 +1021,74 @@ export const sessionStore = {
 		}
 
 		return request;
+	},
+	listProjects() {
+		return listProjectsStatement.all().map(mapProject);
+	},
+	getProject(projectId: string) {
+		const row = getProjectStatement.get(projectId);
+		return row ? mapProject(row) : null;
+	},
+	createProject(input: { name: string; cwd: string; permissionMode: PermissionMode }) {
+		const now = createTimestamp();
+		const project: Project = {
+			id: createId(),
+			name: input.name,
+			cwd: input.cwd,
+			permissionMode: input.permissionMode,
+			createTime: now,
+			updateTime: now,
+		};
+
+		insertProjectStatement.run(
+			project.id,
+			project.name,
+			project.cwd,
+			project.permissionMode,
+			project.createTime,
+			project.updateTime,
+		);
+
+		return project;
+	},
+	updateProject(
+		projectId: string,
+		input: { name?: string; cwd?: string; permissionMode?: PermissionMode },
+	) {
+		const current = this.getProject(projectId);
+
+		if (!current) {
+			return null;
+		}
+
+		const next: Project = {
+			...current,
+			name: input.name ?? current.name,
+			cwd: input.cwd ?? current.cwd,
+			permissionMode: input.permissionMode ?? current.permissionMode,
+			updateTime: createTimestamp(),
+		};
+
+		updateProjectStatement.run(
+			next.name,
+			next.cwd,
+			next.permissionMode,
+			next.updateTime,
+			projectId,
+		);
+
+		return next;
+	},
+	deleteProject(projectId: string) {
+		const project = this.getProject(projectId);
+
+		if (!project) {
+			return null;
+		}
+
+		clearProjectSessionsStatement.run(projectId);
+		deleteProjectStatement.run(projectId);
+
+		return project;
 	},
 };
