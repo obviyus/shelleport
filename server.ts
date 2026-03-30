@@ -822,9 +822,9 @@ const securityHeaders: Record<string, string> = {
 	"X-Content-Type-Options": "nosniff",
 	"X-Frame-Options": "DENY",
 	"Referrer-Policy": "strict-origin-when-cross-origin",
-	"Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+	"Permissions-Policy": "camera=(), microphone=(self), geolocation=()",
 	"Content-Security-Policy":
-		"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+		"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://esm.sh https://*.huggingface.co; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
 };
 
 function applySecurityHeaders(response: Response) {

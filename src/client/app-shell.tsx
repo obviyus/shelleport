@@ -2,6 +2,7 @@ import {
 	Archive,
 	ArchiveRestore,
 	Check,
+	ChevronDown,
 	CircleStop,
 	CircleX,
 	ClipboardCopy,
@@ -10,17 +11,16 @@ import {
 	EyeOff,
 	FileDown,
 	Info,
-	Paperclip,
 	Folder,
 	Loader2,
 	LogOut,
 	Menu,
+	Mic,
 	Pencil,
 	Pin,
 	Plus,
 	Search,
 	Send,
-	Sparkles,
 	Trash2,
 	X,
 } from "lucide-react";
@@ -103,6 +103,8 @@ import {
 	copyToClipboard,
 	streamToMarkdown,
 } from "~/client/session-stream";
+import { VoiceWaveform } from "~/client/components/voice-waveform";
+import { type VoiceInputState, createVoiceSession } from "~/client/voice-input";
 
 function requestNotificationPermission() {
 	if (typeof window === "undefined" || !("Notification" in window)) {
@@ -255,33 +257,46 @@ function usePopoverDismiss(
 	}, [open, setOpen, buttonRef, dropdownRef]);
 }
 
-function SessionModelPicker({
+function InputPlusMenu({ canAttach, onAttach }: { canAttach: boolean; onAttach: () => void }) {
+	return (
+		<button
+			type="button"
+			onClick={canAttach ? onAttach : undefined}
+			disabled={!canAttach}
+			className="flex size-7 items-center justify-center rounded border border-foreground/10 text-muted-foreground/70 transition hover:text-foreground hover:border-foreground/20 disabled:opacity-30"
+			title="Attach files"
+		>
+			<Plus className="size-3.5" />
+		</button>
+	);
+}
+
+function InputModelPicker({
 	session,
 	models,
 	onChangeModel,
 }: {
 	session: HostSession;
 	models: ProviderModel[];
-	onChangeModel: (model: string | null) => Promise<void>;
+	onChangeModel: (model: string | null) => void;
 }) {
 	const [open, setOpen] = useState(false);
 	const buttonRef = useRef<HTMLButtonElement>(null);
 	const dropdownRef = useRef<HTMLDivElement>(null);
-	const currentModel = models.find((model) => model.id === session.model) ?? null;
-	const shortLabel = currentModel?.label ?? "Default model";
-	const [pos, setPos] = useState({ top: 0, right: 0 });
-
+	const [pos, setPos] = useState({ bottom: 0, left: 0 });
 	usePopoverDismiss(open, setOpen, buttonRef, dropdownRef);
+
+	const currentModel = models.find((m) => m.id === session.model) ?? null;
+	const label = currentModel?.label ?? "Default";
 
 	function handleToggle() {
 		if (!open && buttonRef.current) {
 			const rect = buttonRef.current.getBoundingClientRect();
 			setPos({
-				top: rect.bottom + 4,
-				right: window.innerWidth - rect.right,
+				bottom: window.innerHeight - rect.top + 4,
+				left: rect.left,
 			});
 		}
-
 		setOpen(!open);
 	}
 
@@ -291,23 +306,22 @@ function SessionModelPicker({
 				ref={buttonRef}
 				type="button"
 				onClick={handleToggle}
-				title={currentModel?.label ?? "Default model"}
-				className="flex items-center justify-center gap-1 rounded border border-foreground/12 px-2 py-1 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-xs text-muted-foreground/80 transition hover:border-foreground/18 hover:text-foreground"
+				className="flex h-7 items-center gap-1 rounded border border-foreground/10 px-2 text-xs text-muted-foreground/70 transition hover:text-foreground hover:border-foreground/20"
 			>
-				<Sparkles className="size-3 md:size-2.5" />
-				<span className="hidden md:inline">{shortLabel}</span>
+				<span>{label}</span>
+				<ChevronDown className="size-2.5" />
 			</button>
 			{open &&
 				createPortal(
 					<div
 						ref={dropdownRef}
-						style={{ top: pos.top, right: pos.right }}
+						style={{ bottom: pos.bottom, left: pos.left }}
 						className="fixed z-[9999] min-w-[150px] rounded-md border border-foreground/12 bg-card p-1 shadow-lg"
 					>
 						<button
 							type="button"
 							onClick={() => {
-								void onChangeModel(null);
+								onChangeModel(null);
 								setOpen(false);
 							}}
 							className={`flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-xs text-left transition ${
@@ -323,7 +337,7 @@ function SessionModelPicker({
 								key={model.id}
 								type="button"
 								onClick={() => {
-									void onChangeModel(model.id);
+									onChangeModel(model.id);
 									setOpen(false);
 								}}
 								className={`flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-xs text-left transition ${
@@ -1066,6 +1080,11 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	);
 	const sessionView = session?.id === selectedId ? session : selectedSession;
 	const hideThinking = !selectedId || !shownThinkingSessionIds.includes(selectedId);
+	const [voiceState, setVoiceState] = useState<VoiceInputState>({ status: "idle" });
+	const voiceSetupRef = useRef<ReturnType<typeof createVoiceSession> | null>(null);
+	const voiceSessionRef =
+		useRef<Awaited<ReturnType<ReturnType<typeof createVoiceSession>["start"]>>>(null);
+	const voiceStateUpdatesEnabledRef = useRef(true);
 	const isSessionPending = isSessionRoute && (sessionView === null || session?.id !== selectedId);
 	const { activeSessions, archivedSessions, projectGroups } = useMemo(() => {
 		const active: HostSession[] = [];
@@ -1168,6 +1187,10 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const renameDraft = isRenaming ? renameState.title : (sessionView?.title ?? "");
 	const editingQueuedInputId = queuedInputEdit?.id ?? null;
 	const queuedInputDraft = queuedInputEdit?.prompt ?? "";
+	const canUseVoiceInput = typeof window !== "undefined" && window.isSecureContext;
+	const isVoiceBusy = voiceState.status === "loading-model" || voiceState.status === "transcribing";
+	const activeVoiceSession = voiceState.status === "recording" ? voiceSessionRef.current : null;
+	const isVoiceRecording = activeVoiceSession !== null;
 
 	function setDraftAttachments(
 		updater: DraftAttachment[] | ((previous: DraftAttachment[]) => DraftAttachment[]),
@@ -1185,7 +1208,28 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		}
 	}
 
+	function applyVoiceState(nextState: VoiceInputState) {
+		if (voiceStateUpdatesEnabledRef.current) {
+			setVoiceState(nextState);
+		}
+	}
+
+	function cancelVoiceInput(resetState = true) {
+		const voiceSetup = voiceSetupRef.current;
+		voiceSetupRef.current = null;
+		voiceSetup?.cancelSetup();
+
+		const voiceSession = voiceSessionRef.current;
+		voiceSessionRef.current = null;
+		voiceSession?.cancel();
+
+		if (resetState && !voiceSetup && !voiceSession) {
+			setVoiceState({ status: "idle" });
+		}
+	}
+
 	function resetSessionViewState() {
+		cancelVoiceInput();
 		previousSessionStatus.current = null;
 		setStream([]);
 		setTotalEvents(0);
@@ -1303,6 +1347,13 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	}, [selectedId]);
 
 	useEffect(() => {
+		if (voiceState.status === "error") {
+			showToast("error", voiceState.message);
+			setVoiceState({ status: "idle" });
+		}
+	}, [voiceState, showToast]);
+
+	useEffect(() => {
 		if (!selectedId) {
 			return;
 		}
@@ -1411,6 +1462,9 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 
 	useEffect(() => {
 		return () => {
+			voiceStateUpdatesEnabledRef.current = false;
+			cancelVoiceInput(false);
+
 			for (const attachment of draftAttachmentsRef.current) {
 				releaseDraftAttachment(attachment);
 			}
@@ -1498,6 +1552,34 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			setDraftAttachments(nextDraftAttachments);
 		}
 	}, [draftAttachments, prompt, selectedId]);
+
+	async function handleVoiceRecord() {
+		if (voiceState.status === "recording" && voiceSessionRef.current) {
+			const text = await voiceSessionRef.current.stop();
+			voiceSessionRef.current = null;
+			if (text) {
+				setPrompt((previous) => (previous ? `${previous} ${text}` : text));
+			}
+			return;
+		}
+
+		if (voiceState.status !== "idle") return;
+
+		const voiceSetup = createVoiceSession({ onStateChange: applyVoiceState });
+		voiceSetupRef.current = voiceSetup;
+		const recorder = await voiceSetup.start();
+		if (voiceSetupRef.current !== voiceSetup) {
+			return;
+		}
+		voiceSetupRef.current = null;
+		if (recorder) {
+			voiceSessionRef.current = recorder;
+		}
+	}
+
+	function handleVoiceCancel() {
+		cancelVoiceInput();
+	}
 
 	const handleInterrupt = useCallback(async () => {
 		if (!selectedId) {
@@ -2239,13 +2321,6 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											{permissionModeLabel}
 										</span>
 									)}
-									{sessionView && (sessionProvider?.models ?? []).length > 0 && (
-										<SessionModelPicker
-											session={sessionView}
-											models={sessionProvider?.models ?? []}
-											onChangeModel={(model) => handleChangeModel(sessionView.id, model)}
-										/>
-									)}
 									{sessionHeaderBadges.length > 0 && (
 										<SessionStatsPopover badges={sessionHeaderBadges} />
 									)}
@@ -2470,45 +2545,129 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 													</div>
 												</div>
 											)}
-											<div className="flex items-center md:items-end gap-1.5 px-2 py-2">
-												<textarea
-													ref={textareaRef}
-													rows={1}
-													value={prompt}
-													onChange={(event) => {
-														setPrompt(event.target.value);
-														autoResize(event.currentTarget);
-													}}
-													onKeyDown={handleKeyDown}
-													onPaste={handlePaste}
-													placeholder={
-														isSessionBusy
-															? "Claude is working... press Enter to queue"
-															: canAttach
-																? "Message Claude... attach files or paste images"
-																: "Message Claude... (Enter to send)"
-													}
-													className="min-h-[100px] md:min-h-[80px] flex-1 resize-none bg-transparent px-2 py-1.5 text-xs leading-[1.6] text-foreground outline-none placeholder:text-muted-foreground/80"
-												/>
-												{canAttach && (
-													<button
-														type="button"
-														onClick={() => fileInputRef.current?.click()}
-														className="flex size-9 md:size-7 shrink-0 items-center justify-center rounded border border-foreground/10 bg-background text-foreground/50 transition hover:border-foreground/22 hover:text-foreground"
-														title="Attach files"
-													>
-														<Paperclip className="size-4" />
-													</button>
-												)}
-												<button
-													type="button"
-													onClick={() => void handleSend()}
-													disabled={!canSend}
-													className="flex size-9 md:size-7 shrink-0 items-center justify-center rounded bg-foreground text-background shadow-[0_0_18px_oklch(1_0_0_/_0.12)] transition hover:bg-foreground/85 disabled:opacity-20"
-												>
-													<Send className="size-3.5" />
-												</button>
-											</div>
+											{isVoiceRecording ? (
+												<div className="flex flex-col gap-2 px-3 py-3">
+													<VoiceWaveform analyser={activeVoiceSession.analyser} />
+													<div className="flex items-center justify-between gap-2">
+														<div className="flex items-center gap-1.5">
+															<InputPlusMenu
+																canAttach={canAttach}
+																onAttach={() => fileInputRef.current?.click()}
+															/>
+															{sessionView && (sessionProvider?.models ?? []).length > 0 && (
+																<InputModelPicker
+																	session={sessionView}
+																	models={sessionProvider?.models ?? []}
+																	onChangeModel={(model) =>
+																		void handleChangeModel(sessionView.id, model)
+																	}
+																/>
+															)}
+														</div>
+														<button
+															type="button"
+															onClick={handleVoiceCancel}
+															className="flex size-7 items-center justify-center rounded border border-foreground/10 text-muted-foreground/70 transition hover:text-foreground hover:border-foreground/20"
+															title="Cancel recording"
+														>
+															<X className="size-3.5" />
+														</button>
+														<button
+															type="button"
+															onClick={() => void handleVoiceRecord()}
+															className="flex size-7 items-center justify-center rounded bg-foreground text-background shadow-[0_0_18px_oklch(1_0_0_/_0.12)] transition hover:bg-foreground/85"
+															title="Stop and transcribe"
+														>
+															<Check className="size-3.5" />
+														</button>
+													</div>
+												</div>
+											) : (
+												<div className="flex flex-col px-2 pb-2 pt-1">
+													<textarea
+														ref={textareaRef}
+														rows={1}
+														value={prompt}
+														onChange={(event) => {
+															setPrompt(event.target.value);
+															autoResize(event.currentTarget);
+														}}
+														onKeyDown={handleKeyDown}
+														onPaste={handlePaste}
+														placeholder={
+															isSessionBusy
+																? "Claude is working... press Enter to queue"
+																: canAttach
+																	? "Message Claude... attach files or paste images"
+																	: "Message Claude... (Enter to send)"
+														}
+														className="min-h-[48px] md:min-h-[64px] w-full resize-none bg-transparent px-3.5 py-3 text-xs leading-[1.6] text-foreground outline-none placeholder:text-muted-foreground/80"
+													/>
+													<div className="flex items-center justify-between px-1.5 pb-0.5">
+														<div className="flex items-center gap-1.5">
+															<InputPlusMenu
+																canAttach={canAttach}
+																onAttach={() => fileInputRef.current?.click()}
+															/>
+															{sessionView && (sessionProvider?.models ?? []).length > 0 && (
+																<InputModelPicker
+																	session={sessionView}
+																	models={sessionProvider?.models ?? []}
+																	onChangeModel={(model) =>
+																		void handleChangeModel(sessionView.id, model)
+																	}
+																/>
+															)}
+														</div>
+														<div className="flex items-center gap-1.5">
+															{isVoiceBusy ? (
+																<>
+																	<button
+																		type="button"
+																		onClick={handleVoiceCancel}
+																		className="flex size-7 items-center justify-center rounded border border-foreground/10 text-muted-foreground/70 transition hover:text-foreground hover:border-foreground/20"
+																		title="Cancel voice input"
+																	>
+																		<X className="size-3.5" />
+																	</button>
+																	<button
+																		type="button"
+																		disabled
+																		className="flex size-7 items-center justify-center rounded bg-foreground text-background shadow-[0_0_18px_oklch(1_0_0_/_0.12)] opacity-60"
+																		title={
+																			voiceState.status === "loading-model"
+																				? `Loading model… ${Math.round(voiceState.progress)}%`
+																				: "Transcribing…"
+																		}
+																	>
+																		<Loader2 className="size-3.5 animate-spin" />
+																	</button>
+																</>
+															) : prompt.trim().length > 0 ||
+															  draftAttachments.length > 0 ||
+															  !canUseVoiceInput ? (
+																<button
+																	type="button"
+																	onClick={() => void handleSend()}
+																	disabled={!canSend}
+																	className="flex size-7 items-center justify-center rounded bg-foreground text-background shadow-[0_0_18px_oklch(1_0_0_/_0.12)] transition hover:bg-foreground/85 disabled:opacity-20"
+																>
+																	<Send className="size-3.5" />
+																</button>
+															) : (
+																<button
+																	type="button"
+																	onClick={() => void handleVoiceRecord()}
+																	className="flex size-7 items-center justify-center rounded border border-foreground/10 text-muted-foreground/70 transition hover:text-foreground hover:border-foreground/20"
+																	title="Voice input"
+																>
+																	<Mic className="size-3.5" />
+																</button>
+															)}
+														</div>
+													</div>
+												</div>
+											)}
 											{queuedInputCount > 0 && (
 												<div className="px-4 pb-1.5 text-xs text-muted-foreground/86">
 													{queuedInputCount} queued
