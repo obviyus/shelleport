@@ -11,6 +11,7 @@ All notable changes to shelleport are documented here.
 ### Added
 
 - Browser-local voice input now supports recording and local transcription from the composer, with a waveform recording panel and first-party-hosted runtime assets (#59) (thanks @kesava500)
+- Session views can now open a desktop file browser from the Actions menu, with per-file path copy actions and diff badges sourced from successful Edit tool calls (#62) (thanks @kesava500)
 
 ### Fixed
 
