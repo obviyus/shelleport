@@ -468,7 +468,6 @@ function SessionActionsPopover({
 	copiedConversation,
 	hideThinking,
 	onPin,
-	onDelete,
 	onRename,
 	onCopy,
 	onMoveProject,
@@ -483,7 +482,6 @@ function SessionActionsPopover({
 	copiedConversation: boolean;
 	hideThinking: boolean;
 	onPin: (id: string, pinned: boolean) => void;
-	onDelete: (id: string) => void;
 	onRename: () => void;
 	onCopy: () => void;
 	onMoveProject: (projectId: string | null) => void;
@@ -496,16 +494,9 @@ function SessionActionsPopover({
 	const buttonRef = useRef<HTMLButtonElement>(null);
 	const dropdownRef = useRef<HTMLDivElement>(null);
 	const [pos, setPos] = useState({ top: 0, right: 8 });
-	const [confirmingDelete, setConfirmingDelete] = useState(false);
 	const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 
 	usePopoverDismiss(open, setOpen, buttonRef, dropdownRef);
-
-	useEffect(() => {
-		if (!open) {
-			setConfirmingDelete(false);
-		}
-	}, [open]);
 
 	function handleToggle() {
 		if (!open && buttonRef.current) {
@@ -667,38 +658,6 @@ function SessionActionsPopover({
 									</button>
 								))}
 							</>
-						)}
-						<div className="my-1 border-t border-foreground/8" />
-						{confirmingDelete ? (
-							<div className="flex items-center gap-1.5 px-2.5 py-2">
-								<span className="text-xs text-destructive">Delete?</span>
-								<button
-									type="button"
-									onClick={() => {
-										onDelete(session.id);
-										setOpen(false);
-									}}
-									className="rounded bg-destructive/15 px-2 py-0.5 text-xs font-medium text-destructive transition hover:bg-destructive/25"
-								>
-									Yes
-								</button>
-								<button
-									type="button"
-									onClick={() => setConfirmingDelete(false)}
-									className="rounded bg-foreground/8 px-2 py-0.5 text-xs font-medium text-muted-foreground transition hover:bg-foreground/15"
-								>
-									No
-								</button>
-							</div>
-						) : (
-							<button
-								type="button"
-								onClick={() => setConfirmingDelete(true)}
-								className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition text-destructive/70 hover:bg-destructive/10 hover:text-destructive"
-							>
-								<Trash2 className="size-3.5" />
-								Delete
-							</button>
 						)}
 					</div>,
 					document.body,
@@ -2340,7 +2299,6 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											copiedConversation={copiedConversation}
 											hideThinking={hideThinking}
 											onPin={(id, pinned) => handlePinned(id, pinned)}
-											onDelete={(id) => void handleDelete(id)}
 											onRename={() =>
 												setRenameState({ sessionId: sessionView.id, title: sessionView.title })
 											}
