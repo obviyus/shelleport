@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
 	getToolOutput,
 	copyToClipboard,
+	hasMixedAssistantModels,
 	getSidebarMeta,
 	getSessionHeaderBadges,
 	groupStream,
@@ -376,6 +377,91 @@ describe("groupStream", () => {
 				entries: [expect.objectContaining({ id: "assistant-1" })],
 			},
 		]);
+	});
+});
+
+describe("hasMixedAssistantModels", () => {
+	test("returns false for a single assistant model", () => {
+		const grouped = groupStream([
+			{
+				id: "text-1",
+				sessionId: "session-1",
+				sequence: 1,
+				kind: "text",
+				summary: "Assistant message",
+				data: {
+					role: "assistant",
+					text: "first",
+					model: "claude-sonnet-4-5",
+				},
+				rawProviderEvent: null,
+				createTime: 1,
+			},
+			{
+				id: "text-2",
+				sessionId: "session-1",
+				sequence: 2,
+				kind: "text",
+				summary: "Assistant message",
+				data: {
+					role: "assistant",
+					text: "second",
+					model: "claude-sonnet-4-5",
+				},
+				rawProviderEvent: null,
+				createTime: 2,
+			},
+		]);
+
+		expect(hasMixedAssistantModels(grouped)).toBe(false);
+	});
+
+	test("returns true when assistant model changes across the transcript", () => {
+		const grouped = groupStream([
+			{
+				id: "text-1",
+				sessionId: "session-1",
+				sequence: 1,
+				kind: "text",
+				summary: "Assistant message",
+				data: {
+					role: "assistant",
+					text: "first",
+					model: "claude-sonnet-4-5",
+				},
+				rawProviderEvent: null,
+				createTime: 1,
+			},
+			{
+				id: "user-1",
+				sessionId: "session-1",
+				sequence: 2,
+				kind: "text",
+				summary: "User message",
+				data: {
+					role: "user",
+					text: "switch",
+				},
+				rawProviderEvent: null,
+				createTime: 2,
+			},
+			{
+				id: "text-2",
+				sessionId: "session-1",
+				sequence: 3,
+				kind: "text",
+				summary: "Assistant message",
+				data: {
+					role: "assistant",
+					text: "second",
+					model: "claude-opus-4-1",
+				},
+				rawProviderEvent: null,
+				createTime: 3,
+			},
+		]);
+
+		expect(hasMixedAssistantModels(grouped)).toBe(true);
 	});
 });
 

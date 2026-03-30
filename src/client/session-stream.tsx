@@ -1031,16 +1031,59 @@ export function friendlyModelLabel(modelId: unknown): string {
 	return `Claude (${modelId})`;
 }
 
-export function GroupedEntryRenderer({ group }: { group: GroupedEntry }) {
+function getAssistantModel(group: GroupedEntry): string | null {
+	if (group.type === "assistant-text-run") {
+		const model = group.entries[0]?.data.model;
+		return typeof model === "string" ? model : null;
+	}
+
+	if (group.type !== "single" || group.entry.kind !== "text" || group.entry.data.role !== "assistant") {
+		return null;
+	}
+
+	const model = group.entry.data.model;
+	return typeof model === "string" ? model : null;
+}
+
+export function hasMixedAssistantModels(groups: GroupedEntry[]): boolean {
+	let firstModel: string | null | undefined;
+
+	for (const group of groups) {
+		const model = getAssistantModel(group);
+
+		if (model === null) {
+			continue;
+		}
+
+		if (firstModel === undefined) {
+			firstModel = model;
+			continue;
+		}
+
+		if (firstModel !== model) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+export function GroupedEntryRenderer({
+	group,
+	showModelLabel = false,
+}: {
+	group: GroupedEntry;
+	showModelLabel?: boolean;
+}) {
 	if (group.type === "tool") {
 		return <ToolCard call={group.call} result={group.result} />;
 	}
 
 	if (group.type === "assistant-text-run") {
-		return <AssistantTextRunRenderer entries={group.entries} />;
+		return <AssistantTextRunRenderer entries={group.entries} showModelLabel={showModelLabel} />;
 	}
 
-	return <EventRenderer event={group.entry} />;
+	return <EventRenderer event={group.entry} showModelLabel={showModelLabel} />;
 }
 
 function UserMessageRenderer({ event }: { event: HostEvent }) {
@@ -1198,9 +1241,22 @@ function ToolCard({ call, result }: { call: HostEvent; result: HostEvent | null 
 	);
 }
 
-function AssistantTextRunRenderer({ entries }: { entries: HostEvent[] }) {
+function AssistantTextRunRenderer({
+	entries,
+	showModelLabel,
+}: {
+	entries: HostEvent[];
+	showModelLabel: boolean;
+}) {
+	const label = showModelLabel ? friendlyModelLabel(entries[0]?.data.model) : null;
+
 	return (
 		<div className="animate-event-enter mb-4">
+			{label && (
+				<div className="mb-1 px-1 text-xs uppercase tracking-[0.14em] text-muted-foreground/68">
+					{label}
+				</div>
+			)}
 			<div className="overflow-hidden rounded-lg bg-card/95 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]">
 				<div className="px-4 py-3 text-xs leading-[1.8] text-foreground/92">
 					<MarkdownMessage text={entries.map((entry) => readString(entry.data.text)).join("")} />
@@ -1226,7 +1282,13 @@ function ThinkingBlock({ text }: { text: string }) {
 	);
 }
 
-function EventRenderer({ event }: { event: HostEvent }) {
+function EventRenderer({
+	event,
+	showModelLabel,
+}: {
+	event: HostEvent;
+	showModelLabel: boolean;
+}) {
 	if (event.kind === "text") {
 		if (event.data.role === "user") {
 			return <UserMessageRenderer event={event} />;
@@ -1236,8 +1298,15 @@ function EventRenderer({ event }: { event: HostEvent }) {
 			return <ThinkingBlock text={readString(event.data.text)} />;
 		}
 
+		const label = showModelLabel ? friendlyModelLabel(event.data.model) : null;
+
 		return (
 			<div className="animate-event-enter mb-4">
+				{label && (
+					<div className="mb-1 px-1 text-xs uppercase tracking-[0.14em] text-muted-foreground/68">
+						{label}
+					</div>
+				)}
 				<div className="overflow-hidden rounded-lg bg-card/95 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]">
 					<div className="px-4 py-3 text-xs leading-[1.8] text-foreground/92">
 						<MarkdownMessage text={readString(event.data.text)} />

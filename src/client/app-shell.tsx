@@ -453,6 +453,7 @@ function SessionActionsPopover({
 	copiedConversation,
 	hideThinking,
 	onPin,
+	onDelete,
 	onRename,
 	onCopy,
 	onMoveProject,
@@ -467,6 +468,7 @@ function SessionActionsPopover({
 	copiedConversation: boolean;
 	hideThinking: boolean;
 	onPin: (id: string, pinned: boolean) => void;
+	onDelete: (id: string) => void;
 	onRename: () => void;
 	onCopy: () => void;
 	onMoveProject: (projectId: string | null) => void;
@@ -479,9 +481,16 @@ function SessionActionsPopover({
 	const buttonRef = useRef<HTMLButtonElement>(null);
 	const dropdownRef = useRef<HTMLDivElement>(null);
 	const [pos, setPos] = useState({ top: 0, right: 8 });
+	const [confirmingDelete, setConfirmingDelete] = useState(false);
 	const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 
 	usePopoverDismiss(open, setOpen, buttonRef, dropdownRef);
+
+	useEffect(() => {
+		if (!open) {
+			setConfirmingDelete(false);
+		}
+	}, [open]);
 
 	function handleToggle() {
 		if (!open && buttonRef.current) {
@@ -2247,6 +2256,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											copiedConversation={copiedConversation}
 											hideThinking={hideThinking}
 											onPin={(id, pinned) => handlePinned(id, pinned)}
+											onDelete={(id) => void handleDelete(id)}
 											onRename={() =>
 												setRenameState({ sessionId: sessionView.id, title: sessionView.title })
 											}
