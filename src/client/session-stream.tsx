@@ -178,7 +178,7 @@ function CopyButton({ text, className }: { text: string; className?: string }) {
 		<button
 			type="button"
 			onClick={handleCopy}
-			className={`flex items-center justify-center rounded border border-foreground/10 text-muted-foreground/80 transition hover:border-foreground/18 hover:text-foreground ${className ?? "size-6"}`}
+			className={`flex items-center justify-center rounded border border-foreground/10 text-muted-foreground transition hover:border-foreground/18 hover:text-foreground ${className ?? "size-6"}`}
 			title="Copy to clipboard"
 		>
 			{copied ? <Check className="size-3" /> : <Copy className="size-3" />}
@@ -458,7 +458,7 @@ function DiffStatBlock({ text }: { text: string }) {
 							return (
 								<div
 									key={`${line}-${index}`}
-									className="px-3 py-2 text-xs text-muted-foreground/86"
+									className="px-3 py-2 text-xs text-muted-foreground"
 								>
 									{line}
 								</div>
@@ -482,7 +482,7 @@ function DiffStatBlock({ text }: { text: string }) {
 								className="grid grid-cols-[minmax(0,1fr)_auto_minmax(4rem,9rem)] items-center gap-3 px-3 py-2 text-xs"
 							>
 								<span className="truncate text-foreground/90">{fileName.trim()}</span>
-								<span className="text-muted-foreground/80">{count.trim()}</span>
+								<span className="text-muted-foreground">{count.trim()}</span>
 								<span className="overflow-hidden rounded bg-background/60 px-2 py-1 font-mono text-xs leading-none text-foreground/82">
 									{markers}
 								</span>
@@ -644,12 +644,12 @@ export async function normalizeDraftAttachment(file: File): Promise<DraftAttachm
 }
 
 const STATUS_STYLES: Record<SessionStatus, string> = {
-	idle: "bg-foreground/20",
-	running: "bg-foreground animate-status-pulse",
-	waiting: "bg-foreground/50 animate-status-pulse",
+	idle: "bg-slate-400/50",
+	running: "bg-emerald-400 animate-status-pulse",
+	waiting: "bg-sky-400/70 animate-status-pulse",
 	retrying: "bg-amber-500 animate-status-pulse",
-	failed: "bg-foreground/40",
-	interrupted: "bg-foreground/30",
+	failed: "bg-red-400/60",
+	interrupted: "bg-orange-400/50",
 };
 
 export function formatStatus(session: HostSession, now: number) {
@@ -1114,7 +1114,7 @@ function UserMessageRenderer({ event }: { event: HostEvent }) {
 								{attachments.map((attachment) => (
 									<div
 										key={attachment.name}
-										className="rounded-md border border-foreground/10 bg-background/70 px-2 py-1 text-xs text-muted-foreground/86"
+										className="rounded-md border border-foreground/10 bg-background/70 px-2 py-1 text-xs text-muted-foreground"
 									>
 										{attachment.name}
 									</div>
@@ -1174,45 +1174,34 @@ function ToolCard({ call, result }: { call: HostEvent; result: HostEvent | null 
 
 	return (
 		<details
-			className="animate-event-enter group mb-4 overflow-hidden rounded-lg border border-foreground/10 bg-card/92 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]"
+			className="animate-event-enter group"
 			onToggle={(event) => {
 				if (event.currentTarget.open) {
 					setShouldRenderCode(true);
 				}
 			}}
 		>
-			<summary className="flex cursor-pointer list-none items-center gap-3 px-3 md:px-4 py-3 transition hover:bg-accent/45">
-				<ChevronRight className="size-3 shrink-0 text-muted-foreground transition group-open:rotate-90" />
-				<div className="min-w-0 flex-1">
-					<div className="flex items-center gap-2">
-						<span className="truncate text-xs font-medium text-foreground">
-							{call.data.toolName as string}
-						</span>
-						{isRunning ? (
-							<span className="inline-flex items-center gap-1 rounded border border-foreground/10 px-1.5 py-px text-[10px] uppercase tracking-[0.12em] text-muted-foreground/86">
-								<Loader2 className="size-2.5 animate-spin" />
-								running
-							</span>
-						) : result?.data.isError ? (
-							<span className="rounded border border-destructive/20 px-1.5 py-px text-[10px] uppercase tracking-[0.12em] text-destructive/80">
-								error
-							</span>
-						) : (
-							<span className="rounded border border-foreground/10 px-1.5 py-px text-[10px] uppercase tracking-[0.12em] text-muted-foreground/80">
-								done
-							</span>
-						)}
-					</div>
-					<p className="mt-0.5 truncate text-xs text-muted-foreground/86">{getToolPreview(call)}</p>
-				</div>
+			<summary className="flex cursor-pointer list-none items-center gap-2 px-3 md:px-4 py-1 transition hover:bg-accent/30">
+				<ChevronRight className="size-2.5 shrink-0 text-muted-foreground transition group-open:rotate-90" />
+				<span className="text-xs font-medium text-sky-300 shrink-0">
+					{call.data.toolName as string}
+				</span>
+				{isRunning ? (
+					<Loader2 className="size-2.5 shrink-0 animate-spin text-primary" />
+				) : result?.data.isError ? (
+					<X className="size-2.5 shrink-0 text-destructive" />
+				) : (
+					<Check className="size-2.5 shrink-0 text-emerald-400" />
+				)}
+				<span className="min-w-0 truncate text-xs text-muted-foreground">{getToolPreview(call)}</span>
 			</summary>
-			<div className="border-t border-foreground/12 bg-background/35 px-4 py-3">
+			<div className="ml-[18px] md:ml-[22px] mb-1 mt-0.5 overflow-hidden rounded-md border border-foreground/10 bg-card/90">
 				{hasOutput ? (
 					isDiffStat ? (
 						<DiffStatBlock text={content} />
 					) : (
-						<div className="overflow-hidden rounded-md border border-foreground/10 bg-card/90">
-							<div className="flex items-center justify-between border-b border-foreground/12 px-3 py-2 text-xs text-muted-foreground/80">
+						<>
+							<div className="flex items-center justify-between border-b border-foreground/10 px-3 py-1.5 text-xs text-muted-foreground">
 								<span>{fileName}</span>
 								<div className="flex items-center gap-2">
 									{strippedRead && strippedRead.matched > 0 && (
@@ -1230,15 +1219,15 @@ function ToolCard({ call, result }: { call: HostEvent; result: HostEvent | null 
 										</div>
 									</>
 								) : (
-									<div className="px-3 py-2 text-xs text-muted-foreground/80">
+									<div className="px-3 py-1.5 text-xs text-muted-foreground">
 										Open to load preview
 									</div>
 								)}
 							</div>
-						</div>
+						</>
 					)
 				) : (
-					<p className="text-xs text-muted-foreground/80">No output</p>
+					<p className="px-3 py-1.5 text-xs text-muted-foreground">No output</p>
 				)}
 			</div>
 		</details>
@@ -1257,7 +1246,7 @@ function AssistantTextRunRenderer({
 	return (
 		<div className="animate-event-enter mb-4">
 			{label && (
-				<div className="mb-1 px-1 text-xs uppercase tracking-[0.14em] text-muted-foreground/68">
+				<div className="mb-1 px-1 text-xs uppercase tracking-[0.14em] text-muted-foreground">
 					{label}
 				</div>
 			)}
@@ -1275,7 +1264,7 @@ function ThinkingBlock({ text }: { text: string }) {
 		<details className="animate-event-enter group mb-4 overflow-hidden rounded-lg border border-foreground/10 bg-card/92 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]">
 			<summary className="flex cursor-pointer list-none items-center gap-2 px-3 md:px-4 py-2.5 transition hover:bg-accent/45">
 				<ChevronRight className="size-3 shrink-0 text-muted-foreground transition group-open:rotate-90" />
-				<span className="text-xs text-muted-foreground/80">Thinking</span>
+				<span className="text-xs text-violet-400/80">Thinking</span>
 			</summary>
 			<div className="border-t border-foreground/12 bg-background/35 px-4 py-3">
 				<div className="text-xs leading-[1.8] text-foreground/80">
@@ -1301,7 +1290,7 @@ function EventRenderer({ event, showModelLabel }: { event: HostEvent; showModelL
 		return (
 			<div className="animate-event-enter mb-4">
 				{label && (
-					<div className="mb-1 px-1 text-xs uppercase tracking-[0.14em] text-muted-foreground/68">
+					<div className="mb-1 px-1 text-xs uppercase tracking-[0.14em] text-muted-foreground">
 						{label}
 					</div>
 				)}
@@ -1324,18 +1313,14 @@ function EventRenderer({ event, showModelLabel }: { event: HostEvent; showModelL
 
 	if (event.kind === "state") {
 		return (
-			<div className="animate-event-enter mb-4 rounded-lg border border-foreground/10 bg-card/88 px-4 py-2 text-xs text-muted-foreground/86">
+			<div className="animate-event-enter mb-4 rounded-lg border border-foreground/10 bg-card/88 px-4 py-2 text-xs text-muted-foreground">
 				{readString(event.data.message) || event.summary}
 			</div>
 		);
 	}
 
 	if (event.kind === "system") {
-		return (
-			<div className="animate-event-enter mb-4 text-center text-xs uppercase tracking-[0.14em] text-muted-foreground/65">
-				{event.summary}
-			</div>
-		);
+		return null;
 	}
 
 	return null;

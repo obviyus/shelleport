@@ -41,7 +41,7 @@ html {
 	--secondary-foreground: oklch(0.76 0.015 250);
 
 	--muted: oklch(0.13 0.01 260);
-	--muted-foreground: oklch(0.62 0.015 250);
+	--muted-foreground: oklch(0.78 0.03 250);
 
 	--accent: oklch(0.16 0.015 260);
 	--accent-foreground: oklch(0.92 0.008 250);

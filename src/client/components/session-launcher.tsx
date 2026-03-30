@@ -273,9 +273,9 @@ function DirectoryColumn({
 						<p className="truncate text-[11px] font-medium text-foreground/92">
 							{getPathName(path)}
 						</p>
-						<p className="mt-0.5 truncate text-[10px] text-muted-foreground/68">{path}</p>
+						<p className="mt-0.5 truncate text-[10px] text-muted-foreground">{path}</p>
 					</div>
-					{isLoading && <Loader2 className="size-3 animate-spin text-muted-foreground/78" />}
+					{isLoading && <Loader2 className="size-3 animate-spin text-muted-foreground" />}
 				</div>
 				<div className="relative mt-2">
 					<label htmlFor={searchInputId} className="sr-only">
@@ -283,7 +283,7 @@ function DirectoryColumn({
 					</label>
 					<Search
 						aria-hidden="true"
-						className="pointer-events-none absolute top-1/2 left-2.5 size-3 -translate-y-1/2 text-muted-foreground/72"
+						className="pointer-events-none absolute top-1/2 left-2.5 size-3 -translate-y-1/2 text-muted-foreground"
 					/>
 					<input
 						id={searchInputId}
@@ -300,7 +300,7 @@ function DirectoryColumn({
 						placeholder="Search…"
 						aria-controls={listId}
 						autoComplete="off"
-						className="h-10 md:h-8 w-full rounded-md border border-foreground/10 bg-background/55 pr-2 pl-7 text-[11px] text-foreground outline-none transition placeholder:text-muted-foreground/68 focus-visible:border-foreground/20 focus-visible:ring-1 focus-visible:ring-foreground/12"
+						className="h-10 md:h-8 w-full rounded-md border border-foreground/10 bg-background/55 pr-2 pl-7 text-[11px] text-foreground outline-none transition placeholder:text-muted-foreground focus-visible:border-foreground/20 focus-visible:ring-1 focus-visible:ring-foreground/12"
 					/>
 				</div>
 			</header>
@@ -359,7 +359,7 @@ function DirectoryColumn({
 										) : (
 											<Folder
 												aria-hidden="true"
-												className="size-3.5 shrink-0 text-muted-foreground/74"
+												className="size-3.5 shrink-0 text-muted-foreground"
 											/>
 										)}
 										<span className="min-w-0 flex-1 truncate">{entry.name}</span>
@@ -385,7 +385,7 @@ function DirectoryColumn({
 													? "bg-foreground/8 text-foreground/72"
 													: isActive
 														? "bg-foreground/14 text-foreground/72"
-														: "text-muted-foreground/72"
+														: "text-muted-foreground"
 										}`}
 									>
 										<FileText aria-hidden="true" className="size-3.5 shrink-0" />
@@ -395,7 +395,7 @@ function DirectoryColumn({
 							})}
 						</div>
 					) : (
-						<div className="flex h-full items-center justify-center px-4 text-center text-[11px] text-muted-foreground/72">
+						<div className="flex h-full items-center justify-center px-4 text-center text-[11px] text-muted-foreground">
 							{normalizedQuery.length > 0 ? "No matches" : "Empty directory"}
 						</div>
 					)
@@ -727,7 +727,7 @@ export function SessionLauncher({
 										value={newProjectName}
 										onChange={(event) => setNewProjectName(event.target.value)}
 										placeholder="Project name…"
-										className="h-7 flex-1 rounded-md border border-foreground/10 bg-card/90 px-2.5 text-[10px] text-foreground outline-none transition placeholder:text-muted-foreground/70 focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
+										className="h-7 flex-1 rounded-md border border-foreground/10 bg-card/90 px-2.5 text-[10px] text-foreground outline-none transition placeholder:text-muted-foreground focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
 									/>
 									<button
 										type="button"
@@ -780,7 +780,7 @@ export function SessionLauncher({
 								onChange={(event) => setTitle(event.target.value)}
 								autoComplete="off"
 								placeholder="Optional session title…"
-								className="h-7 w-full rounded-md border border-foreground/10 bg-card/90 px-2.5 text-[10px] text-foreground outline-none transition placeholder:text-muted-foreground/70 focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
+								className="h-7 w-full rounded-md border border-foreground/10 bg-card/90 px-2.5 text-[10px] text-foreground outline-none transition placeholder:text-muted-foreground focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
 							/>
 						</div>
 
@@ -869,7 +869,7 @@ export function SessionLauncher({
 									onChange={(event) => setSaveAsProject(event.target.checked)}
 									className="rounded border border-foreground/20 accent-foreground"
 								/>
-								<label htmlFor="saveAsProject" className="text-[10px] text-muted-foreground/70">
+								<label htmlFor="saveAsProject" className="text-[10px] text-muted-foreground">
 									Save as project
 								</label>
 								{saveAsProject && (
@@ -878,7 +878,7 @@ export function SessionLauncher({
 										value={saveAsProjectName}
 										onChange={(event) => setSaveAsProjectName(event.target.value)}
 										placeholder="Name…"
-										className="h-6 w-28 rounded border border-foreground/10 bg-card/90 px-2 text-[10px] text-foreground outline-none placeholder:text-muted-foreground/70 focus-visible:border-foreground/22"
+										className="h-6 w-28 rounded border border-foreground/10 bg-card/90 px-2 text-[10px] text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-foreground/22"
 									/>
 								)}
 							</div>
@@ -914,7 +914,7 @@ export function SessionLauncher({
 							<ChevronLeft className="size-3.5" />
 							Back
 						</button>
-						<div className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground/80">
+						<div className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
 							{currentPath}
 						</div>
 					</div>

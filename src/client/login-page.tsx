@@ -90,7 +90,7 @@ export function LoginPage() {
 					</button>
 				</form>
 
-				<div className="mt-4 rounded-md border border-border bg-card/80 px-4 py-3 text-[11px] leading-[1.7] text-muted-foreground/78">
+				<div className="mt-4 rounded-md border border-border bg-card/80 px-4 py-3 text-[11px] leading-[1.7] text-muted-foreground">
 					<p>The first launch prints the token once in the terminal.</p>
 					<p className="mt-1">
 						Need another one? Run{" "}
@@ -106,7 +106,7 @@ export function LoginPage() {
 					</p>
 				</div>
 
-				<p className="mt-10 text-center text-[11px] text-muted-foreground/65">
+				<p className="mt-10 text-center text-[11px] text-muted-foreground">
 					Session secured with an HTTP-only cookie
 				</p>
 			</div>

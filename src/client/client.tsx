@@ -41,7 +41,7 @@ function BootLoader() {
 
 	if (!boot) {
 		return (
-			<div className="flex min-h-screen items-center justify-center bg-background text-[11px] uppercase tracking-[0.14em] text-muted-foreground/60">
+			<div className="flex min-h-screen items-center justify-center bg-background text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
 				Loading
 			</div>
 		);

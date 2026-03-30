@@ -129,11 +129,11 @@ export const SessionTranscript = memo(function SessionTranscript({
 				>
 					{isSessionPending ? (
 						<div className="flex h-full items-center justify-center">
-							<Loader2 className="size-4 animate-spin text-muted-foreground/80" />
+							<Loader2 className="size-4 animate-spin text-muted-foreground" />
 						</div>
 					) : session && grouped.length === 0 && !isRunning ? (
 						<div className="flex h-full items-center justify-center">
-							<p className="text-xs text-muted-foreground/80">Send a message to start</p>
+							<p className="text-xs text-muted-foreground">Send a message to start</p>
 						</div>
 					) : session ? (
 						<div className="mx-auto max-w-[70rem]">
@@ -143,7 +143,7 @@ export const SessionTranscript = memo(function SessionTranscript({
 										type="button"
 										onClick={() => void handleLoadEarlier()}
 										disabled={loadingEarlier}
-										className="flex items-center gap-1.5 rounded-md border border-foreground/10 bg-card/90 px-3 py-1.5 text-[11px] text-muted-foreground/88 transition hover:border-foreground/18 hover:text-foreground disabled:opacity-40"
+										className="flex items-center gap-1.5 rounded-md border border-foreground/10 bg-card/90 px-3 py-1.5 text-[11px] text-muted-foreground transition hover:border-foreground/18 hover:text-foreground disabled:opacity-40"
 									>
 										{loadingEarlier ? <Loader2 className="size-3 animate-spin" /> : null}
 										Load earlier messages
@@ -151,7 +151,7 @@ export const SessionTranscript = memo(function SessionTranscript({
 								</div>
 							)}
 							{statusMessage && (
-								<div className="mb-5 rounded-lg border border-foreground/10 bg-card/90 px-4 py-3 text-[11px] text-muted-foreground/88">
+								<div className="mb-5 rounded-lg border border-foreground/10 bg-card/90 px-4 py-3 text-[11px] text-muted-foreground">
 									{statusMessage}
 								</div>
 							)}
