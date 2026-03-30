@@ -1182,13 +1182,13 @@ function UserMessageRenderer({ event }: { event: HostEvent }) {
 
 	return (
 		<div className="animate-event-enter group mb-4 flex justify-end">
-			<div className="max-w-[90%] min-w-0 md:min-w-[14rem]">
-				<div className="overflow-hidden rounded-lg border border-foreground/10 bg-card/95 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]">
+			<div className="max-w-[90%]">
+				<div className="overflow-hidden rounded-lg bg-foreground/[0.07]">
 					<div className="px-4 py-3 text-sm leading-[1.8] text-foreground/92">
 						<MarkdownMessage text={readString(event.data.text)} />
 					</div>
 					{attachments.length > 0 && (
-						<div className="border-t border-foreground/12 bg-background/40 px-4 py-2">
+						<div className="border-t border-foreground/8 bg-background/30 px-4 py-2">
 							<div className="flex flex-wrap gap-2">
 								{attachments.map((attachment) => (
 									<div
@@ -1331,10 +1331,8 @@ function AssistantTextRunRenderer({
 					{label}
 				</div>
 			)}
-			<div className="overflow-hidden rounded-lg bg-card/95 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]">
-				<div className="px-4 py-3 text-sm leading-[1.8] text-foreground/92">
-					<MarkdownMessage text={entries.map((entry) => readString(entry.data.text)).join("")} />
-				</div>
+			<div className="px-1 py-1 text-sm leading-[1.8] text-foreground/92">
+				<MarkdownMessage text={entries.map((entry) => readString(entry.data.text)).join("")} />
 			</div>
 		</div>
 	);
@@ -1373,10 +1371,8 @@ function EventRenderer({ event, showModelLabel }: { event: HostEvent; showModelL
 						{label}
 					</div>
 				)}
-				<div className="overflow-hidden rounded-lg bg-card/95 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]">
-					<div className="px-4 py-3 text-sm leading-[1.8] text-foreground/92">
-						<MarkdownMessage text={readString(event.data.text)} />
-					</div>
+				<div className="px-1 py-1 text-sm leading-[1.8] text-foreground/92">
+					<MarkdownMessage text={readString(event.data.text)} />
 				</div>
 			</div>
 		);
