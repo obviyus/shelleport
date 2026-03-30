@@ -23,12 +23,14 @@ describe("session limits", () => {
 					resetsAt: 1,
 					utilization: null,
 					status: "allowed_warning",
+					isUsingOverage: null,
 				},
 				{
 					window: "weekly",
 					resetsAt: 2,
 					utilization: 42,
 					status: "active",
+					isUsingOverage: null,
 				},
 			]),
 		).toEqual([
@@ -37,6 +39,7 @@ describe("session limits", () => {
 				resetsAt: 2,
 				utilization: 42,
 				status: "active",
+				isUsingOverage: null,
 			},
 		]);
 	});
@@ -49,6 +52,7 @@ describe("session limits", () => {
 				resetsAt: 1,
 				utilization: null,
 				status: "allowed_warning",
+				isUsingOverage: null,
 			}),
 		).toBeNull();
 	});
@@ -70,22 +74,22 @@ describe("getSessionHeaderBadges", () => {
 		expect(badges).toEqual([
 			{
 				key: "in:12",
-				label: "in 12",
+				label: "12",
 				visibility: "xl",
 			},
 			{
 				key: "out:4",
-				label: "out 4",
+				label: "4",
 				visibility: "xl",
 			},
 			{
 				key: "cache-read:1200",
-				label: "cache read 1,200",
+				label: "1,200",
 				visibility: "xl",
 			},
 			{
 				key: "cache-write:600",
-				label: "cache write 600",
+				label: "600",
 				visibility: "xl",
 			},
 			{
@@ -111,12 +115,12 @@ describe("getSessionHeaderBadges", () => {
 		expect(badges).toEqual([
 			{
 				key: "in:1",
-				label: "in 1",
+				label: "1",
 				visibility: "xl",
 			},
 			{
 				key: "out:2",
-				label: "out 2",
+				label: "2",
 				visibility: "xl",
 			},
 		]);
