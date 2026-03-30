@@ -23,6 +23,8 @@ import { createProject, fetchDirectory } from "~/client/api";
 import { useToast } from "~/client/components/toast";
 import {
 	getDefaultPermissionMode,
+	getSupportedEffortLevels,
+	normalizeEffortLevel,
 	type DirectoryEntry,
 	type DirectoryListing,
 	type EffortLevel,
@@ -38,6 +40,11 @@ const EFFORT_LEVELS: { id: EffortLevel; label: string }[] = [
 	{ id: "high", label: "High" },
 	{ id: "max", label: "Max" },
 ];
+
+function getEffortLevels(modelId: string | null) {
+	const supportedLevels = getSupportedEffortLevels(modelId);
+	return EFFORT_LEVELS.filter((level) => supportedLevels.includes(level.id));
+}
 
 type SessionLauncherProps = {
 	createDisabledReason: string | null;
@@ -458,6 +465,7 @@ export function SessionLauncher({
 	const [isCreatingProject, setIsCreatingProject] = useState(false);
 	const [saveAsProject, setSaveAsProject] = useState(false);
 	const [saveAsProjectName, setSaveAsProjectName] = useState("");
+	const effortLevels = getEffortLevels(selectedModel);
 
 	useEffect(() => {
 		const mql = window.matchMedia("(max-width: 767px)");
@@ -656,7 +664,7 @@ export function SessionLauncher({
 									title.trim(),
 									permissionMode,
 									selectedModel ?? undefined,
-									selectedEffort,
+									normalizeEffortLevel(selectedModel, selectedEffort),
 									projectIdToUse ?? undefined,
 								);
 							}}
@@ -809,14 +817,9 @@ export function SessionLauncher({
 											type="button"
 											onClick={() => {
 												setSelectedModel(model.id);
-												// reset max effort if switching away from opus
-												if (
-													selectedEffort === "max" &&
-													model.id !== "opus" &&
-													model.id !== "opus[1m]"
-												) {
-													setSelectedEffort("high");
-												}
+												setSelectedEffort(
+													(current) => normalizeEffortLevel(model.id, current) ?? "medium",
+												);
 											}}
 											className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
 												selectedModel === model.id
@@ -832,16 +835,13 @@ export function SessionLauncher({
 						)}
 
 						{/* Row 2.5: Effort (only shown for non-haiku models) */}
-						{models.length > 0 && !selectedModel?.includes("haiku") && (
+						{effortLevels.length > 0 && (
 							<div className="space-y-1.5">
 								<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
 									Effort
 								</p>
 								<div className="flex flex-wrap gap-1.5">
-									{EFFORT_LEVELS.filter(
-										(e) =>
-											e.id !== "max" || selectedModel === "opus" || selectedModel === "opus[1m]",
-									).map((level) => (
+									{effortLevels.map((level) => (
 										<button
 											key={level.id}
 											type="button"

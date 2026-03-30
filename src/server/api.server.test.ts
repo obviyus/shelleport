@@ -2117,6 +2117,59 @@ describe("handleApiRequest", () => {
 		});
 	});
 
+	test("rejects create-session effort that does not match the selected model", async () => {
+		const response = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "claude",
+					cwd: testRoot,
+					model: "haiku",
+					effort: "medium",
+				}),
+			}),
+		);
+
+		expect(response.status).toBe(400);
+		expect(await response.json()).toMatchObject({
+			code: "invalid_effort",
+		});
+	});
+
+	test("rejects model changes that leave an existing session with invalid effort", async () => {
+		const session = sessionStore.createSession({
+			provider: "claude",
+			cwd: testRoot,
+			title: "Needs clamp",
+			model: "opus",
+			effort: "max",
+			permissionMode: "default",
+			allowedTools: [],
+		});
+
+		const response = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${session.id}/meta`, {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					model: "sonnet",
+				}),
+			}),
+		);
+
+		expect(response.status).toBe(400);
+		expect(await response.json()).toMatchObject({
+			code: "invalid_effort",
+		});
+	});
+
 	test("rejects too many attachments", async () => {
 		const createResponse = await handleApiRequest(
 			new Request("http://localhost/api/sessions", {
