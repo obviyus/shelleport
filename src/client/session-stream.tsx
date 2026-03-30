@@ -321,18 +321,27 @@ export function getSessionLimits(entries: HostEvent[]) {
 
 export function orderSessionLimits(limits: SessionLimit[]) {
 	const orderedWindows = ["five_hour", "weekly"];
+	const aliases: Record<string, string> = { seven_day: "weekly" };
 	const ordered: LimitSnapshot[] = [];
+	const includedWindows = new Set<string>();
 
 	for (const window of orderedWindows) {
 		const limit = limits.find((candidate) => candidate.window === window);
 
 		if (limit) {
 			ordered.push(limit as LimitSnapshot);
+			includedWindows.add(window);
 		}
 	}
 
 	for (const limit of limits) {
 		if (!limit.window || orderedWindows.includes(limit.window)) {
+			continue;
+		}
+
+		const canonical = limit.window ? aliases[limit.window] : undefined;
+
+		if (canonical && includedWindows.has(canonical)) {
 			continue;
 		}
 
@@ -347,7 +356,7 @@ export function formatSessionLimitLabel(window: string) {
 		return "5 hour";
 	}
 
-	if (window === "weekly") {
+	if (window === "weekly" || window === "seven_day") {
 		return "Weekly";
 	}
 
@@ -364,7 +373,7 @@ export function formatSessionLimitReset(limit: SessionLimit, now: number) {
 
 export function formatSessionLimitUsage(limit: SessionLimit) {
 	if (limit.utilization === null) {
-		return limit.status ?? "active";
+		return null;
 	}
 
 	return `${Math.round(limit.utilization)}% used`;
