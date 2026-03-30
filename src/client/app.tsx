@@ -1,9 +1,12 @@
+import { Agentation } from "agentation";
 import { AppShell } from "~/client/app-shell";
 import type { AppBootData } from "~/client/boot";
 import { ToastProvider } from "~/client/components/toast";
 import { LoginPage } from "~/client/login-page";
 import { NotFoundPage } from "~/client/not-found-page";
 import { useCurrentRoute } from "~/client/router";
+
+const isDevelopment = process.env.NODE_ENV !== "production";
 
 export function App({ boot }: { boot: AppBootData }) {
 	const route = useCurrentRoute();
@@ -23,6 +26,7 @@ export function App({ boot }: { boot: AppBootData }) {
 	return (
 		<ToastProvider>
 			<AppShell boot={boot} />
+			{isDevelopment && <Agentation endpoint="http://localhost:4747" />}
 		</ToastProvider>
 	);
 }
