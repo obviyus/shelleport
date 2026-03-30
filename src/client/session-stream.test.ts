@@ -23,18 +23,14 @@ describe("session limits", () => {
 					window: "seven_day",
 					resetsAt: 1,
 					utilization: null,
-					isUsingOverage: null,
 					status: "allowed_warning",
-					isUsingOverage: null,
 				},
 				{
 					isUsingOverage: null,
 					window: "weekly",
 					resetsAt: 2,
 					utilization: 42,
-					isUsingOverage: null,
 					status: "active",
-					isUsingOverage: null,
 				},
 			]),
 		).toEqual([
@@ -43,9 +39,7 @@ describe("session limits", () => {
 				window: "weekly",
 				resetsAt: 2,
 				utilization: 42,
-				isUsingOverage: null,
 				status: "active",
-				isUsingOverage: null,
 			},
 		]);
 	});
@@ -58,9 +52,7 @@ describe("session limits", () => {
 				window: "seven_day",
 				resetsAt: 1,
 				utilization: null,
-				isUsingOverage: null,
 				status: "allowed_warning",
-				isUsingOverage: null,
 			}),
 		).toBeNull();
 	});
