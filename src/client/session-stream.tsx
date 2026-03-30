@@ -1169,7 +1169,12 @@ export function GroupedEntryRenderer({
 	}
 
 	if (group.type === "assistant-text-run") {
-		return <AssistantTextRunRenderer entries={group.entries} showModelLabel={showModelLabel} />;
+		return (
+			<AssistantTextBlock
+				label={showModelLabel ? friendlyModelLabel(group.entries[0]?.data.model) : null}
+				text={group.entries.map((entry) => readString(entry.data.text)).join("")}
+			/>
+		);
 	}
 
 	return <EventRenderer event={group.entry} showModelLabel={showModelLabel} />;
@@ -1321,15 +1326,7 @@ function ToolCard({ call, result }: { call: HostEvent; result: HostEvent | null 
 	);
 }
 
-function AssistantTextRunRenderer({
-	entries,
-	showModelLabel,
-}: {
-	entries: HostEvent[];
-	showModelLabel: boolean;
-}) {
-	const label = showModelLabel ? friendlyModelLabel(entries[0]?.data.model) : null;
-
+function AssistantTextBlock({ label, text }: { label: string | null; text: string }) {
 	return (
 		<div className="animate-event-enter mb-4">
 			{label && (
@@ -1338,7 +1335,7 @@ function AssistantTextRunRenderer({
 				</div>
 			)}
 			<div className="px-1 py-1 text-sm leading-[1.8] text-foreground/92">
-				<MarkdownMessage text={entries.map((entry) => readString(entry.data.text)).join("")} />
+				<MarkdownMessage text={text} />
 			</div>
 		</div>
 	);
@@ -1368,19 +1365,11 @@ function EventRenderer({ event, showModelLabel }: { event: HostEvent; showModelL
 			return <ThinkingBlock text={readString(event.data.text)} />;
 		}
 
-		const label = showModelLabel ? friendlyModelLabel(event.data.model) : null;
-
 		return (
-			<div className="animate-event-enter mb-4">
-				{label && (
-					<div className="mb-1 px-1 text-xs uppercase tracking-[0.14em] text-muted-foreground">
-						{label}
-					</div>
-				)}
-				<div className="px-1 py-1 text-sm leading-[1.8] text-foreground/92">
-					<MarkdownMessage text={readString(event.data.text)} />
-				</div>
-			</div>
+			<AssistantTextBlock
+				label={showModelLabel ? friendlyModelLabel(event.data.model) : null}
+				text={readString(event.data.text)}
+			/>
 		);
 	}
 
