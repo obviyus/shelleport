@@ -1081,7 +1081,7 @@ export function getStreamEditDiffs(stream: HostEvent[]): Map<string, FileEditDif
 		const toolUseId = typeof event.data.toolUseId === "string" ? event.data.toolUseId : null;
 		if (toolUseId) {
 			const result = resultsByToolUseId.get(toolUseId);
-			if (result?.data.isError) continue;
+			if (!result || result.data.isError) continue;
 		}
 		const existing = diffs.get(filePath) ?? { added: 0, removed: 0, edits: [] };
 		existing.removed += oldString.split("\n").length;
