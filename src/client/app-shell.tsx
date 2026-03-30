@@ -200,6 +200,7 @@ function orderSessions(nextSessions: HostSession[]) {
 }
 
 const CLAUDE_BYPASS_WARNING_KEY = "shelleport.claude-bypass-warning-dismissed";
+const HIDDEN_THINKING_KEY = "shelleport.hidden-thinking-session-ids";
 
 function formatPermissionModeLabel(session: HostSession) {
 	if (session.provider !== "claude") {
@@ -1213,7 +1214,14 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const [streamState, setStreamState] = useState<"connected" | "reconnecting">("connected");
 	const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const [copiedConversation, setCopiedConversation] = useState(false);
-	const [hiddenThinkingSessionIds, setHiddenThinkingSessionIds] = useState<string[]>([]);
+	const [hiddenThinkingSessionIds, setHiddenThinkingSessionIds] = useState<string[]>(() => {
+		try {
+			const stored = window.localStorage.getItem(HIDDEN_THINKING_KEY);
+			return stored ? (JSON.parse(stored) as string[]) : [];
+		} catch {
+			return [];
+		}
+	});
 	const [fileBrowserOpen, setFileBrowserOpen] = useState(false);
 	const [renameState, setRenameState] = useState<{ sessionId: string; title: string } | null>(null);
 	const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -2518,11 +2526,12 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 														return current;
 													}
 
-													if (current.includes(selectedId)) {
-														return current.filter((id) => id !== selectedId);
-													}
+													const next = current.includes(selectedId)
+														? current.filter((id) => id !== selectedId)
+														: [...current, selectedId];
 
-													return [...current, selectedId];
+													window.localStorage.setItem(HIDDEN_THINKING_KEY, JSON.stringify(next));
+													return next;
 												})
 											}
 											onExportMarkdown={() => {
