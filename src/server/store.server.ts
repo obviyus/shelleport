@@ -651,7 +651,10 @@ function addUsageTotals(total: SessionUsage | null, next: SessionUsage | null) {
 		outputTokens: total.outputTokens + next.outputTokens,
 		cacheReadInputTokens: total.cacheReadInputTokens + next.cacheReadInputTokens,
 		cacheCreationInputTokens: total.cacheCreationInputTokens + next.cacheCreationInputTokens,
-		costUsd: total.costUsd === null || next.costUsd === null ? null : total.costUsd + next.costUsd,
+		costUsd:
+			total.costUsd === null && next.costUsd === null
+				? null
+				: (total.costUsd ?? 0) + (next.costUsd ?? 0),
 		model: next.model ?? total.model,
 	} satisfies SessionUsage;
 }

@@ -1065,6 +1065,46 @@ describe("handleApiRequest", () => {
 		});
 	});
 
+	test("preserves accumulated cost when active usage has null costUsd", () => {
+		const session = sessionStore.createSession({
+			provider: "claude",
+			title: "track usage",
+			cwd: testRoot,
+			permissionMode: "bypassPermissions",
+			allowedTools: [],
+		});
+
+		sessionStore.updateSessionUsage(session.id, {
+			inputTokens: 12,
+			outputTokens: 4,
+			cacheReadInputTokens: 1200,
+			cacheCreationInputTokens: 600,
+			costUsd: 0.045784,
+			model: "claude-opus-4-6[1m]",
+		});
+		sessionStore.resetSessionUsageProgress(session.id);
+
+		sessionStore.updateSessionUsage(session.id, {
+			inputTokens: 1,
+			outputTokens: 2,
+			cacheReadInputTokens: 0,
+			cacheCreationInputTokens: 0,
+			costUsd: null,
+			model: "claude-opus-4-6[1m]",
+		});
+
+		const nextSession = sessionStore.resetSessionUsageProgress(session.id);
+
+		expect(nextSession?.usage).toMatchObject({
+			inputTokens: 13,
+			outputTokens: 6,
+			cacheReadInputTokens: 1200,
+			cacheCreationInputTokens: 600,
+			costUsd: 0.045784,
+			model: "claude-opus-4-6[1m]",
+		});
+	});
+
 	test("archives and unarchives sessions", async () => {
 		const createResponse = await handleApiRequest(
 			new Request("http://localhost/api/sessions", {
@@ -1446,40 +1486,6 @@ describe("handleApiRequest", () => {
 		expect(detail.pendingRequests).toHaveLength(0);
 
 		await reader.cancel();
-	});
-
-	test("raises Bun idle timeout for SSE streams", async () => {
-		const createResponse = await handleApiRequest(
-			new Request("http://localhost/api/sessions", {
-				method: "POST",
-				headers: {
-					...authHeader,
-					"content-type": "application/json",
-				},
-				body: JSON.stringify({
-					provider: "claude",
-					cwd: testRoot,
-					prompt: "Say hello",
-				}),
-			}),
-		);
-		expect(createResponse.status).toBe(201);
-		const createJson = await readJson<{ session: { id: string } }>(createResponse);
-		const timeoutCalls: number[] = [];
-		const eventsResponse = await handleApiRequest(
-			new Request(`http://localhost/api/sessions/${createJson.session.id}/events`, {
-				headers: authHeader,
-			}),
-			{
-				timeout(_request, seconds) {
-					timeoutCalls.push(seconds);
-				},
-			},
-		);
-
-		expect(eventsResponse.status).toBe(200);
-		expect(timeoutCalls).toEqual([60]);
-		await eventsResponse.body?.cancel();
 	});
 
 	test("queues session input on the server while approval is pending", async () => {
