@@ -242,8 +242,16 @@ function validateMetaInput(payload: SessionMetaPayload) {
 		}
 	}
 
+	if (payload.effort !== undefined) {
+		hasField = true;
+		const validEfforts = ["low", "medium", "high", "max"];
+		if (payload.effort !== null && !validEfforts.includes(payload.effort)) {
+			throw new ApiError(400, "invalid_effort", "effort must be low, medium, high, max, or null");
+		}
+	}
+
 	if (!hasField) {
-		throw new ApiError(400, "invalid_session_meta", "title, pinned, or model is required");
+		throw new ApiError(400, "invalid_session_meta", "title, pinned, model, or effort is required");
 	}
 }
 

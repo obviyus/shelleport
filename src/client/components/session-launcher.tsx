@@ -25,11 +25,19 @@ import {
 	getDefaultPermissionMode,
 	type DirectoryEntry,
 	type DirectoryListing,
+	type EffortLevel,
 	type PermissionMode,
 	type ProviderModel,
 	type ProviderId,
 	type Project,
 } from "~/shared/shelleport";
+
+const EFFORT_LEVELS: { id: EffortLevel; label: string }[] = [
+	{ id: "low", label: "Low" },
+	{ id: "medium", label: "Medium" },
+	{ id: "high", label: "High" },
+	{ id: "max", label: "Max" },
+];
 
 type SessionLauncherProps = {
 	createDisabledReason: string | null;
@@ -43,6 +51,7 @@ type SessionLauncherProps = {
 		title: string,
 		permissionMode: PermissionMode,
 		model?: string,
+		effort?: EffortLevel,
 		projectId?: string,
 	) => void | Promise<void>;
 	projects: Project[];
@@ -435,7 +444,9 @@ export function SessionLauncher({
 	const browserRef = useRef<HTMLDivElement>(null);
 	const columnRefs = useRef<Record<string, HTMLElement | null>>({});
 	const [focusPath, setFocusPath] = useState<string | null>(null);
-	const [selectedModel, setSelectedModel] = useState<string | null>(null);
+	const defaultModel = models.find((m) => m.id === "sonnet")?.id ?? models[0]?.id ?? null;
+	const [selectedModel, setSelectedModel] = useState<string | null>(defaultModel);
+	const [selectedEffort, setSelectedEffort] = useState<EffortLevel | null>(null);
 	const [permissionMode, setPermissionMode] = useState<PermissionMode>(
 		createProviderId ? getDefaultPermissionMode(createProviderId) : "default",
 	);
@@ -645,6 +656,7 @@ export function SessionLauncher({
 									title.trim(),
 									permissionMode,
 									selectedModel ?? undefined,
+									selectedEffort ?? undefined,
 									projectIdToUse ?? undefined,
 								);
 							}}
@@ -791,22 +803,22 @@ export function SessionLauncher({
 									Model
 								</p>
 								<div className="flex flex-wrap gap-1.5">
-									<button
-										type="button"
-										onClick={() => setSelectedModel(null)}
-										className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
-											selectedModel === null
-												? "border-foreground/20 bg-foreground text-background"
-												: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
-										}`}
-									>
-										Default
-									</button>
 									{models.map((model) => (
 										<button
 											key={model.id}
 											type="button"
-											onClick={() => setSelectedModel(model.id)}
+											onClick={() => {
+												setSelectedModel(model.id);
+												// reset max effort if switching away from opus
+												if (
+													selectedEffort === "max" &&
+													model.id !== "opus" &&
+													model.id !== "opus[1m]" &&
+													model.id !== "opusplan"
+												) {
+													setSelectedEffort(null);
+												}
+											}}
 											className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
 												selectedModel === model.id
 													? "border-foreground/20 bg-foreground text-background"
@@ -814,6 +826,39 @@ export function SessionLauncher({
 											}`}
 										>
 											{model.label}
+										</button>
+									))}
+								</div>
+							</div>
+						)}
+
+						{/* Row 2.5: Effort (only shown for non-haiku models) */}
+						{models.length > 0 && !selectedModel?.includes("haiku") && (
+							<div className="space-y-1.5">
+								<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+									Effort
+								</p>
+								<div className="flex flex-wrap gap-1.5">
+									{EFFORT_LEVELS.filter(
+										(e) =>
+											e.id !== "max" ||
+											selectedModel === "opus" ||
+											selectedModel === "opus[1m]" ||
+											selectedModel === "opusplan",
+									).map((level) => (
+										<button
+											key={level.id}
+											type="button"
+											onClick={() =>
+												setSelectedEffort(selectedEffort === level.id ? null : level.id)
+											}
+											className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+												selectedEffort === level.id
+													? "border-foreground/20 bg-foreground text-background"
+													: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
+											}`}
+										>
+											{level.label}
 										</button>
 									))}
 								</div>

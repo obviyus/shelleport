@@ -493,6 +493,7 @@ export const sessionBroker = {
 			title: input.title?.trim() || autoTitle || defaultSessionTitle(input.provider),
 			projectId: input.projectId,
 			model: input.model,
+			effort: input.effort,
 			permissionMode: input.permissionMode ?? getDefaultPermissionMode(input.provider),
 			allowedTools: normalizeAllowedTools(input.allowedTools ?? []),
 		});
@@ -589,6 +590,7 @@ export const sessionBroker = {
 			pinned: input.pinned,
 			projectId: input.projectId,
 			model: input.model,
+			effort: input.effort,
 		});
 
 		if (!session) {

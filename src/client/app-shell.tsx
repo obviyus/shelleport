@@ -74,6 +74,7 @@ import {
 } from "~/client/api";
 import type {
 	DirectoryListing,
+	EffortLevel,
 	HostEvent,
 	HostSession,
 	PendingRequest,
@@ -287,7 +288,7 @@ function InputModelPicker({
 }: {
 	session: HostSession;
 	models: ProviderModel[];
-	onChangeModel: (model: string | null) => void;
+	onChangeModel: (model: string) => void;
 }) {
 	const [open, setOpen] = useState(false);
 	const buttonRef = useRef<HTMLButtonElement>(null);
@@ -295,8 +296,8 @@ function InputModelPicker({
 	const [pos, setPos] = useState({ bottom: 0, left: 0 });
 	usePopoverDismiss(open, setOpen, buttonRef, dropdownRef);
 
-	const currentModel = models.find((m) => m.id === session.model) ?? null;
-	const label = currentModel?.label ?? "Default";
+	const currentModel = models.find((m) => m.id === session.model);
+	const label = currentModel?.label ?? friendlyModelLabel(session.model);
 
 	function handleToggle() {
 		if (!open && buttonRef.current) {
@@ -327,20 +328,6 @@ function InputModelPicker({
 						style={{ bottom: pos.bottom, left: pos.left }}
 						className="fixed z-[9999] min-w-[150px] rounded-md border border-foreground/12 bg-card p-1 shadow-lg"
 					>
-						<button
-							type="button"
-							onClick={() => {
-								onChangeModel(null);
-								setOpen(false);
-							}}
-							className={`flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-xs text-left transition ${
-								session.model === null
-									? "bg-accent text-foreground"
-									: "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-							}`}
-						>
-							Default
-						</button>
 						{models.map((model) => (
 							<button
 								key={model.id}
@@ -356,6 +343,108 @@ function InputModelPicker({
 								}`}
 							>
 								{model.label}
+							</button>
+						))}
+					</div>,
+					document.body,
+				)}
+		</>
+	);
+}
+
+const EFFORT_LEVELS: { id: EffortLevel; label: string }[] = [
+	{ id: "low", label: "Low" },
+	{ id: "medium", label: "Med" },
+	{ id: "high", label: "High" },
+	{ id: "max", label: "Max" },
+];
+
+function getEffortLevels(modelId: string | null): { id: EffortLevel; label: string }[] {
+	if (modelId?.includes("haiku")) return [];
+	if (modelId === "opus" || modelId === "opus[1m]" || modelId === "opusplan") {
+		return EFFORT_LEVELS;
+	}
+	// sonnet, sonnet[1m], and unknown/null models: low/medium/high only
+	return EFFORT_LEVELS.filter((e) => e.id !== "max");
+}
+
+function InputEffortPicker({
+	session,
+	onChangeEffort,
+}: {
+	session: HostSession;
+	onChangeEffort: (effort: EffortLevel | null) => void;
+}) {
+	const [open, setOpen] = useState(false);
+	const buttonRef = useRef<HTMLButtonElement>(null);
+	const dropdownRef = useRef<HTMLDivElement>(null);
+	const [pos, setPos] = useState({ bottom: 0, left: 0 });
+	usePopoverDismiss(open, setOpen, buttonRef, dropdownRef);
+
+	const levels = getEffortLevels(session.model);
+	if (levels.length === 0) return null;
+
+	const current = levels.find((e) => e.id === session.effort);
+	const label = current?.label ?? "Effort";
+
+	function handleToggle() {
+		if (!open && buttonRef.current) {
+			const rect = buttonRef.current.getBoundingClientRect();
+			setPos({
+				bottom: window.innerHeight - rect.top + 4,
+				left: rect.left,
+			});
+		}
+		setOpen(!open);
+	}
+
+	return (
+		<>
+			<button
+				ref={buttonRef}
+				type="button"
+				onClick={handleToggle}
+				className="flex h-7 items-center gap-1 rounded border border-foreground/10 px-2 text-xs text-muted-foreground transition hover:text-foreground hover:border-foreground/20"
+			>
+				<span>{label}</span>
+				<ChevronDown className="size-2.5" />
+			</button>
+			{open &&
+				createPortal(
+					<div
+						ref={dropdownRef}
+						style={{ bottom: pos.bottom, left: pos.left }}
+						className="fixed z-[9999] min-w-[120px] rounded-md border border-foreground/12 bg-card p-1 shadow-lg"
+					>
+						<button
+							type="button"
+							onClick={() => {
+								onChangeEffort(null);
+								setOpen(false);
+							}}
+							className={`flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-xs text-left transition ${
+								session.effort === null
+									? "bg-accent text-foreground"
+									: "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+							}`}
+						>
+							Default
+						</button>
+						{levels.map((level) => (
+							<button
+								key={level.id}
+								type="button"
+								onClick={() => {
+									onChangeEffort(level.id);
+									setOpen(false);
+								}}
+								className={`flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-xs text-left transition ${
+									session.effort === level.id
+										? "bg-accent text-foreground"
+										: "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+								}`}
+							>
+								{level.label}
 							</button>
 						))}
 					</div>,
@@ -1028,6 +1117,9 @@ function SessionStatusBadge({
 }) {
 	const now = useNow();
 	const modelLabel = session.model ? friendlyModelLabel(session.model) : null;
+	const effortLabel = session.effort
+		? session.effort.charAt(0).toUpperCase() + session.effort.slice(1)
+		: null;
 
 	if (reconnecting) {
 		return (
@@ -1058,6 +1150,12 @@ function SessionStatusBadge({
 				<>
 					<span className="hidden sm:inline text-foreground/20">·</span>
 					<span className="hidden sm:inline text-xs text-muted-foreground">{modelLabel}</span>
+				</>
+			)}
+			{effortLabel && (
+				<>
+					<span className="hidden sm:inline text-foreground/20">·</span>
+					<span className="hidden sm:inline text-xs text-muted-foreground">{effortLabel}</span>
 				</>
 			)}
 		</div>
@@ -1635,6 +1733,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			title: string,
 			permissionMode: PermissionMode,
 			model?: string,
+			effort?: EffortLevel,
 			projectId?: string,
 		) => {
 			if (!cwd.trim() || !createProvider) {
@@ -1650,6 +1749,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 					permissionMode,
 					title: title || undefined,
 					model,
+					effort,
 					projectId,
 				});
 				await refreshSessions(sessionQuery);
@@ -1963,11 +2063,22 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	);
 
 	const handleChangeModel = useCallback(
-		async (sessionId: string, model: string | null) => {
+		async (sessionId: string, model: string) => {
 			try {
 				await applySessionMetaUpdate(sessionId, { model });
 			} catch {
 				showToast("error", "Failed to update model");
+			}
+		},
+		[applySessionMetaUpdate, showToast],
+	);
+
+	const handleChangeEffort = useCallback(
+		async (sessionId: string, effort: EffortLevel | null) => {
+			try {
+				await applySessionMetaUpdate(sessionId, { effort });
+			} catch {
+				showToast("error", "Failed to update effort");
 			}
 		},
 		[applySessionMetaUpdate, showToast],
@@ -2737,6 +2848,14 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 																	}
 																/>
 															)}
+															{sessionView && (
+																<InputEffortPicker
+																	session={sessionView}
+																	onChangeEffort={(effort) =>
+																		void handleChangeEffort(sessionView.id, effort)
+																	}
+																/>
+															)}
 														</div>
 														<div className="flex items-center gap-1.5">
 															<button
@@ -2791,6 +2910,14 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 																	models={sessionProvider?.models ?? []}
 																	onChangeModel={(model) =>
 																		void handleChangeModel(sessionView.id, model)
+																	}
+																/>
+															)}
+															{sessionView && (
+																<InputEffortPicker
+																	session={sessionView}
+																	onChangeEffort={(effort) =>
+																		void handleChangeEffort(sessionView.id, effort)
 																	}
 																/>
 															)}

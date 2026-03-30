@@ -20,6 +20,7 @@ const testSession: HostSession = {
 	imported: false,
 	projectId: null,
 	model: null,
+	effort: null,
 	lastEventSequence: 0,
 	permissionMode: "default",
 	pid: null,
