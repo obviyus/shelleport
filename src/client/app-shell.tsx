@@ -2580,22 +2580,24 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 																/>
 															)}
 														</div>
-														<button
-															type="button"
-															onClick={handleVoiceCancel}
-															className="flex size-7 items-center justify-center rounded border border-foreground/10 text-muted-foreground transition hover:text-foreground hover:border-foreground/20"
-															title="Cancel recording"
-														>
-															<X className="size-3.5" />
-														</button>
-														<button
-															type="button"
-															onClick={() => void handleVoiceRecord()}
-															className="flex size-7 items-center justify-center rounded bg-foreground text-background shadow-[0_0_18px_oklch(1_0_0_/_0.12)] transition hover:bg-foreground/85"
-															title="Stop and transcribe"
-														>
-															<Check className="size-3.5" />
-														</button>
+														<div className="flex items-center gap-1.5">
+															<button
+																type="button"
+																onClick={handleVoiceCancel}
+																className="flex size-7 items-center justify-center rounded border border-foreground/10 text-muted-foreground transition hover:text-foreground hover:border-foreground/20"
+																title="Cancel recording"
+															>
+																<X className="size-3.5" />
+															</button>
+															<button
+																type="button"
+																onClick={() => void handleVoiceRecord()}
+																className="flex size-7 items-center justify-center rounded bg-foreground text-background shadow-[0_0_18px_oklch(1_0_0_/_0.12)] transition hover:bg-foreground/85"
+																title="Stop and transcribe"
+															>
+																<Check className="size-3.5" />
+															</button>
+														</div>
 													</div>
 												</div>
 											) : (

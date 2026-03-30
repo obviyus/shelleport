@@ -75,15 +75,15 @@ export function VoiceWaveform({ analyser }: { analyser: AnalyserNode }) {
 			phase += 0.025;
 
 			const isMobile = width < 420;
-			const barCount = isMobile ? 26 : 32;
+			const barCount = isMobile ? 52 : 64;
 			const sidePadding = isMobile ? 6 : 10;
-			const gap = isMobile ? 5 : 6;
+			const gap = 2;
 			const availableWidth = width - sidePadding * 2;
-			const barWidth = Math.max(2.5, (availableWidth - gap * (barCount - 1)) / barCount);
+			const barWidth = Math.max(1.5, (availableWidth - gap * (barCount - 1)) / barCount);
 			const baseline = height - 3;
 			const maxBarHeight = height - 6;
-			const minBarHeight = 4;
-			const radius = Math.min(2.5, barWidth / 2);
+			const minBarHeight = 2;
+			const radius = Math.min(1.5, barWidth / 2);
 
 			context.shadowColor = "rgba(255, 255, 255, 0.06)";
 			context.shadowBlur = 6;
