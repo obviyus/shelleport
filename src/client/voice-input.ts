@@ -4,8 +4,6 @@
  * Model (~40MB) downloads lazily on first use and is cached by the browser.
  */
 
-import ortWasmPath from "../../node_modules/@huggingface/transformers/dist/ort-wasm-simd-threaded.jsep.wasm";
-
 type TranscriptionPipeline = (
 	audio: Float32Array,
 	options?: { language?: string; task?: string },
@@ -14,7 +12,7 @@ type TranscriptionPipeline = (
 let pipelinePromise: Promise<TranscriptionPipeline> | null = null;
 const whisperModelId = "onnx-community/whisper-tiny";
 const ortWasmUrls = {
-	wasm: new URL(ortWasmPath, import.meta.url).href,
+	wasm: new URL("./ort-wasm-simd-threaded.jsep.wasm", import.meta.resolve("@huggingface/transformers")).href,
 };
 
 export type VoiceInputState =
