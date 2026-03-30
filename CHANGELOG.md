@@ -2,6 +2,20 @@
 
 All notable changes to shelleport are documented here.
 
+## 0.0.30 - 2026-03-30
+
+### Added
+
+- Browser-local voice input now supports recording and local transcription from the composer, with a waveform recording panel and first-party-hosted runtime assets (#59) (thanks @kesava500)
+
+### Fixed
+
+- Session delete actions now call the real delete API and keep the browser UI in sync after removal (#54) (thanks @kesava500)
+- Claude "run complete" system messages no longer render in the transcript (#53) (thanks @kesava500)
+- Reconnecting header state now ignores transient SSE drops instead of flashing stale reconnect UI after cleanup (#61)
+- Mobile session views can now open the Stats popover, and the header buttons are reordered to fit the current layout (#55)
+- Composer text sizing, message bubble treatment, and assistant model labeling now stay consistent after the recent UI cleanup pass (#60)
+
 ## 0.0.29 - 2026-03-29
 
 ### Fixed
