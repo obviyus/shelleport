@@ -42,7 +42,7 @@ describe("createVoiceSession", () => {
 		expect(cb.states).toEqual([{ status: "idle" }]);
 	});
 
-	test("first state emitted by start() is loading-model with progress 0", async () => {
+	test("getUserMedia failure does not start model loading", async () => {
 		await withNavigator(
 			{
 				mediaDevices: {
@@ -53,7 +53,7 @@ describe("createVoiceSession", () => {
 				const cb = collectStates();
 				const session = createVoiceSession(cb);
 				await session.start();
-				expect(cb.states[0]).toEqual({ status: "loading-model", progress: 0 });
+				expect(cb.states).toEqual([{ status: "error", message: "test abort" }]);
 			},
 		);
 	});

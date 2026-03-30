@@ -23,10 +23,11 @@ function drawRoundedRect(
 }
 
 function sampleRange(data: Uint8Array, start: number, end: number) {
+	const safeStart = Math.min(start, data.length - 1);
+	const safeEnd = Math.min(data.length, Math.max(safeStart + 1, end));
 	let total = 0;
-	const safeEnd = Math.max(start + 1, end);
-	for (let i = start; i < safeEnd; i++) total += data[i] ?? 0;
-	return total / Math.max(1, safeEnd - start) / 255;
+	for (let i = safeStart; i < safeEnd; i++) total += data[i];
+	return total / (safeEnd - safeStart) / 255;
 }
 
 export function VoiceWaveform({ analyser }: { analyser: AnalyserNode }) {
@@ -69,7 +70,7 @@ export function VoiceWaveform({ analyser }: { analyser: AnalyserNode }) {
 			context.clearRect(0, 0, width, height);
 
 			let total = 0;
-			for (let i = 0; i < freqData.length; i++) total += freqData[i] ?? 0;
+			for (let i = 0; i < freqData.length; i++) total += freqData[i];
 			const avgVolume = total / freqData.length / 255;
 			smoothedVolume = smoothedVolume * 0.88 + avgVolume * 0.12;
 			phase += 0.025;
@@ -87,6 +88,7 @@ export function VoiceWaveform({ analyser }: { analyser: AnalyserNode }) {
 
 			context.shadowColor = "rgba(255, 255, 255, 0.06)";
 			context.shadowBlur = 6;
+			context.fillStyle = "rgb(236, 241, 247)";
 
 			for (let i = 0; i < barCount; i++) {
 				const t = i / Math.max(1, barCount - 1);
@@ -111,16 +113,12 @@ export function VoiceWaveform({ analyser }: { analyser: AnalyserNode }) {
 				);
 				const y = baseline - barHeight;
 				const alpha = 0.28 + Math.min(0.42, level * 0.34);
-
-				const gradient = context.createLinearGradient(0, y, 0, baseline);
-				gradient.addColorStop(0, `rgba(255, 255, 255, ${alpha * 0.95})`);
-				gradient.addColorStop(1, `rgba(148, 163, 184, ${alpha})`);
-				context.fillStyle = gradient;
-
+				context.globalAlpha = alpha;
 				drawRoundedRect(context, x, y, barWidth, barHeight, radius);
 				context.fill();
 			}
 
+			context.globalAlpha = 1;
 			context.shadowColor = "transparent";
 			context.shadowBlur = 0;
 		}

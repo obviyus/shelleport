@@ -74,16 +74,8 @@ export function createVoiceSession(callbacks: { onStateChange: (state: VoiceInpu
 	let mediaRecorder: MediaRecorder | null = null;
 	let cancelled = false;
 
-	async function start() {
+async function start() {
 		try {
-			callbacks.onStateChange({ status: "loading-model", progress: 0 });
-
-			const pipelineReady = getOrCreatePipeline((progress) => {
-				if (!cancelled) {
-					callbacks.onStateChange({ status: "loading-model", progress });
-				}
-			});
-
 			if (!navigator.mediaDevices?.getUserMedia) {
 				throw new Error("Voice input requires HTTPS or localhost");
 			}
@@ -95,6 +87,13 @@ export function createVoiceSession(callbacks: { onStateChange: (state: VoiceInpu
 				return null;
 			}
 
+			callbacks.onStateChange({ status: "loading-model", progress: 0 });
+
+			const pipelineReady = getOrCreatePipeline((progress) => {
+				if (!cancelled) {
+					callbacks.onStateChange({ status: "loading-model", progress });
+				}
+			});
 			const transcriber = await pipelineReady;
 
 			if (cancelled) {
@@ -159,6 +158,9 @@ export function createVoiceSession(callbacks: { onStateChange: (state: VoiceInpu
 				},
 			};
 		} catch (error) {
+			if (cancelled) {
+				return null;
+			}
 			const message =
 				error instanceof DOMException && error.name === "NotAllowedError"
 					? "Microphone permission denied"
