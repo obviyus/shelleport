@@ -6,7 +6,9 @@ import { LoginPage } from "~/client/login-page";
 import { NotFoundPage } from "~/client/not-found-page";
 import { useCurrentRoute } from "~/client/router";
 
-const isDevelopment = process.env.NODE_ENV !== "production";
+const isLocalBrowser =
+	typeof window !== "undefined" &&
+	(window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost");
 
 export function App({ boot }: { boot: AppBootData }) {
 	const route = useCurrentRoute();
@@ -26,7 +28,7 @@ export function App({ boot }: { boot: AppBootData }) {
 	return (
 		<ToastProvider>
 			<AppShell boot={boot} />
-			{isDevelopment && <Agentation endpoint="http://localhost:4747" />}
+			{isLocalBrowser && <Agentation endpoint="http://localhost:4747" />}
 		</ToastProvider>
 	);
 }

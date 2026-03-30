@@ -33,8 +33,6 @@ type RequestTimeoutController = {
 	timeout(request: Request, seconds: number): void;
 };
 
-const SESSION_STREAM_IDLE_TIMEOUT_SECONDS = 60;
-
 async function readJson<T>(request: Request) {
 	try {
 		return (await request.json()) as T;
@@ -565,7 +563,7 @@ async function dispatchApiRequest(request: Request, timeoutController?: RequestT
 				return jsonError(404, "session_not_found", "Session not found");
 			}
 
-			timeoutController?.timeout(request, SESSION_STREAM_IDLE_TIMEOUT_SECONDS);
+			timeoutController?.timeout(request, 60);
 
 			return new Response(createSessionEventStream(sessionId), {
 				headers: {
