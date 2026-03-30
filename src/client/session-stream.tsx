@@ -1,5 +1,6 @@
 import { Check, ChevronRight, Copy, FileIcon, Loader2, X } from "lucide-react";
-import { Suspense, lazy, useCallback, useState } from "react";
+import { createElement, Suspense, lazy, useCallback, useState } from "react";
+import type { RefCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type {
@@ -24,6 +25,38 @@ type LimitSnapshot = SessionLimit & {
 const DiffCodeFile = lazy(async () => {
 	const module = await import("@pierre/diffs/react");
 	return { default: module.File };
+});
+
+export const LazyEditDiff = lazy(async () => {
+	const { useFileDiffInstance } = await import("@pierre/diffs/react");
+
+	function EditDiffView({
+		oldPath,
+		oldContents,
+		newPath,
+		newContents,
+	}: {
+		oldPath: string;
+		oldContents: string;
+		newPath: string;
+		newContents: string;
+	}) {
+		const { ref } = useFileDiffInstance({
+			oldFile: { name: oldPath, contents: oldContents },
+			newFile: { name: newPath, contents: newContents },
+			fileDiff: undefined,
+			options: { theme: "github-dark" },
+			lineAnnotations: undefined,
+			selectedLines: undefined,
+			prerenderedHTML: undefined,
+			hasGutterRenderUtility: false,
+		});
+		return createElement("diffs-container" as "div", {
+			ref: ref as RefCallback<HTMLDivElement>,
+		});
+	}
+
+	return { default: EditDiffView };
 });
 
 function MarkdownMessage({ text }: { text: string }) {
@@ -1019,6 +1052,44 @@ export function streamToMarkdown(entries: HostEvent[]) {
 	}
 
 	return parts.join("\n\n");
+}
+
+export type FileEditDiff = {
+	added: number;
+	removed: number;
+	edits: Array<{ oldString: string; newString: string }>;
+};
+
+export function getStreamEditDiffs(stream: HostEvent[]): Map<string, FileEditDiff> {
+	const resultsByToolUseId = new Map<string, HostEvent>();
+	for (const event of stream) {
+		if (event.kind === "tool-result") {
+			const toolUseId = typeof event.data.toolUseId === "string" ? event.data.toolUseId : null;
+			if (toolUseId) resultsByToolUseId.set(toolUseId, event);
+		}
+	}
+
+	const diffs = new Map<string, FileEditDiff>();
+	for (const event of stream) {
+		if (event.kind !== "tool-call" || event.data.toolName !== "Edit") continue;
+		const input = event.data.input as Record<string, unknown> | undefined;
+		if (!input) continue;
+		const filePath = typeof input.file_path === "string" ? input.file_path : null;
+		const oldString = typeof input.old_string === "string" ? input.old_string : null;
+		const newString = typeof input.new_string === "string" ? input.new_string : null;
+		if (!filePath || oldString === null || newString === null) continue;
+		const toolUseId = typeof event.data.toolUseId === "string" ? event.data.toolUseId : null;
+		if (toolUseId) {
+			const result = resultsByToolUseId.get(toolUseId);
+			if (result?.data.isError) continue;
+		}
+		const existing = diffs.get(filePath) ?? { added: 0, removed: 0, edits: [] };
+		existing.removed += oldString.split("\n").length;
+		existing.added += newString.split("\n").length;
+		existing.edits.push({ oldString, newString });
+		diffs.set(filePath, existing);
+	}
+	return diffs;
 }
 
 export function readToolResultContent(result: HostEvent | null) {

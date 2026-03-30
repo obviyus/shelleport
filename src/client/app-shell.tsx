@@ -3,15 +3,18 @@ import {
 	ArchiveRestore,
 	Check,
 	ChevronDown,
+	ChevronLeft,
 	CircleStop,
 	CircleX,
 	ClipboardCopy,
 	EllipsisVertical,
 	Eye,
 	EyeOff,
+	File,
 	FileDown,
 	Info,
 	Folder,
+	FolderTree,
 	Loader2,
 	LogOut,
 	Menu,
@@ -26,6 +29,7 @@ import {
 } from "lucide-react";
 import {
 	startTransition,
+	Suspense,
 	useCallback,
 	useDeferredValue,
 	useEffect,
@@ -58,6 +62,7 @@ import {
 	deleteProject as deleteProjectApi,
 	deleteQueuedInput,
 	deleteSession,
+	fetchDirectory,
 	fetchProviders,
 	fetchSessionDetail,
 	fetchSessions,
@@ -68,6 +73,7 @@ import {
 	updateSessionMeta,
 } from "~/client/api";
 import type {
+	DirectoryListing,
 	HostEvent,
 	HostSession,
 	PendingRequest,
@@ -102,6 +108,9 @@ import {
 	StatusDot,
 	copyToClipboard,
 	streamToMarkdown,
+	getStreamEditDiffs,
+	LazyEditDiff,
+	type FileEditDiff,
 } from "~/client/session-stream";
 import { VoiceWaveform } from "~/client/components/voice-waveform";
 import { type VoiceInputState, createVoiceSession } from "~/client/voice-input";
@@ -459,17 +468,238 @@ function SessionStatsPopover({ badges }: { badges: SessionHeaderBadge[] }) {
 	);
 }
 
+function FileDiffModal({
+	filePath,
+	diff,
+	onClose,
+}: {
+	filePath: string;
+	diff: FileEditDiff;
+	onClose: () => void;
+}) {
+	return createPortal(
+		<div
+			className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+			onClick={(e) => {
+				if (e.target === e.currentTarget) onClose();
+			}}
+		>
+			<div className="flex h-[80vh] w-[min(860px,95vw)] flex-col overflow-hidden rounded-lg border border-foreground/12 bg-card shadow-2xl">
+				<div className="flex shrink-0 items-center gap-3 border-b border-foreground/10 px-4 py-3">
+					<span
+						className="min-w-0 flex-1 truncate font-mono text-xs text-foreground/80"
+						title={filePath}
+					>
+						{filePath}
+					</span>
+					<span className="text-[10px] tabular-nums text-emerald-400/80">+{diff.added}</span>
+					<span className="text-[10px] tabular-nums text-red-400/80">−{diff.removed}</span>
+					<button
+						type="button"
+						onClick={onClose}
+						className="flex size-6 items-center justify-center rounded text-foreground/50 transition hover:bg-accent/60 hover:text-foreground"
+					>
+						<X className="size-3.5" />
+					</button>
+				</div>
+				<div className="flex-1 overflow-y-auto">
+					<Suspense
+						fallback={
+							<div className="flex items-center justify-center py-12">
+								<Loader2 className="size-4 animate-spin text-muted-foreground/50" />
+							</div>
+						}
+					>
+						{diff.edits.map((edit, i) => (
+							<LazyEditDiff
+								key={i}
+								oldPath={filePath}
+								oldContents={edit.oldString}
+								newPath={filePath}
+								newContents={edit.newString}
+							/>
+						))}
+					</Suspense>
+				</div>
+			</div>
+		</div>,
+		document.body,
+	);
+}
+
+function FileBrowserSidebar({
+	rootPath,
+	fileDiffs,
+	onClose,
+	onSelectFile,
+}: {
+	rootPath: string;
+	fileDiffs: Map<string, FileEditDiff>;
+	onClose: () => void;
+	onSelectFile: (path: string) => void;
+}) {
+	const [currentPath, setCurrentPath] = useState(rootPath);
+	const [listing, setListing] = useState<DirectoryListing | null>(null);
+	const [loading, setLoading] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	const [diffModalPath, setDiffModalPath] = useState<string | null>(null);
+	const [copiedPath, setCopiedPath] = useState<string | null>(null);
+
+	const load = useCallback(async (path: string) => {
+		setLoading(true);
+		setError(null);
+		try {
+			const result = await fetchDirectory(path);
+			setListing(result);
+			setCurrentPath(result.path);
+		} catch {
+			setError("Failed to load directory");
+		} finally {
+			setLoading(false);
+		}
+	}, []);
+
+	useEffect(() => {
+		void load(rootPath);
+	}, [rootPath, load]);
+
+	const sorted = listing
+		? [
+				...listing.entries.filter((e) => e.kind === "directory"),
+				...listing.entries.filter((e) => e.kind === "file"),
+			]
+		: [];
+
+	const canGoUp = listing?.parentPath !== null && listing?.parentPath !== undefined;
+
+	const displayPath = currentPath.length > 32 ? `…${currentPath.slice(-30)}` : currentPath;
+
+	function handleCopyPath(path: string) {
+		void copyToClipboard(path).then(() => {
+			setCopiedPath(path);
+			setTimeout(() => setCopiedPath(null), 1500);
+		});
+	}
+
+	const diffModalDiff = diffModalPath ? fileDiffs.get(diffModalPath) : null;
+
+	return (
+		<div className="flex flex-col h-full overflow-hidden">
+			{diffModalDiff && diffModalPath && (
+				<FileDiffModal
+					filePath={diffModalPath}
+					diff={diffModalDiff}
+					onClose={() => setDiffModalPath(null)}
+				/>
+			)}
+
+			{/* Header */}
+			<div className="flex items-center gap-1.5 border-b border-foreground/10 px-2 py-2 shrink-0">
+				<button
+					type="button"
+					disabled={!canGoUp || loading}
+					onClick={() => {
+						if (listing?.parentPath) {
+							void load(listing.parentPath);
+						}
+					}}
+					title="Go up"
+					className="flex size-6 items-center justify-center rounded text-foreground/50 transition hover:bg-accent/60 hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
+				>
+					<ChevronLeft className="size-3.5" />
+				</button>
+				<span
+					className="min-w-0 flex-1 truncate text-[10px] text-muted-foreground/70 font-mono"
+					title={currentPath}
+				>
+					{displayPath}
+				</span>
+				<button
+					type="button"
+					onClick={onClose}
+					title="Close file browser"
+					className="flex size-6 items-center justify-center rounded text-foreground/50 transition hover:bg-accent/60 hover:text-foreground"
+				>
+					<X className="size-3.5" />
+				</button>
+			</div>
+
+			{/* Content */}
+			<div className="flex-1 overflow-y-auto py-1">
+				{loading && (
+					<div className="flex items-center justify-center py-8">
+						<Loader2 className="size-4 animate-spin text-muted-foreground/50" />
+					</div>
+				)}
+				{error && !loading && <p className="px-3 py-4 text-xs text-destructive/70">{error}</p>}
+				{!loading && !error && sorted.length === 0 && (
+					<p className="px-3 py-4 text-xs text-muted-foreground/50">Empty directory</p>
+				)}
+				{!loading &&
+					!error &&
+					sorted.map((entry) => {
+						const diff = entry.kind === "file" ? fileDiffs.get(entry.path) : null;
+						const isCopied = copiedPath === entry.path;
+						return (
+							<div key={entry.path} className="group flex items-center hover:bg-accent/60">
+								<button
+									type="button"
+									onClick={() => {
+										if (entry.kind === "directory") {
+											void load(entry.path);
+										} else {
+											onSelectFile(entry.path);
+										}
+									}}
+									className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-1.5 text-left text-xs"
+								>
+									{entry.kind === "directory" ? (
+										<Folder className="size-3.5 shrink-0 text-muted-foreground/60" />
+									) : (
+										<File className="size-3.5 shrink-0 text-muted-foreground/40" />
+									)}
+									<span className="min-w-0 flex-1 truncate text-foreground/80">{entry.name}</span>
+								</button>
+								{diff && (
+									<button
+										type="button"
+										onClick={() => setDiffModalPath(entry.path)}
+										title="View diff"
+										className="flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[10px] tabular-nums transition hover:bg-accent"
+									>
+										<span className="text-emerald-400/80">+{diff.added}</span>
+										<span className="text-red-400/80">−{diff.removed}</span>
+									</button>
+								)}
+								<button
+									type="button"
+									onClick={() => handleCopyPath(entry.path)}
+									title="Copy path"
+									className="mr-1.5 flex size-5 shrink-0 items-center justify-center rounded text-foreground/30 opacity-0 transition hover:bg-accent hover:text-foreground group-hover:opacity-100"
+								>
+									{isCopied ? <Check className="size-3" /> : <ClipboardCopy className="size-3" />}
+								</button>
+							</div>
+						);
+					})}
+			</div>
+		</div>
+	);
+}
+
 function SessionActionsPopover({
 	session,
 	projects,
 	stream,
 	copiedConversation,
 	hideThinking,
+	fileBrowserOpen,
 	onPin,
 	onRename,
 	onCopy,
 	onMoveProject,
 	onToggleThinking,
+	onToggleFileBrowser,
 	onExportMarkdown,
 	onExportJson,
 	onArchive,
@@ -479,11 +709,13 @@ function SessionActionsPopover({
 	stream: HostEvent[];
 	copiedConversation: boolean;
 	hideThinking: boolean;
+	fileBrowserOpen: boolean;
 	onPin: (id: string, pinned: boolean) => void;
 	onRename: () => void;
 	onCopy: () => void;
 	onMoveProject: (projectId: string | null) => void;
 	onToggleThinking: () => void;
+	onToggleFileBrowser: () => void;
 	onExportMarkdown: () => void;
 	onExportJson: () => void;
 	onArchive: (id: string, archived: boolean) => void;
@@ -572,6 +804,19 @@ function SessionActionsPopover({
 							{hideThinking ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
 							{hideThinking ? "Show thinking" : "Hide thinking"}
 						</button>
+						{!isMobile && (
+							<button
+								type="button"
+								onClick={() => {
+									onToggleFileBrowser();
+									setOpen(false);
+								}}
+								className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+							>
+								<FolderTree className="size-3.5" />
+								{fileBrowserOpen ? "Close file browser" : "Browse files"}
+							</button>
+						)}
 						{stream.length > 0 && (
 							<>
 								<div className="my-1 border-t border-foreground/8" />
@@ -969,6 +1214,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const [copiedConversation, setCopiedConversation] = useState(false);
 	const [hiddenThinkingSessionIds, setHiddenThinkingSessionIds] = useState<string[]>([]);
+	const [fileBrowserOpen, setFileBrowserOpen] = useState(false);
 	const [renameState, setRenameState] = useState<{ sessionId: string; title: string } | null>(null);
 	const [sidebarOpen, setSidebarOpen] = useState(false);
 	const [sessionQuery, setSessionQuery] = useState("");
@@ -1056,6 +1302,8 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			projectGroups: groups,
 		};
 	}, [sessions, projects]);
+	const fileDiffs = useMemo(() => getStreamEditDiffs(stream), [stream]);
+
 	const grouped = useMemo(() => {
 		const groups = groupStream(stream);
 		if (!hideThinking) return groups;
@@ -1253,6 +1501,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		}
 
 		requestNotificationPermission();
+		setFileBrowserOpen(false);
 	}, [selectedId]);
 
 	useEffect(() => {
@@ -2062,6 +2311,20 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 				);
 			})()}
 
+			{/* File browser sidebar (desktop only) */}
+			{fileBrowserOpen && sessionView && (
+				<aside className="hidden md:flex w-56 shrink-0 flex-col border-r border-foreground/10 bg-card/40">
+					<FileBrowserSidebar
+						rootPath={sessionView.cwd}
+						fileDiffs={fileDiffs}
+						onClose={() => setFileBrowserOpen(false)}
+						onSelectFile={(path) => {
+							setPrompt((prev) => (prev ? `${prev} ${path}` : path));
+						}}
+					/>
+				</aside>
+			)}
+
 			<main className="flex flex-1 flex-col overflow-hidden">
 				{isArchivedView ? (
 					<div className="flex flex-1 flex-col overflow-hidden">
@@ -2241,12 +2504,14 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											stream={stream}
 											copiedConversation={copiedConversation}
 											hideThinking={hideThinking}
+											fileBrowserOpen={fileBrowserOpen}
 											onPin={(id, pinned) => handlePinned(id, pinned)}
 											onRename={() =>
 												setRenameState({ sessionId: sessionView.id, title: sessionView.title })
 											}
 											onCopy={handleCopyConversation}
 											onMoveProject={(projectId) => void handleMoveSessionToProject(projectId)}
+											onToggleFileBrowser={() => setFileBrowserOpen((v) => !v)}
 											onToggleThinking={() =>
 												setHiddenThinkingSessionIds((current) => {
 													if (!selectedId) {
