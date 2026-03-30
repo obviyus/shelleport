@@ -47,6 +47,8 @@ export type ProviderSummary = {
 	models: ProviderModel[];
 };
 
+export type EffortLevel = "low" | "medium" | "high" | "max";
+
 export type HostSession = {
 	id: string;
 	provider: ProviderId;
@@ -60,6 +62,7 @@ export type HostSession = {
 	imported: boolean;
 	projectId: string | null;
 	model: string | null;
+	effort: EffortLevel | null;
 	permissionMode: PermissionMode;
 	allowedTools: string[];
 	queuedInputCount: number;
@@ -181,6 +184,7 @@ export type CreateSessionInput = {
 	prompt?: string;
 	title?: string;
 	model?: string;
+	effort?: EffortLevel;
 	projectId?: string;
 	permissionMode?: PermissionMode;
 	allowedTools?: string[];
@@ -209,6 +213,7 @@ export type SessionMetaPayload = {
 	title?: string;
 	pinned?: boolean;
 	model?: string | null;
+	effort?: EffortLevel | null;
 	projectId?: string | null;
 };
 

@@ -175,6 +175,10 @@ function createClaudeCommand(input: ProviderAdapterRunInput) {
 		command.push("--model", session.model);
 	}
 
+	if (session.effort) {
+		command.push("--effort", session.effort);
+	}
+
 	for (const toolRule of session.allowedTools) {
 		command.push("--allowedTools", toolRule);
 	}
@@ -1063,9 +1067,12 @@ export class ClaudeProviderAdapter implements ProviderAdapter {
 				: "Claude CLI not found in PATH. Install it or set SHELLEPORT_CLAUDE_BIN.",
 			capabilities: this.capabilities(),
 			models: [
-				{ id: "sonnet", label: "Claude Sonnet" },
-				{ id: "opus", label: "Claude Opus" },
-				{ id: "haiku", label: "Claude Haiku" },
+				{ id: "sonnet", label: "Sonnet" },
+				{ id: "sonnet[1m]", label: "Sonnet 1M" },
+				{ id: "opus", label: "Opus" },
+				{ id: "opus[1m]", label: "Opus 1M" },
+				{ id: "opusplan", label: "Opus→Sonnet" },
+				{ id: "haiku", label: "Haiku" },
 			],
 		};
 	}

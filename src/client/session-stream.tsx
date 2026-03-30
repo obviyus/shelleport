@@ -1103,11 +1103,14 @@ export function readToolResultContent(result: HostEvent | null) {
 export function friendlyModelLabel(modelId: unknown): string {
 	if (typeof modelId !== "string") return "Claude";
 
-	if (modelId.includes("sonnet")) return "Claude Sonnet";
-	if (modelId.includes("opus")) return "Claude Opus";
-	if (modelId.includes("haiku")) return "Claude Haiku";
+	if (modelId === "opusplan") return "Opus→Sonnet";
+	if (modelId === "sonnet[1m]") return "Sonnet 1M";
+	if (modelId === "opus[1m]") return "Opus 1M";
+	if (modelId.includes("sonnet")) return "Sonnet";
+	if (modelId.includes("opus")) return "Opus";
+	if (modelId.includes("haiku")) return "Haiku";
 
-	return `Claude (${modelId})`;
+	return modelId;
 }
 
 function getAssistantModel(group: GroupedEntry): string | null {
