@@ -2,8 +2,9 @@ import { describe, expect, test } from "bun:test";
 import {
 	formatSessionLimitLabel,
 	formatSessionLimitUsage,
-	getToolOutput,
 	copyToClipboard,
+	getStreamEditDiffs,
+	getToolOutput,
 	hasMixedAssistantModels,
 	getSidebarMeta,
 	getSessionHeaderBadges,
@@ -119,6 +120,115 @@ describe("getSessionHeaderBadges", () => {
 				visibility: "xl",
 			},
 		]);
+	});
+});
+
+describe("getStreamEditDiffs", () => {
+	test("includes completed edit calls", () => {
+		const diffs = getStreamEditDiffs([
+			{
+				id: "call-1",
+				sessionId: "session-1",
+				sequence: 1,
+				kind: "tool-call",
+				summary: "Edit file",
+				data: {
+					toolName: "Edit",
+					toolUseId: "tool-1",
+					input: {
+						file_path: "/tmp/demo.ts",
+						old_string: "a\nb",
+						new_string: "a\nb\nc",
+					},
+				},
+				rawProviderEvent: null,
+				createTime: 1,
+			},
+			{
+				id: "result-1",
+				sessionId: "session-1",
+				sequence: 2,
+				kind: "tool-result",
+				summary: "Edited file",
+				data: {
+					toolUseId: "tool-1",
+					content: "ok",
+					isError: false,
+				},
+				rawProviderEvent: null,
+				createTime: 2,
+			},
+		]);
+
+		expect(diffs.get("/tmp/demo.ts")).toEqual({
+			added: 3,
+			removed: 2,
+			edits: [{ oldString: "a\nb", newString: "a\nb\nc" }],
+		});
+	});
+
+	test("skips pending edit calls until they have a result", () => {
+		const diffs = getStreamEditDiffs([
+			{
+				id: "call-1",
+				sessionId: "session-1",
+				sequence: 1,
+				kind: "tool-call",
+				summary: "Edit file",
+				data: {
+					toolName: "Edit",
+					toolUseId: "tool-1",
+					input: {
+						file_path: "/tmp/demo.ts",
+						old_string: "a",
+						new_string: "b",
+					},
+				},
+				rawProviderEvent: null,
+				createTime: 1,
+			},
+		]);
+
+		expect(diffs.size).toBe(0);
+	});
+
+	test("skips failed edit calls", () => {
+		const diffs = getStreamEditDiffs([
+			{
+				id: "call-1",
+				sessionId: "session-1",
+				sequence: 1,
+				kind: "tool-call",
+				summary: "Edit file",
+				data: {
+					toolName: "Edit",
+					toolUseId: "tool-1",
+					input: {
+						file_path: "/tmp/demo.ts",
+						old_string: "a",
+						new_string: "b",
+					},
+				},
+				rawProviderEvent: null,
+				createTime: 1,
+			},
+			{
+				id: "result-1",
+				sessionId: "session-1",
+				sequence: 2,
+				kind: "tool-result",
+				summary: "Edit failed",
+				data: {
+					toolUseId: "tool-1",
+					content: "Permission denied",
+					isError: true,
+				},
+				rawProviderEvent: null,
+				createTime: 2,
+			},
+		]);
+
+		expect(diffs.size).toBe(0);
 	});
 });
 
