@@ -893,10 +893,22 @@ function SessionStatusBadge({
 		);
 	}
 
+	const isActive = session.status === "running" || session.status === "retrying";
+
 	return (
-		<div className="flex items-center gap-1.5 rounded border border-foreground/12 px-2 py-1">
+		<div
+			className={`flex items-center gap-1.5 rounded border px-2 py-1 ${
+				isActive
+					? "border-emerald-500/25 bg-emerald-500/8"
+					: "border-foreground/12"
+			}`}
+		>
 			<StatusDot status={session.status} />
-			<span className="hidden sm:inline text-xs text-muted-foreground">
+			<span
+				className={`hidden sm:inline text-xs ${
+					isActive ? "text-emerald-300" : "text-muted-foreground"
+				}`}
+			>
 				{formatStatus(session, now)}
 			</span>
 			{modelLabel && (
@@ -2317,7 +2329,13 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 									)}
 
 									{permissionModeLabel && (
-										<span className="hidden rounded border border-foreground/12 px-2 py-1 text-xs uppercase tracking-[0.08em] text-muted-foreground md:inline-flex">
+										<span
+											className={`hidden rounded border px-2 py-1 text-xs uppercase tracking-[0.08em] md:inline-flex ${
+												sessionView?.permissionMode === "bypassPermissions"
+													? "border-orange-400/25 bg-orange-400/8 text-orange-300"
+													: "border-foreground/12 text-muted-foreground"
+											}`}
+										>
 											{permissionModeLabel}
 										</span>
 									)}
