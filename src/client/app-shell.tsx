@@ -980,6 +980,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const [draftAttachments, setDraftAttachmentsState] = useState<DraftAttachment[]>([]);
 	const [isCreating, setIsCreating] = useState(false);
 	const [streamState, setStreamState] = useState<"connected" | "reconnecting">("connected");
+	const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const [archiveConfirmId, setArchiveConfirmId] = useState<string | null>(null);
 	const [copiedConversation, setCopiedConversation] = useState(false);
 	const [shownThinkingSessionIds, setShownThinkingSessionIds] = useState<string[]>([]);
@@ -1308,10 +1309,34 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 				});
 			},
 			(error) => console.error("SSE error:", error),
-			(state) => setStreamState(state),
+			(state) => {
+				if (state === "connected") {
+					if (reconnectTimerRef.current) {
+						clearTimeout(reconnectTimerRef.current);
+						reconnectTimerRef.current = null;
+					}
+					setStreamState("connected");
+				} else {
+					// Delay showing "reconnecting" — fast reconnects (proxy timeouts, heartbeat cycles)
+					// resolve before the timer fires and the user never sees the indicator.
+					if (!reconnectTimerRef.current) {
+						reconnectTimerRef.current = setTimeout(() => {
+							reconnectTimerRef.current = null;
+							setStreamState("reconnecting");
+						}, 3000);
+					}
+				}
+			},
 		);
 
-		return () => controller.abort();
+		return () => {
+			if (reconnectTimerRef.current) {
+				clearTimeout(reconnectTimerRef.current);
+				reconnectTimerRef.current = null;
+			}
+
+			controller.abort();
+		};
 	}, [replaceSession, selectedId]);
 
 	useEffect(() => {
