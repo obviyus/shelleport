@@ -518,9 +518,6 @@ function SessionActionsPopover({
 
 		setOpen(!open);
 	}
-
-	const projectName = projects.find((project) => project.id === session.projectId)?.name ?? null;
-
 	return (
 		<>
 			<button
@@ -553,6 +550,21 @@ function SessionActionsPopover({
 						<button
 							type="button"
 							onClick={() => {
+								onArchive(session.id, !session.archived);
+								setOpen(false);
+							}}
+							className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+						>
+							{session.archived ? (
+								<ArchiveRestore className="size-3.5" />
+							) : (
+								<Archive className="size-3.5" />
+							)}
+							{session.archived ? "Unarchive" : "Archive"}
+						</button>
+						<button
+							type="button"
+							onClick={() => {
 								onRename();
 								setOpen(false);
 							}}
@@ -560,6 +572,16 @@ function SessionActionsPopover({
 						>
 							<Pencil className="size-3.5" />
 							Rename
+						</button>
+						<button
+							type="button"
+							onClick={() => {
+								onToggleThinking();
+							}}
+							className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+						>
+							{hideThinking ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
+							{hideThinking ? "Show thinking" : "Hide thinking"}
 						</button>
 						{stream.length > 0 && (
 							<>
@@ -606,16 +628,6 @@ function SessionActionsPopover({
 								</button>
 							</>
 						)}
-						<button
-							type="button"
-							onClick={() => {
-								onToggleThinking();
-							}}
-							className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-						>
-							{hideThinking ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
-							{hideThinking ? "Show thinking" : "Hide thinking"}
-						</button>
 						{projects.length > 0 && (
 							<>
 								<div className="my-1 border-t border-foreground/8" />
@@ -656,27 +668,7 @@ function SessionActionsPopover({
 								))}
 							</>
 						)}
-						{projectName && (
-							<div className="mt-0.5 px-2.5 py-1 text-xs text-muted-foreground">
-								Currently in: {projectName}
-							</div>
-						)}
 						<div className="my-1 border-t border-foreground/8" />
-						<button
-							type="button"
-							onClick={() => {
-								onArchive(session.id, !session.archived);
-								setOpen(false);
-							}}
-							className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-						>
-							{session.archived ? (
-								<ArchiveRestore className="size-3.5" />
-							) : (
-								<Archive className="size-3.5" />
-							)}
-							{session.archived ? "Unarchive" : "Archive"}
-						</button>
 						{confirmingDelete ? (
 							<div className="flex items-center gap-1.5 px-2.5 py-2">
 								<span className="text-xs text-destructive">Delete?</span>
