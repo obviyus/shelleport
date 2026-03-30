@@ -7,6 +7,7 @@ All notable changes to shelleport are documented here.
 ### Fixed
 
 - Reconnect state now lives in the session header badge instead of inserting a transcript banner that shifts chat content (#52) (thanks @kesava500)
+- Fast SSE reconnects no longer leave a stale reconnect timer behind after the session stream tears down (#61) (thanks @kesava500)
 
 ### Breaking
 

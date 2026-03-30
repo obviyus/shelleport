@@ -1329,7 +1329,14 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			},
 		);
 
-		return () => controller.abort();
+		return () => {
+			if (reconnectTimerRef.current) {
+				clearTimeout(reconnectTimerRef.current);
+				reconnectTimerRef.current = null;
+			}
+
+			controller.abort();
+		};
 	}, [replaceSession, selectedId]);
 
 	useEffect(() => {
