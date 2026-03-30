@@ -22,12 +22,14 @@ describe("session limits", () => {
 					window: "seven_day",
 					resetsAt: 1,
 					utilization: null,
+					isUsingOverage: null,
 					status: "allowed_warning",
 				},
 				{
 					window: "weekly",
 					resetsAt: 2,
 					utilization: 42,
+					isUsingOverage: null,
 					status: "active",
 				},
 			]),
@@ -36,6 +38,7 @@ describe("session limits", () => {
 				window: "weekly",
 				resetsAt: 2,
 				utilization: 42,
+				isUsingOverage: null,
 				status: "active",
 			},
 		]);
@@ -48,6 +51,7 @@ describe("session limits", () => {
 				window: "seven_day",
 				resetsAt: 1,
 				utilization: null,
+				isUsingOverage: null,
 				status: "allowed_warning",
 			}),
 		).toBeNull();
