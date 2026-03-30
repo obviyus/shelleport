@@ -70,7 +70,7 @@ export function createVoiceSession(callbacks: { onStateChange: (state: VoiceInpu
 	let mediaRecorder: MediaRecorder | null = null;
 	let cancelled = false;
 
-async function start() {
+	async function start() {
 		try {
 			if (!navigator.mediaDevices?.getUserMedia) {
 				throw new Error("Voice input requires HTTPS or localhost");
