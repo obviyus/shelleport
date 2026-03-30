@@ -1,14 +1,57 @@
 import { describe, expect, test } from "bun:test";
 import {
+	formatSessionLimitLabel,
+	formatSessionLimitUsage,
 	getToolOutput,
 	copyToClipboard,
 	hasMixedAssistantModels,
 	getSidebarMeta,
 	getSessionHeaderBadges,
 	groupStream,
+	orderSessionLimits,
 	readToolResultContent,
 	streamToMarkdown,
 } from "~/client/session-stream";
+
+describe("session limits", () => {
+	test("deduplicates seven_day when weekly is present", () => {
+		expect(
+			orderSessionLimits([
+				{
+					window: "seven_day",
+					resetsAt: 1,
+					utilization: null,
+					status: "allowed_warning",
+				},
+				{
+					window: "weekly",
+					resetsAt: 2,
+					utilization: 42,
+					status: "active",
+				},
+			]),
+		).toEqual([
+			{
+				window: "weekly",
+				resetsAt: 2,
+				utilization: 42,
+				status: "active",
+			},
+		]);
+	});
+
+	test("labels lone seven_day limits as weekly and hides raw status usage text", () => {
+		expect(formatSessionLimitLabel("seven_day")).toBe("Weekly");
+		expect(
+			formatSessionLimitUsage({
+				window: "seven_day",
+				resetsAt: 1,
+				utilization: null,
+				status: "allowed_warning",
+			}),
+		).toBeNull();
+	});
+});
 
 describe("getSessionHeaderBadges", () => {
 	test("skips model badge and shows usage badges", () => {
