@@ -456,10 +456,7 @@ function DiffStatBlock({ text }: { text: string }) {
 					.map((line, index) => {
 						if (isDiffSummaryLine(line)) {
 							return (
-								<div
-									key={`${line}-${index}`}
-									className="px-3 py-2 text-xs text-muted-foreground"
-								>
+								<div key={`${line}-${index}`} className="px-3 py-2 text-xs text-muted-foreground">
 									{line}
 								</div>
 							);
@@ -1193,7 +1190,9 @@ function ToolCard({ call, result }: { call: HostEvent; result: HostEvent | null 
 				) : (
 					<Check className="size-2.5 shrink-0 text-emerald-400" />
 				)}
-				<span className="min-w-0 truncate text-xs text-muted-foreground">{getToolPreview(call)}</span>
+				<span className="min-w-0 truncate text-xs text-muted-foreground">
+					{getToolPreview(call)}
+				</span>
 			</summary>
 			<div className="ml-[18px] md:ml-[22px] mb-1 mt-0.5 overflow-hidden rounded-md border border-foreground/10 bg-card/90">
 				{hasOutput ? (
