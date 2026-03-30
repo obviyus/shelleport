@@ -1984,7 +1984,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 					<>
 						<div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-4">
 							<span className="text-xs font-semibold uppercase tracking-[0.15em] text-foreground/82">
-								shelleport
+								🐚 shelleport
 							</span>
 							<button
 								type="button"
@@ -2701,7 +2701,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 								<Menu className="size-5" />
 							</button>
 							<span className="text-xs font-semibold uppercase tracking-[0.15em] text-foreground/82">
-								shelleport
+								🐚 shelleport
 							</span>
 						</div>
 						{sessions.length === 0 && renderRoute.kind === "home" && (

@@ -96,7 +96,7 @@ Providers yield events; the broker consumes them. To add a new provider, impleme
 
 - Bun owns browser assets. Do not reintroduce Vite or React Router build assumptions.
 - Tailwind flows through Bun plugin wiring in `scripts/build.ts`. Do not reintroduce Tailwind CLI sidecars.
-- Dev path: `bun run server.ts serve` or `bun run dev`. This uses Bun's fullstack HTML dev server; do not wrap it in `bun --hot` or build custom client watchers.
+- Dev path: `bun run dev`. This uses `bun --hot server.ts serve` so Bun serves the fullstack HTML dev server and client edits reload without restarting. Do not replace it with `bun --watch` or custom client watchers.
 - Prod path: native binary or `bun run server.ts serve`; keep `NODE_ENV=production` explicit when validating prod behavior.
 - Packaging path: `scripts/package.ts` compiles one native binary per target. npm package never ships the app logic; it installs the binary.
 - If changing client boot data, remember SSR embeds boot state into HTML. Refresh when validating server-only boot changes.

@@ -9,7 +9,7 @@ const serverFilePath = fileURLToPath(import.meta.url);
 const projectRoot = dirname(serverFilePath);
 const usingBunRuntime =
 	process.execPath.endsWith("/bun") || process.execPath.endsWith("/bun-debug");
-const isDevelopment = usingBunRuntime && Bun.env.NODE_ENV !== "production";
+const isDevelopment = serverFilePath.endsWith(".ts") && Bun.env.NODE_ENV !== "production";
 const commandNames = ["serve", "doctor", "token", "install-service", "upgrade"] as const;
 const repository = "obviyus/shelleport";
 const linuxInstallDir = "/usr/local/lib/shelleport";
