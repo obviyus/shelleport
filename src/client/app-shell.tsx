@@ -72,22 +72,24 @@ import {
 	updateQueuedInput,
 	updateSessionMeta,
 } from "~/client/api";
-import type {
-	DirectoryListing,
-	EffortLevel,
-	HostEvent,
-	HostSession,
-	PendingRequest,
-	PermissionMode,
-	Project,
-	ProviderLimitState,
-	ProviderModel,
-	ProviderSummary,
-	QueuedSessionInput,
-	RequestResponsePayload,
-	SessionLimit,
-	SessionMetaPayload,
-	SessionStatus,
+import {
+	getSupportedEffortLevels,
+	normalizeEffortLevel,
+	type DirectoryListing,
+	type EffortLevel,
+	type HostEvent,
+	type HostSession,
+	type PendingRequest,
+	type PermissionMode,
+	type Project,
+	type ProviderLimitState,
+	type ProviderModel,
+	type ProviderSummary,
+	type QueuedSessionInput,
+	type RequestResponsePayload,
+	type SessionLimit,
+	type SessionMetaPayload,
+	type SessionStatus,
 } from "~/shared/shelleport";
 import { useCurrentRoute, useRouter } from "~/client/router";
 import {
@@ -360,12 +362,8 @@ const EFFORT_LEVELS: { id: EffortLevel; label: string }[] = [
 ];
 
 function getEffortLevels(modelId: string | null): { id: EffortLevel; label: string }[] {
-	if (modelId?.includes("haiku")) return [];
-	if (modelId === "opus" || modelId === "opus[1m]") {
-		return EFFORT_LEVELS;
-	}
-	// sonnet, sonnet[1m], and unknown/null models: low/medium/high only
-	return EFFORT_LEVELS.filter((e) => e.id !== "max");
+	const supportedLevels = getSupportedEffortLevels(modelId);
+	return EFFORT_LEVELS.filter((level) => supportedLevels.includes(level.id));
 }
 
 function InputEffortPicker({
@@ -2050,9 +2048,14 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	);
 
 	const handleChangeModel = useCallback(
-		async (sessionId: string, model: string) => {
+		async (session: HostSession, model: string) => {
+			const effort = normalizeEffortLevel(model, session.effort);
+
 			try {
-				await applySessionMetaUpdate(sessionId, { model });
+				await applySessionMetaUpdate(
+					session.id,
+					effort === session.effort ? { model } : { model, effort },
+				);
 			} catch {
 				showToast("error", "Failed to update model");
 			}
@@ -2831,7 +2834,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 																	session={sessionView}
 																	models={sessionProvider?.models ?? []}
 																	onChangeModel={(model) =>
-																		void handleChangeModel(sessionView.id, model)
+																		void handleChangeModel(sessionView, model)
 																	}
 																/>
 															)}
@@ -2896,7 +2899,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 																	session={sessionView}
 																	models={sessionProvider?.models ?? []}
 																	onChangeModel={(model) =>
-																		void handleChangeModel(sessionView.id, model)
+																		void handleChangeModel(sessionView, model)
 																	}
 																/>
 															)}

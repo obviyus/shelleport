@@ -49,6 +49,40 @@ export type ProviderSummary = {
 
 export type EffortLevel = "low" | "medium" | "high" | "max";
 
+const BASIC_EFFORT_LEVELS: EffortLevel[] = ["low", "medium", "high"];
+const OPUS_EFFORT_LEVELS: EffortLevel[] = [...BASIC_EFFORT_LEVELS, "max"];
+
+export function getSupportedEffortLevels(modelId: string | null): EffortLevel[] {
+	if (modelId?.includes("haiku")) {
+		return [];
+	}
+
+	if (modelId === "opus" || modelId === "opus[1m]") {
+		return OPUS_EFFORT_LEVELS;
+	}
+
+	return BASIC_EFFORT_LEVELS;
+}
+
+export function supportsEffortLevel(modelId: string | null, effort: EffortLevel | null): boolean {
+	return effort === null || getSupportedEffortLevels(modelId).includes(effort);
+}
+
+export function normalizeEffortLevel(
+	modelId: string | null,
+	effort: EffortLevel | null,
+): EffortLevel | null {
+	if (effort === null) {
+		return null;
+	}
+
+	if (supportsEffortLevel(modelId, effort)) {
+		return effort;
+	}
+
+	return getSupportedEffortLevels(modelId).at(-1) ?? null;
+}
+
 export type HostSession = {
 	id: string;
 	provider: ProviderId;

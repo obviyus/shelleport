@@ -3,6 +3,7 @@ import { dirname, isAbsolute, join } from "node:path";
 import type {
 	CreateSessionInput,
 	DirectoryListing,
+	EffortLevel,
 	ImportSessionPayload,
 	PermissionMode,
 	QueuedSessionInputUpdatePayload,
@@ -13,6 +14,7 @@ import type {
 	SessionMetaPayload,
 	SessionStreamMessage,
 } from "~/shared/shelleport";
+import { getSupportedEffortLevels } from "~/shared/shelleport";
 import {
 	checkLoginRateLimit,
 	clearAuthCookie,
@@ -139,7 +141,22 @@ function validateCreateSessionInput(payload: CreateSessionInput) {
 	validatePrompt(payload.prompt, "prompt", false);
 	assertPermissionMode(payload.permissionMode);
 	assertAllowedTools(payload.allowedTools);
+	validateEffortForModel(payload.model ?? null, payload.effort);
 	return assertDirectory(payload.cwd, "cwd");
+}
+
+function validateEffortForModel(model: string | null, effort: EffortLevel | null | undefined) {
+	if (effort === undefined) {
+		return;
+	}
+
+	if (effort === null) {
+		return;
+	}
+
+	if (!getSupportedEffortLevels(model).includes(effort)) {
+		throw new ApiError(400, "invalid_effort", "effort does not match the selected model");
+	}
 }
 
 function validateImportSessionInput(payload: ImportSessionPayload) {
@@ -220,7 +237,10 @@ function validateArchiveInput(payload: SessionArchivePayload) {
 	}
 }
 
-function validateMetaInput(payload: SessionMetaPayload) {
+function validateMetaInput(
+	payload: SessionMetaPayload,
+	current: { model: string | null; effort: EffortLevel | null },
+) {
 	let hasField = false;
 
 	if (payload.title !== undefined) {
@@ -249,6 +269,11 @@ function validateMetaInput(payload: SessionMetaPayload) {
 			throw new ApiError(400, "invalid_effort", "effort must be low, medium, high, max, or null");
 		}
 	}
+
+	validateEffortForModel(
+		payload.model === undefined ? current.model : payload.model,
+		payload.effort === undefined ? current.effort : payload.effort,
+	);
 
 	if (!hasField) {
 		throw new ApiError(400, "invalid_session_meta", "title, pinned, model, or effort is required");
@@ -610,7 +635,11 @@ async function dispatchApiRequest(request: Request, timeoutController?: RequestT
 
 		if (request.method === "POST" && segments[3] === "meta") {
 			const payload = await readJson<SessionMetaPayload>(request);
-			validateMetaInput(payload);
+			const currentSession = sessionStore.getSession(sessionId);
+			if (!currentSession) {
+				throw new ApiError(404, "session_not_found", "Session not found");
+			}
+			validateMetaInput(payload, currentSession);
 			const session = sessionBroker.updateSessionMeta(sessionId, payload);
 			return Response.json({ session });
 		}
