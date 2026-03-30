@@ -297,6 +297,10 @@ function getSessionLimitMap(entries: HostEvent[]) {
 }
 
 function formatMetricCount(value: number) {
+	if (value >= 1_000_000) {
+		return `${(value / 1_000_000).toFixed(1)}M`;
+	}
+
 	if (value >= 100_000) {
 		return `${Math.round(value / 1_000)}k`;
 	}
@@ -793,19 +797,19 @@ export function getSessionHeaderBadges(session: Pick<HostSession, "usage"> | nul
 
 	badges.push({
 		key: `in:${usage.inputTokens}`,
-		label: `in ${formatMetricCount(usage.inputTokens)}`,
+		label: formatMetricCount(usage.inputTokens),
 		visibility: "xl",
 	});
 	badges.push({
 		key: `out:${usage.outputTokens}`,
-		label: `out ${formatMetricCount(usage.outputTokens)}`,
+		label: formatMetricCount(usage.outputTokens),
 		visibility: "xl",
 	});
 
 	if (usage.cacheReadInputTokens > 0) {
 		badges.push({
 			key: `cache-read:${usage.cacheReadInputTokens}`,
-			label: `cache read ${formatMetricCount(usage.cacheReadInputTokens)}`,
+			label: formatMetricCount(usage.cacheReadInputTokens),
 			visibility: "xl",
 		});
 	}
@@ -813,7 +817,7 @@ export function getSessionHeaderBadges(session: Pick<HostSession, "usage"> | nul
 	if (usage.cacheCreationInputTokens > 0) {
 		badges.push({
 			key: `cache-write:${usage.cacheCreationInputTokens}`,
-			label: `cache write ${formatMetricCount(usage.cacheCreationInputTokens)}`,
+			label: formatMetricCount(usage.cacheCreationInputTokens),
 			visibility: "xl",
 		});
 	}
