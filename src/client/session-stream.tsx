@@ -1057,9 +1057,6 @@ function UserMessageRenderer({ event }: { event: HostEvent }) {
 	return (
 		<div className="animate-event-enter group mb-4 flex justify-end">
 			<div className="max-w-[90%] min-w-0 md:min-w-[14rem]">
-				<div className="mb-1 px-1 text-right text-xs uppercase tracking-[0.14em] text-muted-foreground/68">
-					You
-				</div>
 				<div className="overflow-hidden rounded-lg border border-foreground/10 bg-card/95 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]">
 					<div className="px-4 py-3 text-xs leading-[1.8] text-foreground/92">
 						<MarkdownMessage text={readString(event.data.text)} />

@@ -453,6 +453,7 @@ function SessionActionsPopover({
 	copiedConversation,
 	hideThinking,
 	onPin,
+	onRename,
 	onCopy,
 	onMoveProject,
 	onToggleThinking,
@@ -466,6 +467,7 @@ function SessionActionsPopover({
 	copiedConversation: boolean;
 	hideThinking: boolean;
 	onPin: (id: string, pinned: boolean) => void;
+	onRename: () => void;
 	onCopy: () => void;
 	onMoveProject: (projectId: string | null) => void;
 	onToggleThinking: () => void;
@@ -502,9 +504,9 @@ function SessionActionsPopover({
 				type="button"
 				onClick={handleToggle}
 				title="Actions"
-				className="flex items-center justify-center gap-1 rounded border border-foreground/12 px-2 py-1 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-xs text-muted-foreground/80 transition hover:border-foreground/18 hover:text-foreground"
+				className="flex items-center justify-center gap-1 rounded border border-foreground/12 px-2 py-1 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-xs text-foreground/60 transition hover:border-foreground/18 hover:text-foreground"
 			>
-				<EllipsisVertical className="size-3 md:size-2.5" />
+				<EllipsisVertical className="size-4 md:size-3.5" />
 			</button>
 			{open &&
 				createPortal(
@@ -523,6 +525,17 @@ function SessionActionsPopover({
 						>
 							<Pin className="size-3.5" />
 							{session.pinned ? "Unpin" : "Pin"}
+						</button>
+						<button
+							type="button"
+							onClick={() => {
+								onRename();
+								setOpen(false);
+							}}
+							className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition text-muted-foreground/80 hover:bg-accent/60 hover:text-foreground"
+						>
+							<Pencil className="size-3.5" />
+							Rename
 						</button>
 						{stream.length > 0 && (
 							<>
@@ -824,10 +837,10 @@ const SIDEBAR_SHORTCUTS = [
 
 function SidebarShortcutLegend() {
 	return (
-		<div className="mb-3 hidden flex-wrap items-center justify-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground/70 md:flex">
+		<div className="mb-3 hidden flex-wrap items-center justify-center gap-x-2.5 gap-y-1 text-xs text-muted-foreground/70 md:flex">
 			{SIDEBAR_SHORTCUTS.map((shortcut) => (
 				<span key={shortcut.key} className="inline-flex items-center gap-1">
-					<kbd className="rounded border border-foreground/14 bg-background/60 px-1.5 py-0.5 font-mono text-[8px] text-muted-foreground/80">
+					<kbd className="rounded border border-foreground/14 bg-background/60 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground/80">
 						{shortcut.key}
 					</kbd>
 					{shortcut.label}
@@ -2194,21 +2207,9 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											</button>
 										</div>
 									) : sessionView ? (
-										<>
-											<h1 className="truncate text-xs font-medium text-foreground">
-												{sessionView.title}
-											</h1>
-											<button
-												type="button"
-												onClick={() =>
-													setRenameState({ sessionId: sessionView.id, title: sessionView.title })
-												}
-												className="flex size-10 md:size-5 items-center justify-center rounded text-muted-foreground/80 transition hover:bg-accent hover:text-foreground"
-												title="Rename chat"
-											>
-												<Pencil className="size-2.5" />
-											</button>
-										</>
+										<h1 className="truncate text-xs font-medium text-foreground">
+											{sessionView.title}
+										</h1>
 									) : (
 										<h1 className="truncate text-xs font-medium text-foreground">
 											Loading session
@@ -2246,6 +2247,9 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											copiedConversation={copiedConversation}
 											hideThinking={hideThinking}
 											onPin={(id, pinned) => handlePinned(id, pinned)}
+											onRename={() =>
+												setRenameState({ sessionId: sessionView.id, title: sessionView.title })
+											}
 											onCopy={handleCopyConversation}
 											onMoveProject={(projectId) => void handleMoveSessionToProject(projectId)}
 											onToggleThinking={() =>
@@ -2473,7 +2477,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 																? "Message Claude... attach files or paste images"
 																: "Message Claude... (Enter to send)"
 													}
-													className="min-h-[44px] md:min-h-[28px] flex-1 resize-none bg-transparent px-2 py-1.5 text-xs leading-[1.6] text-foreground outline-none placeholder:text-muted-foreground/80"
+													className="min-h-[100px] md:min-h-[80px] flex-1 resize-none bg-transparent px-2 py-1.5 text-xs leading-[1.6] text-foreground outline-none placeholder:text-muted-foreground/80"
 												/>
 												{canAttach && (
 													<button
