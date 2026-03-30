@@ -51,7 +51,7 @@ type SessionLauncherProps = {
 		title: string,
 		permissionMode: PermissionMode,
 		model?: string,
-		effort?: EffortLevel,
+		effort?: EffortLevel | null,
 		projectId?: string,
 	) => void | Promise<void>;
 	projects: Project[];
@@ -446,7 +446,7 @@ export function SessionLauncher({
 	const [focusPath, setFocusPath] = useState<string | null>(null);
 	const defaultModel = models.find((m) => m.id === "sonnet")?.id ?? models[0]?.id ?? null;
 	const [selectedModel, setSelectedModel] = useState<string | null>(defaultModel);
-	const [selectedEffort, setSelectedEffort] = useState<EffortLevel | null>(null);
+	const [selectedEffort, setSelectedEffort] = useState<EffortLevel>("medium");
 	const [permissionMode, setPermissionMode] = useState<PermissionMode>(
 		createProviderId ? getDefaultPermissionMode(createProviderId) : "default",
 	);
@@ -656,7 +656,7 @@ export function SessionLauncher({
 									title.trim(),
 									permissionMode,
 									selectedModel ?? undefined,
-									selectedEffort ?? undefined,
+									selectedEffort,
 									projectIdToUse ?? undefined,
 								);
 							}}
@@ -813,10 +813,9 @@ export function SessionLauncher({
 												if (
 													selectedEffort === "max" &&
 													model.id !== "opus" &&
-													model.id !== "opus[1m]" &&
-													model.id !== "opusplan"
+													model.id !== "opus[1m]"
 												) {
-													setSelectedEffort(null);
+													setSelectedEffort("high");
 												}
 											}}
 											className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
@@ -841,17 +840,12 @@ export function SessionLauncher({
 								<div className="flex flex-wrap gap-1.5">
 									{EFFORT_LEVELS.filter(
 										(e) =>
-											e.id !== "max" ||
-											selectedModel === "opus" ||
-											selectedModel === "opus[1m]" ||
-											selectedModel === "opusplan",
+											e.id !== "max" || selectedModel === "opus" || selectedModel === "opus[1m]",
 									).map((level) => (
 										<button
 											key={level.id}
 											type="button"
-											onClick={() =>
-												setSelectedEffort(selectedEffort === level.id ? null : level.id)
-											}
+											onClick={() => setSelectedEffort(level.id)}
 											className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
 												selectedEffort === level.id
 													? "border-foreground/20 bg-foreground text-background"

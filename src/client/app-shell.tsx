@@ -361,7 +361,7 @@ const EFFORT_LEVELS: { id: EffortLevel; label: string }[] = [
 
 function getEffortLevels(modelId: string | null): { id: EffortLevel; label: string }[] {
 	if (modelId?.includes("haiku")) return [];
-	if (modelId === "opus" || modelId === "opus[1m]" || modelId === "opusplan") {
+	if (modelId === "opus" || modelId === "opus[1m]") {
 		return EFFORT_LEVELS;
 	}
 	// sonnet, sonnet[1m], and unknown/null models: low/medium/high only
@@ -384,8 +384,9 @@ function InputEffortPicker({
 	const levels = getEffortLevels(session.model);
 	if (levels.length === 0) return null;
 
-	const current = levels.find((e) => e.id === session.effort);
-	const label = current?.label ?? "Effort";
+	const effectiveEffort = session.effort ?? "medium";
+	const current = levels.find((e) => e.id === effectiveEffort);
+	const label = current?.label ?? "Med";
 
 	function handleToggle() {
 		if (!open && buttonRef.current) {
@@ -416,20 +417,6 @@ function InputEffortPicker({
 						style={{ bottom: pos.bottom, left: pos.left }}
 						className="fixed z-[9999] min-w-[120px] rounded-md border border-foreground/12 bg-card p-1 shadow-lg"
 					>
-						<button
-							type="button"
-							onClick={() => {
-								onChangeEffort(null);
-								setOpen(false);
-							}}
-							className={`flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-xs text-left transition ${
-								session.effort === null
-									? "bg-accent text-foreground"
-									: "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-							}`}
-						>
-							Default
-						</button>
 						{levels.map((level) => (
 							<button
 								key={level.id}
@@ -439,7 +426,7 @@ function InputEffortPicker({
 									setOpen(false);
 								}}
 								className={`flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-xs text-left transition ${
-									session.effort === level.id
+									effectiveEffort === level.id
 										? "bg-accent text-foreground"
 										: "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
 								}`}
@@ -1733,7 +1720,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			title: string,
 			permissionMode: PermissionMode,
 			model?: string,
-			effort?: EffortLevel,
+			effort?: EffortLevel | null,
 			projectId?: string,
 		) => {
 			if (!cwd.trim() || !createProvider) {
@@ -1749,7 +1736,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 					permissionMode,
 					title: title || undefined,
 					model,
-					effort,
+					effort: effort ?? undefined,
 					projectId,
 				});
 				await refreshSessions(sessionQuery);
