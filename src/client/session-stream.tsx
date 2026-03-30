@@ -43,17 +43,17 @@ function MarkdownMessage({ text }: { text: string }) {
 					</h3>
 				),
 				h4: ({ children }) => (
-					<h4 className="mt-3 mb-1.5 text-[11px] font-medium text-foreground/92 first:mt-0">
+					<h4 className="mt-3 mb-1.5 text-xs font-medium text-foreground/92 first:mt-0">
 						{children}
 					</h4>
 				),
 				h5: ({ children }) => (
-					<h5 className="mt-3 mb-1 text-[11px] font-medium text-foreground/90 first:mt-0">
+					<h5 className="mt-3 mb-1 text-xs font-medium text-foreground/90 first:mt-0">
 						{children}
 					</h5>
 				),
 				h6: ({ children }) => (
-					<h6 className="mt-3 mb-1 text-[10px] font-medium uppercase tracking-[0.08em] text-foreground/76 first:mt-0">
+					<h6 className="mt-3 mb-1 text-xs font-medium uppercase tracking-[0.08em] text-foreground/76 first:mt-0">
 						{children}
 					</h6>
 				),
@@ -93,7 +93,7 @@ function MarkdownMessage({ text }: { text: string }) {
 					}
 
 					return (
-						<code className="rounded border border-foreground/10 bg-card px-1.5 py-0.5 text-[11px] text-foreground/92">
+						<code className="rounded border border-foreground/10 bg-card px-1.5 py-0.5 text-xs text-foreground/92">
 							{children}
 						</code>
 					);
@@ -107,7 +107,7 @@ function MarkdownMessage({ text }: { text: string }) {
 							: "";
 					return (
 						<div className="group/pre relative my-3">
-							<pre className="overflow-x-auto rounded-md border border-foreground/10 bg-card/90 px-3 py-2.5 text-[11px] leading-[1.7] text-foreground/86">
+							<pre className="overflow-x-auto rounded-md border border-foreground/10 bg-card/90 px-3 py-2.5 text-xs leading-[1.7] text-foreground/86">
 								{children}
 							</pre>
 							{codeText.length > 0 && (
@@ -120,7 +120,7 @@ function MarkdownMessage({ text }: { text: string }) {
 				},
 				table: ({ children }) => (
 					<div className="my-3 overflow-x-auto rounded-md border border-foreground/10">
-						<table className="w-full min-w-[20rem] border-collapse text-left text-[11px]">
+						<table className="w-full min-w-[20rem] border-collapse text-left text-xs">
 							{children}
 						</table>
 					</div>
@@ -458,7 +458,7 @@ function DiffStatBlock({ text }: { text: string }) {
 							return (
 								<div
 									key={`${line}-${index}`}
-									className="px-3 py-2 text-[11px] text-muted-foreground/86"
+									className="px-3 py-2 text-xs text-muted-foreground/86"
 								>
 									{line}
 								</div>
@@ -469,7 +469,7 @@ function DiffStatBlock({ text }: { text: string }) {
 
 						if (!match) {
 							return (
-								<div key={`${line}-${index}`} className="px-3 py-2 text-[11px] text-foreground/84">
+								<div key={`${line}-${index}`} className="px-3 py-2 text-xs text-foreground/84">
 									{line}
 								</div>
 							);
@@ -479,11 +479,11 @@ function DiffStatBlock({ text }: { text: string }) {
 						return (
 							<div
 								key={`${line}-${index}`}
-								className="grid grid-cols-[minmax(0,1fr)_auto_minmax(4rem,9rem)] items-center gap-3 px-3 py-2 text-[11px]"
+								className="grid grid-cols-[minmax(0,1fr)_auto_minmax(4rem,9rem)] items-center gap-3 px-3 py-2 text-xs"
 							>
 								<span className="truncate text-foreground/90">{fileName.trim()}</span>
 								<span className="text-muted-foreground/80">{count.trim()}</span>
-								<span className="overflow-hidden rounded bg-background/60 px-2 py-1 font-mono text-[10px] leading-none text-foreground/82">
+								<span className="overflow-hidden rounded bg-background/60 px-2 py-1 font-mono text-xs leading-none text-foreground/82">
 									{markers}
 								</span>
 							</div>
@@ -560,7 +560,7 @@ function LazyCodeFile({
 	return (
 		<Suspense
 			fallback={
-				<pre className="overflow-x-auto px-3 py-2.5 text-[11px] leading-[1.7] whitespace-pre-wrap text-foreground/86">
+				<pre className="overflow-x-auto px-3 py-2.5 text-xs leading-[1.7] whitespace-pre-wrap text-foreground/86">
 					{truncate(content, 12_000)}
 				</pre>
 			}
@@ -1021,7 +1021,7 @@ export function readToolResultContent(result: HostEvent | null) {
 	return readString(result.data.output) || readString(result.data.content);
 }
 
-function friendlyModelLabel(modelId: unknown): string {
+export function friendlyModelLabel(modelId: unknown): string {
 	if (typeof modelId !== "string") return "Claude";
 
 	if (modelId.includes("sonnet")) return "Claude Sonnet";
@@ -1031,16 +1031,59 @@ function friendlyModelLabel(modelId: unknown): string {
 	return `Claude (${modelId})`;
 }
 
-export function GroupedEntryRenderer({ group }: { group: GroupedEntry }) {
+function getAssistantModel(group: GroupedEntry): string | null {
+	if (group.type === "assistant-text-run") {
+		const model = group.entries[0]?.data.model;
+		return typeof model === "string" ? model : null;
+	}
+
+	if (group.type !== "single" || group.entry.kind !== "text" || group.entry.data.role !== "assistant") {
+		return null;
+	}
+
+	const model = group.entry.data.model;
+	return typeof model === "string" ? model : null;
+}
+
+export function hasMixedAssistantModels(groups: GroupedEntry[]): boolean {
+	let firstModel: string | null | undefined;
+
+	for (const group of groups) {
+		const model = getAssistantModel(group);
+
+		if (model === null) {
+			continue;
+		}
+
+		if (firstModel === undefined) {
+			firstModel = model;
+			continue;
+		}
+
+		if (firstModel !== model) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+export function GroupedEntryRenderer({
+	group,
+	showModelLabel = false,
+}: {
+	group: GroupedEntry;
+	showModelLabel?: boolean;
+}) {
 	if (group.type === "tool") {
 		return <ToolCard call={group.call} result={group.result} />;
 	}
 
 	if (group.type === "assistant-text-run") {
-		return <AssistantTextRunRenderer entries={group.entries} />;
+		return <AssistantTextRunRenderer entries={group.entries} showModelLabel={showModelLabel} />;
 	}
 
-	return <EventRenderer event={group.entry} />;
+	return <EventRenderer event={group.entry} showModelLabel={showModelLabel} />;
 }
 
 function UserMessageRenderer({ event }: { event: HostEvent }) {
@@ -1057,10 +1100,7 @@ function UserMessageRenderer({ event }: { event: HostEvent }) {
 	return (
 		<div className="animate-event-enter group mb-4 flex justify-end">
 			<div className="max-w-[90%] min-w-0 md:min-w-[14rem]">
-				<div className="mb-1 px-1 text-right text-[10px] uppercase tracking-[0.14em] text-muted-foreground/68">
-					You
-				</div>
-				<div className="overflow-hidden rounded-xl rounded-tr-sm border border-foreground/10 bg-card/95 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]">
+				<div className="overflow-hidden rounded-lg border border-foreground/10 bg-card/95 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]">
 					<div className="px-4 py-3 text-xs leading-[1.8] text-foreground/92">
 						<MarkdownMessage text={readString(event.data.text)} />
 					</div>
@@ -1070,7 +1110,7 @@ function UserMessageRenderer({ event }: { event: HostEvent }) {
 								{attachments.map((attachment) => (
 									<div
 										key={attachment.name}
-										className="rounded-md border border-foreground/10 bg-background/70 px-2 py-1 text-[10px] text-muted-foreground/86"
+										className="rounded-md border border-foreground/10 bg-background/70 px-2 py-1 text-xs text-muted-foreground/86"
 									>
 										{attachment.name}
 									</div>
@@ -1141,27 +1181,25 @@ function ToolCard({ call, result }: { call: HostEvent; result: HostEvent | null 
 				<ChevronRight className="size-3 shrink-0 text-muted-foreground transition group-open:rotate-90" />
 				<div className="min-w-0 flex-1">
 					<div className="flex items-center gap-2">
-						<span className="truncate text-[11px] font-medium text-foreground">
+						<span className="truncate text-xs font-medium text-foreground">
 							{call.data.toolName as string}
 						</span>
 						{isRunning ? (
-							<span className="inline-flex items-center gap-1 rounded border border-foreground/10 px-1.5 py-px text-[9px] uppercase tracking-[0.12em] text-muted-foreground/86">
+							<span className="inline-flex items-center gap-1 rounded border border-foreground/10 px-1.5 py-px text-[10px] uppercase tracking-[0.12em] text-muted-foreground/86">
 								<Loader2 className="size-2.5 animate-spin" />
 								running
 							</span>
 						) : result?.data.isError ? (
-							<span className="rounded border border-destructive/20 px-1.5 py-px text-[9px] uppercase tracking-[0.12em] text-destructive/80">
+							<span className="rounded border border-destructive/20 px-1.5 py-px text-[10px] uppercase tracking-[0.12em] text-destructive/80">
 								error
 							</span>
 						) : (
-							<span className="rounded border border-foreground/10 px-1.5 py-px text-[9px] uppercase tracking-[0.12em] text-muted-foreground/80">
+							<span className="rounded border border-foreground/10 px-1.5 py-px text-[10px] uppercase tracking-[0.12em] text-muted-foreground/80">
 								done
 							</span>
 						)}
 					</div>
-					<p className="mt-0.5 truncate text-[10px] text-muted-foreground/86">
-						{getToolPreview(call)}
-					</p>
+					<p className="mt-0.5 truncate text-xs text-muted-foreground/86">{getToolPreview(call)}</p>
 				</div>
 			</summary>
 			<div className="border-t border-foreground/12 bg-background/35 px-4 py-3">
@@ -1170,7 +1208,7 @@ function ToolCard({ call, result }: { call: HostEvent; result: HostEvent | null 
 						<DiffStatBlock text={content} />
 					) : (
 						<div className="overflow-hidden rounded-md border border-foreground/10 bg-card/90">
-							<div className="flex items-center justify-between border-b border-foreground/12 px-3 py-2 text-[10px] text-muted-foreground/80">
+							<div className="flex items-center justify-between border-b border-foreground/12 px-3 py-2 text-xs text-muted-foreground/80">
 								<span>{fileName}</span>
 								<div className="flex items-center gap-2">
 									{strippedRead && strippedRead.matched > 0 && (
@@ -1188,7 +1226,7 @@ function ToolCard({ call, result }: { call: HostEvent; result: HostEvent | null 
 										</div>
 									</>
 								) : (
-									<div className="px-3 py-2 text-[11px] text-muted-foreground/80">
+									<div className="px-3 py-2 text-xs text-muted-foreground/80">
 										Open to load preview
 									</div>
 								)}
@@ -1196,22 +1234,30 @@ function ToolCard({ call, result }: { call: HostEvent; result: HostEvent | null 
 						</div>
 					)
 				) : (
-					<p className="text-[11px] text-muted-foreground/80">No output</p>
+					<p className="text-xs text-muted-foreground/80">No output</p>
 				)}
 			</div>
 		</details>
 	);
 }
 
-function AssistantTextRunRenderer({ entries }: { entries: HostEvent[] }) {
-	const label = friendlyModelLabel(entries[0]?.data.model);
+function AssistantTextRunRenderer({
+	entries,
+	showModelLabel,
+}: {
+	entries: HostEvent[];
+	showModelLabel: boolean;
+}) {
+	const label = showModelLabel ? friendlyModelLabel(entries[0]?.data.model) : null;
 
 	return (
 		<div className="animate-event-enter mb-4">
-			<div className="mb-1 px-1 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/68">
-				{label}
-			</div>
-			<div className="overflow-hidden rounded-xl rounded-tl-sm border border-foreground/10 bg-card/95 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]">
+			{label && (
+				<div className="mb-1 px-1 text-xs uppercase tracking-[0.14em] text-muted-foreground/68">
+					{label}
+				</div>
+			)}
+			<div className="overflow-hidden rounded-lg bg-card/95 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]">
 				<div className="px-4 py-3 text-xs leading-[1.8] text-foreground/92">
 					<MarkdownMessage text={entries.map((entry) => readString(entry.data.text)).join("")} />
 				</div>
@@ -1225,7 +1271,7 @@ function ThinkingBlock({ text }: { text: string }) {
 		<details className="animate-event-enter group mb-4 overflow-hidden rounded-lg border border-foreground/10 bg-card/92 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]">
 			<summary className="flex cursor-pointer list-none items-center gap-2 px-3 md:px-4 py-2.5 transition hover:bg-accent/45">
 				<ChevronRight className="size-3 shrink-0 text-muted-foreground transition group-open:rotate-90" />
-				<span className="text-[11px] text-muted-foreground/80">Thinking</span>
+				<span className="text-xs text-muted-foreground/80">Thinking</span>
 			</summary>
 			<div className="border-t border-foreground/12 bg-background/35 px-4 py-3">
 				<div className="text-xs leading-[1.8] text-foreground/80">
@@ -1236,7 +1282,13 @@ function ThinkingBlock({ text }: { text: string }) {
 	);
 }
 
-function EventRenderer({ event }: { event: HostEvent }) {
+function EventRenderer({
+	event,
+	showModelLabel,
+}: {
+	event: HostEvent;
+	showModelLabel: boolean;
+}) {
 	if (event.kind === "text") {
 		if (event.data.role === "user") {
 			return <UserMessageRenderer event={event} />;
@@ -1246,12 +1298,16 @@ function EventRenderer({ event }: { event: HostEvent }) {
 			return <ThinkingBlock text={readString(event.data.text)} />;
 		}
 
+		const label = showModelLabel ? friendlyModelLabel(event.data.model) : null;
+
 		return (
 			<div className="animate-event-enter mb-4">
-				<div className="mb-1 px-1 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/68">
-					{friendlyModelLabel(event.data.model)}
-				</div>
-				<div className="overflow-hidden rounded-xl rounded-tl-sm border border-foreground/10 bg-card/95 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]">
+				{label && (
+					<div className="mb-1 px-1 text-xs uppercase tracking-[0.14em] text-muted-foreground/68">
+						{label}
+					</div>
+				)}
+				<div className="overflow-hidden rounded-lg bg-card/95 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]">
 					<div className="px-4 py-3 text-xs leading-[1.8] text-foreground/92">
 						<MarkdownMessage text={readString(event.data.text)} />
 					</div>
@@ -1270,7 +1326,7 @@ function EventRenderer({ event }: { event: HostEvent }) {
 
 	if (event.kind === "state") {
 		return (
-			<div className="animate-event-enter mb-4 rounded-lg border border-foreground/10 bg-card/88 px-4 py-2 text-[11px] text-muted-foreground/86">
+			<div className="animate-event-enter mb-4 rounded-lg border border-foreground/10 bg-card/88 px-4 py-2 text-xs text-muted-foreground/86">
 				{readString(event.data.message) || event.summary}
 			</div>
 		);
@@ -1278,7 +1334,7 @@ function EventRenderer({ event }: { event: HostEvent }) {
 
 	if (event.kind === "system") {
 		return (
-			<div className="animate-event-enter mb-4 text-center text-[10px] uppercase tracking-[0.14em] text-muted-foreground/65">
+			<div className="animate-event-enter mb-4 text-center text-xs uppercase tracking-[0.14em] text-muted-foreground/65">
 				{event.summary}
 			</div>
 		);
@@ -1302,14 +1358,14 @@ export function PendingRequestBanner({
 					<button
 						type="button"
 						onClick={() => onRespond(request.id, { decision: "allow" })}
-						className="rounded border border-foreground/20 bg-foreground px-4 py-2.5 md:px-3 md:py-1 text-[11px] font-medium text-background transition hover:bg-foreground/90"
+						className="rounded border border-foreground/20 bg-foreground px-4 py-2.5 md:px-3 md:py-1 text-xs font-medium text-background transition hover:bg-foreground/90"
 					>
 						Allow
 					</button>
 					<button
 						type="button"
 						onClick={() => onRespond(request.id, { decision: "deny" })}
-						className="rounded border border-border px-4 py-2.5 md:px-3 md:py-1 text-[11px] font-medium text-muted-foreground transition hover:border-foreground/16 hover:text-foreground"
+						className="rounded border border-border px-4 py-2.5 md:px-3 md:py-1 text-xs font-medium text-muted-foreground transition hover:border-foreground/16 hover:text-foreground"
 					>
 						Deny
 					</button>

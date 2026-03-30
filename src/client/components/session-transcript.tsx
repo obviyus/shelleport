@@ -9,6 +9,7 @@ import type {
 import {
 	type GroupedEntry,
 	GroupedEntryRenderer,
+	hasMixedAssistantModels,
 	PendingRequestBanner,
 } from "~/client/session-stream";
 
@@ -50,6 +51,7 @@ export const SessionTranscript = memo(function SessionTranscript({
 	session: HostSession | null;
 	statusMessage: string | null;
 }) {
+	const showAssistantModelLabels = hasMixedAssistantModels(grouped);
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const isAtBottom = useRef(true);
 	const [showScrollPill, setShowScrollPill] = useState(false);
@@ -154,7 +156,11 @@ export const SessionTranscript = memo(function SessionTranscript({
 								</div>
 							)}
 							{grouped.map((group) => (
-								<GroupedEntryRenderer key={getGroupedEntryKey(group)} group={group} />
+								<GroupedEntryRenderer
+									key={getGroupedEntryKey(group)}
+									group={group}
+									showModelLabel={showAssistantModelLabels}
+								/>
 							))}
 							{isRunning && (
 								<div className="animate-thinking mt-1 flex gap-1 py-2">

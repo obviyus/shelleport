@@ -8,6 +8,7 @@ All notable changes to shelleport are documented here.
 
 - Reconnect state now lives in the session header badge instead of inserting a transcript banner that shifts chat content (#52) (thanks @kesava500)
 - Fast SSE reconnects no longer leave a stale reconnect timer behind after the session stream tears down (#61) (thanks @kesava500)
+- Session polish now uses the cleaner 12px transcript chrome, adds rename in the Actions menu, and keeps assistant model labels only when a chat actually mixes models (#60) (thanks @kesava500)
 
 ### Breaking
 

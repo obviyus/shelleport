@@ -90,6 +90,7 @@ import {
 	formatSessionLimitLabel,
 	formatSessionLimitReset,
 	formatSessionLimitUsage,
+	friendlyModelLabel,
 	getSessionHeaderBadges,
 	type SessionHeaderBadge,
 	getSidebarMeta,
@@ -291,7 +292,7 @@ function SessionModelPicker({
 				type="button"
 				onClick={handleToggle}
 				title={currentModel?.label ?? "Default model"}
-				className="flex items-center justify-center gap-1 rounded border border-foreground/12 px-2 py-1 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-[10px] text-muted-foreground/80 transition hover:border-foreground/18 hover:text-foreground"
+				className="flex items-center justify-center gap-1 rounded border border-foreground/12 px-2 py-1 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-xs text-muted-foreground/80 transition hover:border-foreground/18 hover:text-foreground"
 			>
 				<Sparkles className="size-3 md:size-2.5" />
 				<span className="hidden md:inline">{shortLabel}</span>
@@ -309,7 +310,7 @@ function SessionModelPicker({
 								void onChangeModel(null);
 								setOpen(false);
 							}}
-							className={`flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-[11px] text-left transition ${
+							className={`flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-xs text-left transition ${
 								session.model === null
 									? "bg-accent text-foreground"
 									: "text-muted-foreground/80 hover:bg-accent/60 hover:text-foreground"
@@ -325,7 +326,7 @@ function SessionModelPicker({
 									void onChangeModel(model.id);
 									setOpen(false);
 								}}
-								className={`flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-[11px] text-left transition ${
+								className={`flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-xs text-left transition ${
 									session.model === model.id
 										? "bg-accent text-foreground"
 										: "text-muted-foreground/80 hover:bg-accent/60 hover:text-foreground"
@@ -356,7 +357,7 @@ function SidebarSessionMeta({ session }: { session: HostSession }) {
 	const running = isActiveStatus(session.status);
 
 	return (
-		<p className="mt-0.5 ml-3.5 flex items-center gap-1.5 truncate text-[10px] text-muted-foreground/86">
+		<p className="mt-0.5 ml-3.5 flex items-center gap-1.5 truncate text-xs text-muted-foreground/86">
 			<span className="truncate">{getSidebarMeta(session, now)}</span>
 			{running && <SidebarRunningDots />}
 		</p>
@@ -411,7 +412,7 @@ function SessionStatsPopover({ badges }: { badges: SessionHeaderBadge[] }) {
 				type="button"
 				onClick={handleToggle}
 				title="Session stats"
-				className="hidden lg:flex items-center justify-center gap-1 rounded border border-foreground/12 px-2 py-1 text-[10px] text-muted-foreground/80 transition hover:border-foreground/18 hover:text-foreground"
+				className="hidden lg:flex items-center justify-center gap-1 rounded border border-foreground/12 px-2 py-1 text-xs text-muted-foreground/80 transition hover:border-foreground/18 hover:text-foreground"
 			>
 				<Info className="size-2.5" />
 				<span>Stats</span>
@@ -423,16 +424,16 @@ function SessionStatsPopover({ badges }: { badges: SessionHeaderBadge[] }) {
 						style={{ top: pos.top, right: pos.right }}
 						className="fixed z-[9999] min-w-[200px] max-w-[320px] rounded-md border border-foreground/12 bg-card p-3 shadow-lg"
 					>
-						<p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+						<p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-foreground/68">
 							Session Stats
 						</p>
 						<div className="space-y-1.5">
 							{badges.map((badge) => (
 								<div key={badge.key} className="flex items-baseline justify-between gap-3">
-									<span className="shrink-0 text-[10px] uppercase tracking-[0.08em] text-muted-foreground/65">
+									<span className="shrink-0 text-xs uppercase tracking-[0.08em] text-muted-foreground/65">
 										{badge.key.split(":")[0] ?? badge.label}
 									</span>
-									<span className="truncate text-right text-[11px] tabular-nums text-foreground/90">
+									<span className="truncate text-right text-xs tabular-nums text-foreground/90">
 										{badge.label}
 									</span>
 								</div>
@@ -452,6 +453,8 @@ function SessionActionsPopover({
 	copiedConversation,
 	hideThinking,
 	onPin,
+	onDelete,
+	onRename,
 	onCopy,
 	onMoveProject,
 	onToggleThinking,
@@ -465,6 +468,8 @@ function SessionActionsPopover({
 	copiedConversation: boolean;
 	hideThinking: boolean;
 	onPin: (id: string, pinned: boolean) => void;
+	onDelete: (id: string) => void;
+	onRename: () => void;
 	onCopy: () => void;
 	onMoveProject: (projectId: string | null) => void;
 	onToggleThinking: () => void;
@@ -476,9 +481,16 @@ function SessionActionsPopover({
 	const buttonRef = useRef<HTMLButtonElement>(null);
 	const dropdownRef = useRef<HTMLDivElement>(null);
 	const [pos, setPos] = useState({ top: 0, right: 8 });
+	const [confirmingDelete, setConfirmingDelete] = useState(false);
 	const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 
 	usePopoverDismiss(open, setOpen, buttonRef, dropdownRef);
+
+	useEffect(() => {
+		if (!open) {
+			setConfirmingDelete(false);
+		}
+	}, [open]);
 
 	function handleToggle() {
 		if (!open && buttonRef.current) {
@@ -501,9 +513,9 @@ function SessionActionsPopover({
 				type="button"
 				onClick={handleToggle}
 				title="Actions"
-				className="flex items-center justify-center gap-1 rounded border border-foreground/12 px-2 py-1 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-[10px] text-muted-foreground/80 transition hover:border-foreground/18 hover:text-foreground"
+				className="flex items-center justify-center gap-1 rounded border border-foreground/12 px-2 py-1 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-xs text-foreground/60 transition hover:border-foreground/18 hover:text-foreground"
 			>
-				<EllipsisVertical className="size-3 md:size-2.5" />
+				<EllipsisVertical className="size-4 md:size-3.5" />
 			</button>
 			{open &&
 				createPortal(
@@ -518,15 +530,26 @@ function SessionActionsPopover({
 								onPin(session.id, !session.pinned);
 								setOpen(false);
 							}}
-							className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-[11px] text-left transition text-muted-foreground/80 hover:bg-accent/60 hover:text-foreground"
+							className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition text-muted-foreground/80 hover:bg-accent/60 hover:text-foreground"
 						>
 							<Pin className="size-3.5" />
 							{session.pinned ? "Unpin" : "Pin"}
 						</button>
+						<button
+							type="button"
+							onClick={() => {
+								onRename();
+								setOpen(false);
+							}}
+							className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition text-muted-foreground/80 hover:bg-accent/60 hover:text-foreground"
+						>
+							<Pencil className="size-3.5" />
+							Rename
+						</button>
 						{stream.length > 0 && (
 							<>
 								<div className="my-1 border-t border-foreground/8" />
-								<p className="px-2.5 py-1 text-[9px] uppercase tracking-[0.12em] text-muted-foreground/55">
+								<p className="px-2.5 py-1 text-xs uppercase tracking-[0.12em] text-muted-foreground/55">
 									Export
 								</p>
 								<button
@@ -535,7 +558,7 @@ function SessionActionsPopover({
 										onCopy();
 										setOpen(false);
 									}}
-									className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-[11px] text-left transition text-muted-foreground/80 hover:bg-accent/60 hover:text-foreground"
+									className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition text-muted-foreground/80 hover:bg-accent/60 hover:text-foreground"
 								>
 									{copiedConversation ? (
 										<Check className="size-3.5" />
@@ -550,7 +573,7 @@ function SessionActionsPopover({
 										onExportMarkdown();
 										setOpen(false);
 									}}
-									className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-[11px] text-left transition text-muted-foreground/80 hover:bg-accent/60 hover:text-foreground"
+									className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition text-muted-foreground/80 hover:bg-accent/60 hover:text-foreground"
 								>
 									<FileDown className="size-3.5" />
 									Export as Markdown
@@ -561,7 +584,7 @@ function SessionActionsPopover({
 										onExportJson();
 										setOpen(false);
 									}}
-									className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-[11px] text-left transition text-muted-foreground/80 hover:bg-accent/60 hover:text-foreground"
+									className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition text-muted-foreground/80 hover:bg-accent/60 hover:text-foreground"
 								>
 									<FileDown className="size-3.5" />
 									Export as JSON
@@ -573,7 +596,7 @@ function SessionActionsPopover({
 							onClick={() => {
 								onToggleThinking();
 							}}
-							className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-[11px] text-left transition text-muted-foreground/80 hover:bg-accent/60 hover:text-foreground"
+							className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition text-muted-foreground/80 hover:bg-accent/60 hover:text-foreground"
 						>
 							{hideThinking ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
 							{hideThinking ? "Show thinking" : "Hide thinking"}
@@ -581,7 +604,7 @@ function SessionActionsPopover({
 						{projects.length > 0 && (
 							<>
 								<div className="my-1 border-t border-foreground/8" />
-								<p className="px-2.5 py-1 text-[9px] uppercase tracking-[0.12em] text-muted-foreground/55">
+								<p className="px-2.5 py-1 text-xs uppercase tracking-[0.12em] text-muted-foreground/55">
 									Move to project
 								</p>
 								<button
@@ -590,7 +613,7 @@ function SessionActionsPopover({
 										onMoveProject(null);
 										setOpen(false);
 									}}
-									className={`flex w-full items-center gap-2.5 rounded px-2.5 py-1.5 text-[11px] text-left transition ${
+									className={`flex w-full items-center gap-2.5 rounded px-2.5 py-1.5 text-xs text-left transition ${
 										session.projectId === null
 											? "bg-accent text-foreground"
 											: "text-muted-foreground/80 hover:bg-accent/60 hover:text-foreground"
@@ -606,7 +629,7 @@ function SessionActionsPopover({
 											onMoveProject(project.id);
 											setOpen(false);
 										}}
-										className={`flex w-full items-center gap-2.5 rounded px-2.5 py-1.5 text-[11px] text-left transition ${
+										className={`flex w-full items-center gap-2.5 rounded px-2.5 py-1.5 text-xs text-left transition ${
 											session.projectId === project.id
 												? "bg-accent text-foreground"
 												: "text-muted-foreground/80 hover:bg-accent/60 hover:text-foreground"
@@ -619,7 +642,7 @@ function SessionActionsPopover({
 							</>
 						)}
 						{projectName && (
-							<div className="mt-0.5 px-2.5 py-1 text-[9px] text-muted-foreground/50">
+							<div className="mt-0.5 px-2.5 py-1 text-xs text-muted-foreground/50">
 								Currently in: {projectName}
 							</div>
 						)}
@@ -630,7 +653,7 @@ function SessionActionsPopover({
 								onArchive(session.id, !session.archived);
 								setOpen(false);
 							}}
-							className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-[11px] text-left transition text-muted-foreground/80 hover:bg-accent/60 hover:text-foreground"
+							className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition text-muted-foreground/80 hover:bg-accent/60 hover:text-foreground"
 						>
 							{session.archived ? (
 								<ArchiveRestore className="size-3.5" />
@@ -639,6 +662,37 @@ function SessionActionsPopover({
 							)}
 							{session.archived ? "Unarchive" : "Archive"}
 						</button>
+						{confirmingDelete ? (
+							<div className="flex items-center gap-1.5 px-2.5 py-2">
+								<span className="text-xs text-destructive">Delete?</span>
+								<button
+									type="button"
+									onClick={() => {
+										onDelete(session.id);
+										setOpen(false);
+									}}
+									className="rounded bg-destructive/15 px-2 py-0.5 text-xs font-medium text-destructive transition hover:bg-destructive/25"
+								>
+									Yes
+								</button>
+								<button
+									type="button"
+									onClick={() => setConfirmingDelete(false)}
+									className="rounded bg-foreground/8 px-2 py-0.5 text-xs font-medium text-muted-foreground transition hover:bg-foreground/15"
+								>
+									No
+								</button>
+							</div>
+						) : (
+							<button
+								type="button"
+								onClick={() => setConfirmingDelete(true)}
+								className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition text-destructive/70 hover:bg-destructive/10 hover:text-destructive"
+							>
+								<Trash2 className="size-3.5" />
+								Delete
+							</button>
+						)}
 					</div>,
 					document.body,
 				)}
@@ -752,12 +806,12 @@ function SidebarLimitsPanel({ limits }: { limits: SessionLimit[] }) {
 
 	return (
 		<div className="mb-3 rounded border border-foreground/8 bg-background/30 px-3.5 py-3">
-			<div className="mb-3 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/60">
+			<div className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground/60">
 				Claude limits
 			</div>
 			<div className="space-y-3.5">
 				{limits.map((limit) => (
-					<div key={limit.window ?? "unknown"} className="text-[10px]">
+					<div key={limit.window ?? "unknown"} className="text-xs">
 						<div className="mb-1.5 flex items-baseline justify-between gap-2">
 							<span className="font-medium text-foreground/90">
 								{formatSessionLimitLabel(limit.window ?? "")}
@@ -774,7 +828,7 @@ function SidebarLimitsPanel({ limits }: { limits: SessionLimit[] }) {
 								/>
 							</div>
 						)}
-						<div className="mt-1.5 text-[9px] text-muted-foreground/50">
+						<div className="mt-1.5 text-xs text-muted-foreground/50">
 							{formatSessionLimitReset(limit, now)}
 						</div>
 					</div>
@@ -792,10 +846,10 @@ const SIDEBAR_SHORTCUTS = [
 
 function SidebarShortcutLegend() {
 	return (
-		<div className="mb-3 hidden flex-wrap items-center justify-center gap-x-3 gap-y-1.5 text-[9px] text-muted-foreground/70 md:flex">
+		<div className="mb-3 hidden flex-wrap items-center justify-center gap-x-2.5 gap-y-1 text-xs text-muted-foreground/70 md:flex">
 			{SIDEBAR_SHORTCUTS.map((shortcut) => (
 				<span key={shortcut.key} className="inline-flex items-center gap-1">
-					<kbd className="rounded border border-foreground/14 bg-background/60 px-1.5 py-0.5 font-mono text-[8px] text-muted-foreground/80">
+					<kbd className="rounded border border-foreground/14 bg-background/60 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground/80">
 						{shortcut.key}
 					</kbd>
 					{shortcut.label}
@@ -813,12 +867,13 @@ function SessionStatusBadge({
 	reconnecting?: boolean;
 }) {
 	const now = useNow();
+	const modelLabel = session.model ? friendlyModelLabel(session.model) : null;
 
 	if (reconnecting) {
 		return (
 			<div className="flex items-center gap-1.5 rounded border border-amber-500/25 bg-amber-500/8 px-2 py-1">
 				<Loader2 className="size-2.5 animate-spin text-amber-400/80" />
-				<span className="hidden sm:inline text-[10px] text-amber-300/80">Reconnecting…</span>
+				<span className="hidden sm:inline text-xs text-amber-300/80">Reconnecting…</span>
 			</div>
 		);
 	}
@@ -826,9 +881,15 @@ function SessionStatusBadge({
 	return (
 		<div className="flex items-center gap-1.5 rounded border border-foreground/12 px-2 py-1">
 			<StatusDot status={session.status} />
-			<span className="hidden sm:inline text-[10px] text-muted-foreground/80">
+			<span className="hidden sm:inline text-xs text-muted-foreground/80">
 				{formatStatus(session, now)}
 			</span>
+			{modelLabel && (
+				<>
+					<span className="hidden sm:inline text-foreground/20">·</span>
+					<span className="hidden sm:inline text-xs text-muted-foreground/60">{modelLabel}</span>
+				</>
+			)}
 		</div>
 	);
 }
@@ -1810,7 +1871,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			>
 				<DialogContent showCloseButton={false} className="max-w-xl border-foreground/14 bg-card">
 					<DialogHeader className="text-left">
-						<div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-foreground/56">
+						<div className="text-xs font-semibold uppercase tracking-[0.16em] text-foreground/56">
 							Claude setup
 						</div>
 						<DialogTitle className="text-xl font-medium tracking-[-0.04em] text-foreground">
@@ -1837,7 +1898,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 				const sidebarContent = (
 					<>
 						<div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-4">
-							<span className="text-[11px] font-semibold uppercase tracking-[0.15em] text-foreground/82">
+							<span className="text-xs font-semibold uppercase tracking-[0.15em] text-foreground/82">
 								shelleport
 							</span>
 							<button
@@ -1846,10 +1907,10 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 									navigate("/");
 									setSidebarOpen(false);
 								}}
-								className="flex size-10 md:size-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
+								className="flex size-10 md:size-6 items-center justify-center rounded text-foreground/50 transition hover:bg-accent hover:text-foreground"
 								title="New session"
 							>
-								<Plus className="size-3.5" />
+								<Plus className="size-4" />
 							</button>
 						</div>
 
@@ -1861,7 +1922,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 										value={sessionQuery}
 										onChange={(event) => setSessionQuery(event.target.value)}
 										placeholder="Search chats"
-										className="h-10 md:h-8 w-full rounded-md border border-foreground/10 bg-background/40 pr-2 pl-7 text-[11px] text-foreground outline-none transition placeholder:text-muted-foreground/80 focus:border-foreground/18"
+										className="h-10 md:h-8 w-full rounded-md border border-foreground/10 bg-background/40 pr-2 pl-7 text-xs text-foreground outline-none transition placeholder:text-muted-foreground/80 focus:border-foreground/18"
 									/>
 								</div>
 							</div>
@@ -1871,7 +1932,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 
 									return (
 										<div className="py-8 text-center">
-											<p className="text-[11px] text-muted-foreground">{emptyState.message}</p>
+											<p className="text-xs text-muted-foreground">{emptyState.message}</p>
 											{emptyState.actionLabel && (
 												<button
 													type="button"
@@ -1879,7 +1940,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 														navigate("/");
 														setSidebarOpen(false);
 													}}
-													className="mt-2 text-[11px] text-foreground/68 transition hover:text-foreground"
+													className="mt-2 text-xs text-foreground/68 transition hover:text-foreground"
 												>
 													{emptyState.actionLabel}
 												</button>
@@ -1895,16 +1956,16 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 												<div className="flex items-center justify-between gap-2 px-2.5 py-2 mb-1">
 													<div className="flex items-center gap-1.5">
 														<Folder className="size-3 text-muted-foreground/60" />
-														<span className="text-[11px] font-medium text-muted-foreground/75">
+														<span className="text-xs font-medium text-muted-foreground/75">
 															{group.projectName}
 														</span>
-														<span className="text-[10px] text-muted-foreground/50">
+														<span className="text-xs text-muted-foreground/50">
 															{group.sessions.length}
 														</span>
 													</div>
 													{deleteProjectConfirmId === group.projectId ? (
 														<div className="flex items-center gap-1">
-															<span className="text-[9px] text-destructive">
+															<span className="text-xs text-destructive">
 																{group.sessions.length > 0
 																	? `${group.sessions.length} session${group.sessions.length === 1 ? "" : "s"} will be ungrouped. Delete?`
 																	: "Delete?"}
@@ -1912,14 +1973,14 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 															<button
 																type="button"
 																onClick={() => void handleDeleteProject(group.projectId!)}
-																className="rounded bg-destructive/15 px-1.5 py-0.5 text-[9px] font-medium text-destructive transition hover:bg-destructive/25"
+																className="rounded bg-destructive/15 px-1.5 py-0.5 text-xs font-medium text-destructive transition hover:bg-destructive/25"
 															>
 																Yes
 															</button>
 															<button
 																type="button"
 																onClick={() => setDeleteProjectConfirmId(null)}
-																className="rounded bg-foreground/8 px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground transition hover:bg-foreground/15"
+																className="rounded bg-foreground/8 px-1.5 py-0.5 text-xs font-medium text-muted-foreground transition hover:bg-foreground/15"
 															>
 																No
 															</button>
@@ -1968,7 +2029,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 									navigate("/archived");
 									setSidebarOpen(false);
 								}}
-								className={`mb-1 flex w-full items-center gap-2 rounded-md px-2.5 py-3 md:py-2 text-[11px] transition ${
+								className={`mb-1 flex w-full items-center gap-2 rounded-md px-2.5 py-3 md:py-2 text-xs transition ${
 									isArchivedView
 										? "bg-accent text-foreground"
 										: "text-muted-foreground/88 hover:bg-accent hover:text-foreground"
@@ -1976,14 +2037,14 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 							>
 								<Archive className="size-3" />
 								Archived
-								<span className="ml-auto text-[10px] text-muted-foreground/80">
+								<span className="ml-auto text-xs text-muted-foreground/80">
 									{archivedSessions.length}
 								</span>
 							</button>
 							<button
 								type="button"
 								onClick={handleLogout}
-								className="flex w-full items-center gap-2 rounded-md px-2.5 py-3 md:py-2 text-[11px] text-muted-foreground/88 transition hover:bg-accent hover:text-foreground"
+								className="flex w-full items-center gap-2 rounded-md px-2.5 py-3 md:py-2 text-xs text-muted-foreground/88 transition hover:bg-accent hover:text-foreground"
 							>
 								<LogOut className="size-3" />
 								Disconnect
@@ -2028,7 +2089,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 									<Menu className="size-5" />
 								</button>
 								<h1 className="text-xs font-medium text-foreground">Archived sessions</h1>
-								<span className="text-[10px] text-muted-foreground/65">
+								<span className="text-xs text-muted-foreground/65">
 									Restore a thread to move it back into the main list.
 								</span>
 							</div>
@@ -2050,7 +2111,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 													<p className="truncate text-xs font-medium text-foreground">
 														{archivedSession.title}
 													</p>
-													<p className="mt-1 truncate text-[10px] text-muted-foreground/86">
+													<p className="mt-1 truncate text-xs text-muted-foreground/86">
 														{archivedSession.cwd}
 													</p>
 												</div>
@@ -2058,14 +2119,14 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 													<button
 														type="button"
 														onClick={() => navigate(`/sessions/${archivedSession.id}`)}
-														className="rounded border border-foreground/10 px-3 py-2.5 md:py-1.5 text-[11px] text-muted-foreground/88 transition hover:border-foreground/18 hover:text-foreground"
+														className="rounded border border-foreground/10 px-3 py-2.5 md:py-1.5 text-xs text-muted-foreground/88 transition hover:border-foreground/18 hover:text-foreground"
 													>
 														Open
 													</button>
 													<button
 														type="button"
 														onClick={() => handleArchive(archivedSession.id, false)}
-														className="flex items-center gap-1.5 rounded bg-foreground px-3 py-2.5 md:py-1.5 text-[11px] font-medium text-background transition hover:bg-foreground/90"
+														className="flex items-center gap-1.5 rounded bg-foreground px-3 py-2.5 md:py-1.5 text-xs font-medium text-background transition hover:bg-foreground/90"
 													>
 														<ArchiveRestore className="size-3" />
 														Unarchive
@@ -2080,7 +2141,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 
 															setDeleteConfirmId(archivedSession.id);
 														}}
-														className={`flex items-center gap-1.5 rounded border px-3 py-2.5 md:py-1.5 text-[11px] transition ${
+														className={`flex items-center gap-1.5 rounded border px-3 py-2.5 md:py-1.5 text-xs transition ${
 															deleteConfirmId === archivedSession.id
 																? "border-destructive/40 bg-destructive/10 text-destructive"
 																: "border-foreground/10 text-muted-foreground/88 hover:border-destructive/30 hover:text-destructive"
@@ -2155,21 +2216,9 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											</button>
 										</div>
 									) : sessionView ? (
-										<>
-											<h1 className="truncate text-xs font-medium text-foreground">
-												{sessionView.title}
-											</h1>
-											<button
-												type="button"
-												onClick={() =>
-													setRenameState({ sessionId: sessionView.id, title: sessionView.title })
-												}
-												className="flex size-10 md:size-5 items-center justify-center rounded text-muted-foreground/80 transition hover:bg-accent hover:text-foreground"
-												title="Rename chat"
-											>
-												<Pencil className="size-2.5" />
-											</button>
-										</>
+										<h1 className="truncate text-xs font-medium text-foreground">
+											{sessionView.title}
+										</h1>
 									) : (
 										<h1 className="truncate text-xs font-medium text-foreground">
 											Loading session
@@ -2185,7 +2234,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 									)}
 
 									{permissionModeLabel && (
-										<span className="hidden rounded border border-foreground/12 px-2 py-1 text-[9px] uppercase tracking-[0.08em] text-muted-foreground/80 md:inline-flex">
+										<span className="hidden rounded border border-foreground/12 px-2 py-1 text-xs uppercase tracking-[0.08em] text-muted-foreground/80 md:inline-flex">
 											{permissionModeLabel}
 										</span>
 									)}
@@ -2207,6 +2256,10 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											copiedConversation={copiedConversation}
 											hideThinking={hideThinking}
 											onPin={(id, pinned) => handlePinned(id, pinned)}
+											onDelete={(id) => void handleDelete(id)}
+											onRename={() =>
+												setRenameState({ sessionId: sessionView.id, title: sessionView.title })
+											}
 											onCopy={handleCopyConversation}
 											onMoveProject={(projectId) => void handleMoveSessionToProject(projectId)}
 											onToggleThinking={() =>
@@ -2260,7 +2313,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											<button
 												type="button"
 												onClick={() => void handleInterrupt()}
-												className="flex items-center justify-center gap-1 rounded border border-foreground/12 px-2 py-1 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-[10px] text-muted-foreground/80 transition hover:border-foreground/18 hover:text-foreground"
+												className="flex items-center justify-center gap-1 rounded border border-foreground/12 px-2 py-1 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-xs text-muted-foreground/80 transition hover:border-foreground/18 hover:text-foreground"
 											>
 												<CircleStop className="size-3 md:size-2.5" />
 												<span className="hidden md:inline">Stop</span>
@@ -2320,7 +2373,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											)}
 											{queuedInputs.length > 0 && (
 												<div className="border-b border-border px-4 py-3">
-													<div className="mb-2 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/80">
+													<div className="mb-2 text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground/80">
 														Queued
 													</div>
 													<div className="space-y-2">
@@ -2335,12 +2388,12 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 																	className="rounded-md border border-foreground/10 bg-background/42 px-3 py-2"
 																>
 																	<div className="flex items-center justify-between gap-3">
-																		<div className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground/80">
+																		<div className="text-xs uppercase tracking-[0.12em] text-muted-foreground/80">
 																			#{index + 1}
 																		</div>
 																		<div className="flex items-center gap-1">
 																			{attachmentLabel && (
-																				<div className="mr-1 text-[10px] text-muted-foreground/80">
+																				<div className="mr-1 text-xs text-muted-foreground/80">
 																					{attachmentLabel}
 																				</div>
 																			)}
@@ -2434,16 +2487,16 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 																? "Message Claude... attach files or paste images"
 																: "Message Claude... (Enter to send)"
 													}
-													className="min-h-[44px] md:min-h-[28px] flex-1 resize-none bg-transparent px-2 py-1.5 text-xs leading-[1.6] text-foreground outline-none placeholder:text-muted-foreground/80"
+													className="min-h-[100px] md:min-h-[80px] flex-1 resize-none bg-transparent px-2 py-1.5 text-xs leading-[1.6] text-foreground outline-none placeholder:text-muted-foreground/80"
 												/>
 												{canAttach && (
 													<button
 														type="button"
 														onClick={() => fileInputRef.current?.click()}
-														className="flex size-9 md:size-7 shrink-0 items-center justify-center rounded border border-foreground/10 bg-background text-muted-foreground/86 transition hover:border-foreground/22 hover:text-foreground"
+														className="flex size-9 md:size-7 shrink-0 items-center justify-center rounded border border-foreground/10 bg-background text-foreground/50 transition hover:border-foreground/22 hover:text-foreground"
 														title="Attach files"
 													>
-														<Paperclip className="size-3.5" />
+														<Paperclip className="size-4" />
 													</button>
 												)}
 												<button
@@ -2456,7 +2509,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 												</button>
 											</div>
 											{queuedInputCount > 0 && (
-												<div className="px-4 pb-1.5 text-[10px] text-muted-foreground/86">
+												<div className="px-4 pb-1.5 text-xs text-muted-foreground/86">
 													{queuedInputCount} queued
 												</div>
 											)}
@@ -2477,7 +2530,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 							>
 								<Menu className="size-5" />
 							</button>
-							<span className="text-[11px] font-semibold uppercase tracking-[0.15em] text-foreground/82">
+							<span className="text-xs font-semibold uppercase tracking-[0.15em] text-foreground/82">
 								shelleport
 							</span>
 						</div>
@@ -2489,11 +2542,11 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											<h2 className="text-xs font-medium text-foreground">
 												Before your first session
 											</h2>
-											<p className="mt-1 text-[11px] leading-[1.7] text-muted-foreground/82">
+											<p className="mt-1 text-xs leading-[1.7] text-muted-foreground/82">
 												Check Claude readiness once, then pick a project directory below.
 											</p>
 										</div>
-										<div className="flex flex-col gap-1 text-[11px] text-muted-foreground/82">
+										<div className="flex flex-col gap-1 text-xs text-muted-foreground/82">
 											<div className="flex items-center gap-2">
 												{firstRunReadiness.claudeReady ? (
 													<Check className="size-3 text-foreground/80" />
@@ -2518,11 +2571,11 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 										</div>
 									</div>
 									{firstRunReadiness.claudeStatusDetail && (
-										<p className="mt-3 text-[11px] leading-[1.7] text-muted-foreground/78">
+										<p className="mt-3 text-xs leading-[1.7] text-muted-foreground/78">
 											{firstRunReadiness.claudeStatusDetail}
 										</p>
 									)}
-									<div className="mt-3 flex flex-wrap gap-2 text-[11px] text-muted-foreground/82">
+									<div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground/82">
 										<span className="rounded border border-foreground/10 bg-background px-2 py-1 text-foreground/86">
 											claude doctor
 										</span>
