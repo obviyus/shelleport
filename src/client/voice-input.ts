@@ -1,8 +1,10 @@
 /**
  * Browser-local voice input using Whisper tiny via @huggingface/transformers.
- * Loaded at runtime from CDN — zero npm bundle impact.
+ * Loaded lazily from our own bundle.
  * Model (~40MB) downloads lazily on first use and is cached by the browser.
  */
+
+import ortWasmPath from "../../node_modules/@huggingface/transformers/dist/ort-wasm-simd-threaded.jsep.wasm";
 
 type TranscriptionPipeline = (
 	audio: Float32Array,
@@ -10,6 +12,10 @@ type TranscriptionPipeline = (
 ) => Promise<{ text: string }>;
 
 let pipelinePromise: Promise<TranscriptionPipeline> | null = null;
+const whisperModelId = "onnx-community/whisper-tiny";
+const ortWasmUrls = {
+	wasm: new URL(ortWasmPath, import.meta.url).href,
+};
 
 export type VoiceInputState =
 	| { status: "idle" }
@@ -26,9 +32,17 @@ function getOrCreatePipeline(
 ): Promise<TranscriptionPipeline> {
 	if (pipelinePromise) return pipelinePromise;
 
-	pipelinePromise = (async () => {
-		const { pipeline } = await import("https://esm.sh/@huggingface/transformers@3.4.0");
-		return pipeline("automatic-speech-recognition", "onnx-community/whisper-tiny", {
+	const nextPipelinePromise = (async () => {
+		const { env, pipeline } = await import("@huggingface/transformers");
+		env.backends.onnx = {
+			...env.backends.onnx,
+			wasm: {
+				...env.backends.onnx.wasm,
+				numThreads: 1,
+				wasmPaths: ortWasmUrls,
+			},
+		};
+		const transcriber = await pipeline("automatic-speech-recognition", whisperModelId, {
 			dtype: "q8",
 			device: "wasm",
 			progress_callback: (event: Record<string, unknown>) => {
@@ -37,13 +51,22 @@ function getOrCreatePipeline(
 				}
 			},
 		});
+
+		return async (audio: Float32Array, options?: { language?: string; task?: string }) => {
+			const result = await transcriber(audio, options);
+			return Array.isArray(result) ? (result[0] ?? { text: "" }) : result;
+		};
 	})();
 
-	pipelinePromise.catch(() => {
-		pipelinePromise = null;
+	pipelinePromise = nextPipelinePromise;
+
+	nextPipelinePromise.catch(() => {
+		if (pipelinePromise === nextPipelinePromise) {
+			pipelinePromise = null;
+		}
 	});
 
-	return pipelinePromise;
+	return nextPipelinePromise;
 }
 
 /**

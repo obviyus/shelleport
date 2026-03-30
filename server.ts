@@ -824,7 +824,7 @@ const securityHeaders: Record<string, string> = {
 	"Referrer-Policy": "strict-origin-when-cross-origin",
 	"Permissions-Policy": "camera=(), microphone=(self), geolocation=()",
 	"Content-Security-Policy":
-		"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://esm.sh https://*.huggingface.co; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+		"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://*.huggingface.co; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
 };
 
 function applySecurityHeaders(response: Response) {
