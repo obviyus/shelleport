@@ -1,16 +1,23 @@
-/**
- * Browser-local voice input using Whisper tiny via @huggingface/transformers.
- * Loaded lazily from our own bundle.
- * Model (~40MB) downloads lazily on first use and is cached by the browser.
- */
+type VoiceWorkerRequest =
+	| { id: number; type: "init" }
+	| { id: number; type: "transcribe"; audio: Float32Array };
 
-type TranscriptionPipeline = (
-	audio: Float32Array,
-	options?: { language?: string; task?: string },
-) => Promise<{ text: string }>;
+type VoiceWorkerResponse =
+	| { id: number; type: "ready" }
+	| { id: number; type: "result"; text: string }
+	| { id: number; type: "progress"; progress: number }
+	| { id: number; type: "error"; message: string };
 
-let pipelinePromise: Promise<TranscriptionPipeline> | null = null;
-const whisperModelId = "onnx-community/whisper-tiny";
+type PendingWorkerRequest = {
+	onProgress?: (progress: number) => void;
+	reject: (error: Error) => void;
+	resolve: (value: string | void) => void;
+};
+
+let nextRequestId = 1;
+let voiceWorker: Worker | null = null;
+let pipelinePromise: Promise<void> | null = null;
+const pendingWorkerRequests = new Map<number, PendingWorkerRequest>();
 
 export type VoiceInputState =
 	| { status: "idle" }
@@ -19,48 +26,116 @@ export type VoiceInputState =
 	| { status: "transcribing" }
 	| { status: "error"; message: string };
 
-/**
- * Lazily load the Whisper tiny pipeline. Only downloads the model on first call.
- */
-function getOrCreatePipeline(
-	onProgress?: (progress: number) => void,
-): Promise<TranscriptionPipeline> {
-	if (pipelinePromise) return pipelinePromise;
+function resetVoiceWorker(error?: Error) {
+	if (voiceWorker) {
+		voiceWorker.terminate();
+		voiceWorker = null;
+	}
 
-	const nextPipelinePromise = (async () => {
-		const { env, pipeline } = await import("./transformers-runtime");
-		env.backends.onnx = {
-			...env.backends.onnx,
-			wasm: {
-				...env.backends.onnx.wasm,
-				numThreads: 1,
-			},
-		};
-		const transcriber = await pipeline("automatic-speech-recognition", whisperModelId, {
-			dtype: "q8",
-			device: "wasm",
-			progress_callback: (event: Record<string, unknown>) => {
-				if (typeof event.progress === "number" && onProgress) {
-					onProgress(event.progress);
-				}
-			},
+	if (pipelinePromise) {
+		pipelinePromise = null;
+	}
+
+	if (pendingWorkerRequests.size === 0) {
+		return;
+	}
+
+	for (const [id, request] of pendingWorkerRequests) {
+		request.reject(error ?? new Error("Voice worker failed"));
+		pendingWorkerRequests.delete(id);
+	}
+}
+
+function getOrCreateVoiceWorker() {
+	if (voiceWorker) {
+		return voiceWorker;
+	}
+
+	const worker = new Worker(new URL("./voice-input.worker.ts", import.meta.url), {
+		type: "module",
+	});
+
+	worker.addEventListener("message", (event: MessageEvent<VoiceWorkerResponse>) => {
+		const message = event.data;
+		const request = pendingWorkerRequests.get(message.id);
+
+		if (!request) {
+			return;
+		}
+
+		if (message.type === "progress") {
+			request.onProgress?.(message.progress);
+			return;
+		}
+
+		pendingWorkerRequests.delete(message.id);
+
+		if (message.type === "error") {
+			request.reject(new Error(message.message));
+			return;
+		}
+
+		request.resolve(message.type === "result" ? message.text : undefined);
+	});
+
+	worker.addEventListener("error", (event) => {
+		resetVoiceWorker(event.error instanceof Error ? event.error : new Error("Voice worker failed"));
+	});
+
+	voiceWorker = worker;
+	return worker;
+}
+
+function postWorkerRequest(
+	message: VoiceWorkerRequest,
+	options?: { onProgress?: (progress: number) => void; transfer?: Transferable[] },
+) {
+	const worker = getOrCreateVoiceWorker();
+
+	return new Promise<string | void>((resolve, reject) => {
+		pendingWorkerRequests.set(message.id, {
+			onProgress: options?.onProgress,
+			reject,
+			resolve,
 		});
+		worker.postMessage(message, options?.transfer ?? []);
+	});
+}
 
-		return async (audio: Float32Array, options?: { language?: string; task?: string }) => {
-			const result = await transcriber(audio, options);
-			return Array.isArray(result) ? (result[0] ?? { text: "" }) : result;
-		};
-	})();
+function getOrCreatePipeline(onProgress?: (progress: number) => void): Promise<void> {
+	if (pipelinePromise) {
+		return pipelinePromise;
+	}
+
+	const nextPipelinePromise = postWorkerRequest(
+		{
+			id: nextRequestId++,
+			type: "init",
+		},
+		{ onProgress },
+	).then(() => undefined);
 
 	pipelinePromise = nextPipelinePromise;
 
-	nextPipelinePromise.catch(() => {
+	nextPipelinePromise.catch((error) => {
 		if (pipelinePromise === nextPipelinePromise) {
 			pipelinePromise = null;
 		}
+		resetVoiceWorker(error instanceof Error ? error : new Error("Voice worker failed"));
 	});
 
 	return nextPipelinePromise;
+}
+
+function transcribeAudio(audio: Float32Array) {
+	return postWorkerRequest(
+		{
+			audio,
+			id: nextRequestId++,
+			type: "transcribe",
+		},
+		{ transfer: [audio.buffer] },
+	).then((result) => (typeof result === "string" ? result : ""));
 }
 
 /**
@@ -70,27 +145,13 @@ export function createVoiceSession(callbacks: { onStateChange: (state: VoiceInpu
 	let mediaRecorder: MediaRecorder | null = null;
 	let cancelled = false;
 
-async function start() {
+	async function start() {
 		try {
 			if (!navigator.mediaDevices?.getUserMedia) {
 				throw new Error("Voice input requires HTTPS or localhost");
 			}
 
 			const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-			if (cancelled) {
-				for (const track of stream.getTracks()) track.stop();
-				return null;
-			}
-
-			callbacks.onStateChange({ status: "loading-model", progress: 0 });
-
-			const pipelineReady = getOrCreatePipeline((progress) => {
-				if (!cancelled) {
-					callbacks.onStateChange({ status: "loading-model", progress });
-				}
-			});
-			const transcriber = await pipelineReady;
 
 			if (cancelled) {
 				for (const track of stream.getTracks()) track.stop();
@@ -117,6 +178,15 @@ async function start() {
 				};
 			});
 
+			callbacks.onStateChange({ status: "loading-model", progress: 0 });
+
+			const pipelineReady = getOrCreatePipeline((progress) => {
+				if (!cancelled) {
+					callbacks.onStateChange({ status: "loading-model", progress });
+				}
+			});
+			void pipelineReady.catch(() => {});
+
 			mediaRecorder.start();
 			callbacks.onStateChange({ status: "recording", startTime: Date.now() });
 
@@ -132,16 +202,17 @@ async function start() {
 
 					if (cancelled) return "";
 
+					await pipelineReady;
+
+					if (cancelled) return "";
+
 					callbacks.onStateChange({ status: "transcribing" });
 
 					const audioBuffer = await blobToFloat32(blob);
-					const result = await transcriber(audioBuffer, {
-						language: "en",
-						task: "transcribe",
-					});
+					const result = await transcribeAudio(audioBuffer);
 
 					callbacks.onStateChange({ status: "idle" });
-					return result.text.trim();
+					return result.trim();
 				},
 				cancel: () => {
 					cancelled = true;
