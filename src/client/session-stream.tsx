@@ -1173,14 +1173,14 @@ function ToolCard({ call, result }: { call: HostEvent; result: HostEvent | null 
 
 	return (
 		<details
-			className="animate-event-enter group"
+			className="animate-event-enter group ml-[18px] md:ml-[22px]"
 			onToggle={(event) => {
 				if (event.currentTarget.open) {
 					setShouldRenderCode(true);
 				}
 			}}
 		>
-			<summary className="flex cursor-pointer list-none items-center gap-2 px-3 md:px-4 py-1 transition hover:bg-accent/30">
+			<summary className="flex cursor-pointer list-none items-center gap-2 py-1 transition hover:bg-accent/30">
 				<ChevronRight className="size-2.5 shrink-0 text-muted-foreground transition group-open:rotate-90" />
 				<span className="text-xs font-medium text-sky-300 shrink-0">
 					{call.data.toolName as string}
@@ -1196,7 +1196,7 @@ function ToolCard({ call, result }: { call: HostEvent; result: HostEvent | null 
 					{getToolPreview(call)}
 				</span>
 			</summary>
-			<div className="ml-[18px] md:ml-[22px] mb-1 mt-0.5 overflow-hidden rounded-md border border-foreground/10 bg-card/90">
+			<div className="mb-1 mt-0.5 overflow-hidden rounded-md border border-foreground/10 bg-card/90">
 				{hasOutput ? (
 					isDiffStat ? (
 						<DiffStatBlock text={content} />
@@ -1262,12 +1262,12 @@ function AssistantTextRunRenderer({
 
 function ThinkingBlock({ text }: { text: string }) {
 	return (
-		<details className="animate-event-enter group mb-2" open>
+		<details className="animate-event-enter group mb-2 ml-[18px] md:ml-[22px]" open>
 			<summary className="flex cursor-pointer list-none items-center gap-1.5 py-1 text-violet-400/60 transition hover:text-violet-400">
 				<ChevronRight className="size-2.5 shrink-0 transition group-open:rotate-90" />
 				<span className="text-[11px] uppercase tracking-[0.08em]">Thinking</span>
 			</summary>
-			<div className="text-sm leading-[1.8] text-foreground/50 italic mt-0.5">
+			<div className="mt-0.5 text-sm leading-[1.8] text-foreground/50 italic">
 				<MarkdownMessage text={text} />
 			</div>
 		</details>
