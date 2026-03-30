@@ -918,7 +918,7 @@ export async function runServe(options: CliOptions) {
 		development: isDevelopment
 			? {
 					console: true,
-					hmr: true,
+					hmr: false,
 				}
 			: false,
 		fetch,
