@@ -1071,7 +1071,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const [archiveConfirmId, setArchiveConfirmId] = useState<string | null>(null);
 	const [copiedConversation, setCopiedConversation] = useState(false);
-	const [shownThinkingSessionIds, setShownThinkingSessionIds] = useState<string[]>([]);
+	const [hiddenThinkingSessionIds, setHiddenThinkingSessionIds] = useState<string[]>([]);
 	const [renameState, setRenameState] = useState<{ sessionId: string; title: string } | null>(null);
 	const [sidebarOpen, setSidebarOpen] = useState(false);
 	const [sessionQuery, setSessionQuery] = useState("");
@@ -1091,7 +1091,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		[selectedId, sessions],
 	);
 	const sessionView = session?.id === selectedId ? session : selectedSession;
-	const hideThinking = !selectedId || !shownThinkingSessionIds.includes(selectedId);
+	const hideThinking = !selectedId || hiddenThinkingSessionIds.includes(selectedId);
 	const [voiceState, setVoiceState] = useState<VoiceInputState>({ status: "idle" });
 	const voiceSetupRef = useRef<ReturnType<typeof createVoiceSession> | null>(null);
 	const voiceSessionRef =
@@ -2357,7 +2357,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											onCopy={handleCopyConversation}
 											onMoveProject={(projectId) => void handleMoveSessionToProject(projectId)}
 											onToggleThinking={() =>
-												setShownThinkingSessionIds((current) => {
+												setHiddenThinkingSessionIds((current) => {
 													if (!selectedId) {
 														return current;
 													}

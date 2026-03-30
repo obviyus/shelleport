@@ -1261,15 +1261,16 @@ function AssistantTextRunRenderer({
 
 function ThinkingBlock({ text }: { text: string }) {
 	return (
-		<details className="animate-event-enter group mb-4 overflow-hidden rounded-lg border border-foreground/10 bg-card/92 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]">
-			<summary className="flex cursor-pointer list-none items-center gap-2 px-3 md:px-4 py-2.5 transition hover:bg-accent/45">
-				<ChevronRight className="size-3 shrink-0 text-muted-foreground transition group-open:rotate-90" />
-				<span className="text-xs text-violet-400/80">Thinking</span>
+		<details
+			className="animate-event-enter group mb-2"
+			open
+		>
+			<summary className="flex cursor-pointer list-none items-center gap-1.5 py-1 text-violet-400/60 transition hover:text-violet-400">
+				<ChevronRight className="size-2.5 shrink-0 transition group-open:rotate-90" />
+				<span className="text-[11px] uppercase tracking-[0.08em]">Thinking</span>
 			</summary>
-			<div className="border-t border-foreground/12 bg-background/35 px-4 py-3">
-				<div className="text-sm leading-[1.8] text-foreground/80">
-					<MarkdownMessage text={text} />
-				</div>
+			<div className="text-sm leading-[1.8] text-foreground/50 italic mt-0.5">
+				<MarkdownMessage text={text} />
 			</div>
 		</details>
 	);
