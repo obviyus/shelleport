@@ -1071,7 +1071,6 @@ export class ClaudeProviderAdapter implements ProviderAdapter {
 				{ id: "sonnet[1m]", label: "Sonnet 1M" },
 				{ id: "opus", label: "Opus" },
 				{ id: "opus[1m]", label: "Opus 1M" },
-				{ id: "opusplan", label: "Opus→Sonnet" },
 				{ id: "haiku", label: "Haiku" },
 			],
 		};
