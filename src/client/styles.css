@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap");
 @import "tailwindcss";
 @import "tw-animate-css";
 @source "./**/*.{ts,tsx}";
@@ -6,7 +6,7 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme {
-	--font-sans: "JetBrains Mono", ui-monospace, monospace;
+	--font-sans: "IBM Plex Sans", system-ui, sans-serif;
 	--font-mono: "JetBrains Mono", ui-monospace, monospace;
 }
 
@@ -120,7 +120,7 @@ html {
 			linear-gradient(180deg, oklch(0.20 0.03 260 / 0.3), transparent 25%);
 		height: 100dvh;
 		overflow: hidden;
-		font-size: 13px;
+		font-size: 14px;
 		letter-spacing: -0.01em;
 	}
 	button,
