@@ -1037,7 +1037,11 @@ function getAssistantModel(group: GroupedEntry): string | null {
 		return typeof model === "string" ? model : null;
 	}
 
-	if (group.type !== "single" || group.entry.kind !== "text" || group.entry.data.role !== "assistant") {
+	if (
+		group.type !== "single" ||
+		group.entry.kind !== "text" ||
+		group.entry.data.role !== "assistant"
+	) {
 		return null;
 	}
 
@@ -1282,13 +1286,7 @@ function ThinkingBlock({ text }: { text: string }) {
 	);
 }
 
-function EventRenderer({
-	event,
-	showModelLabel,
-}: {
-	event: HostEvent;
-	showModelLabel: boolean;
-}) {
+function EventRenderer({ event, showModelLabel }: { event: HostEvent; showModelLabel: boolean }) {
 	if (event.kind === "text") {
 		if (event.data.role === "user") {
 			return <UserMessageRenderer event={event} />;
