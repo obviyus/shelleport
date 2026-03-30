@@ -2511,7 +2511,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 					</div>
 				) : isSessionRoute ? (
 					<>
-						<header className="shrink-0 border-b border-border bg-background/72 px-3 md:px-5 py-2.5 backdrop-blur-sm">
+						<header className="shrink-0 bg-background/72 px-3 md:px-5 py-2.5 backdrop-blur-sm">
 							<div className="mx-auto flex max-w-[70rem] items-center justify-between gap-2 md:gap-4">
 								<button
 									type="button"
@@ -2688,7 +2688,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 							statusMessage={statusMessage}
 						/>
 
-						<div className="shrink-0 border-t border-border px-3 md:px-6 py-3 md:py-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:pb-4">
+						<div className="shrink-0 px-3 md:px-6 py-3 md:py-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:pb-4">
 							<div className="mx-auto max-w-[70rem]">
 								<div className="rounded-md border border-foreground/10 bg-card/92 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)] transition-colors focus-within:border-foreground/22">
 									{sessionView && (
