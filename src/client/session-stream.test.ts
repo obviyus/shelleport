@@ -19,12 +19,14 @@ describe("session limits", () => {
 		expect(
 			orderSessionLimits([
 				{
+					isUsingOverage: null,
 					window: "seven_day",
 					resetsAt: 1,
 					utilization: null,
 					status: "allowed_warning",
 				},
 				{
+					isUsingOverage: null,
 					window: "weekly",
 					resetsAt: 2,
 					utilization: 42,
@@ -33,6 +35,7 @@ describe("session limits", () => {
 			]),
 		).toEqual([
 			{
+				isUsingOverage: null,
 				window: "weekly",
 				resetsAt: 2,
 				utilization: 42,
@@ -45,6 +48,7 @@ describe("session limits", () => {
 		expect(formatSessionLimitLabel("seven_day")).toBe("Weekly");
 		expect(
 			formatSessionLimitUsage({
+				isUsingOverage: null,
 				window: "seven_day",
 				resetsAt: 1,
 				utilization: null,
