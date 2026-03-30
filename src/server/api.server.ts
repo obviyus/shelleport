@@ -29,6 +29,12 @@ import { sessionStore } from "~/server/store.server";
 import { getProvider, listProviders } from "~/server/providers/registry.server";
 import { buildAppBootData } from "~/server/web.server";
 
+type RequestTimeoutController = {
+	timeout(request: Request, seconds: number): void;
+};
+
+const SESSION_STREAM_IDLE_TIMEOUT_SECONDS = 60;
+
 async function readJson<T>(request: Request) {
 	try {
 		return (await request.json()) as T;
@@ -374,7 +380,7 @@ async function listDirectory(path: string): Promise<DirectoryListing> {
 	};
 }
 
-async function dispatchApiRequest(request: Request) {
+async function dispatchApiRequest(request: Request, timeoutController?: RequestTimeoutController) {
 	const url = new URL(request.url);
 	const segments = url.pathname.split("/").filter(Boolean);
 
@@ -559,6 +565,8 @@ async function dispatchApiRequest(request: Request) {
 				return jsonError(404, "session_not_found", "Session not found");
 			}
 
+			timeoutController?.timeout(request, SESSION_STREAM_IDLE_TIMEOUT_SECONDS);
+
 			return new Response(createSessionEventStream(sessionId), {
 				headers: {
 					"Content-Type": "text/event-stream; charset=utf-8",
@@ -634,9 +642,12 @@ async function dispatchApiRequest(request: Request) {
 	throw new ApiError(404, "not_found", "Not found");
 }
 
-export async function handleApiRequest(request: Request) {
+export async function handleApiRequest(
+	request: Request,
+	timeoutController?: RequestTimeoutController,
+) {
 	try {
-		return await dispatchApiRequest(request);
+		return await dispatchApiRequest(request, timeoutController);
 	} catch (error) {
 		if (isApiError(error)) {
 			return jsonError(error.status, error.code, error.message);

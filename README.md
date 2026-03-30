@@ -199,7 +199,7 @@ API endpoints require the auth cookie after login. Bearer auth still works for d
 ## Development
 
 ```bash
-bun run dev          # Bun fullstack dev server with frontend hot reload
+bun run dev          # Bun watch-mode dev server with live browser reload
 bun run build        # Ahead-of-time client bundle
 NODE_ENV=production bun run server.ts serve  # Run from source
 bun run compile      # Build the local standalone binary

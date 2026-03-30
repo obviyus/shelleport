@@ -1448,6 +1448,40 @@ describe("handleApiRequest", () => {
 		await reader.cancel();
 	});
 
+	test("raises Bun idle timeout for SSE streams", async () => {
+		const createResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "claude",
+					cwd: testRoot,
+					prompt: "Say hello",
+				}),
+			}),
+		);
+		expect(createResponse.status).toBe(201);
+		const createJson = await readJson<{ session: { id: string } }>(createResponse);
+		const timeoutCalls: number[] = [];
+		const eventsResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${createJson.session.id}/events`, {
+				headers: authHeader,
+			}),
+			{
+				timeout(_request, seconds) {
+					timeoutCalls.push(seconds);
+				},
+			},
+		);
+
+		expect(eventsResponse.status).toBe(200);
+		expect(timeoutCalls).toEqual([60]);
+		await eventsResponse.body?.cancel();
+	});
+
 	test("queues session input on the server while approval is pending", async () => {
 		const createResponse = await handleApiRequest(
 			new Request("http://localhost/api/sessions", {

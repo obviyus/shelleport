@@ -28,6 +28,10 @@ type CliOptions = {
 	version: boolean;
 };
 
+type RequestTimeoutController = {
+	timeout(request: Request, seconds: number): void;
+};
+
 export async function getServiceEnvironment(home = Bun.env.HOME ?? process.cwd()) {
 	const pathEntries = [`${home}/.local/bin`, ...(process.env.PATH ?? "").split(":")].filter(
 		Boolean,
@@ -841,13 +845,13 @@ export async function createServerFetchHandler() {
 	const { sessionBroker } = await import("~/server/session-broker.server");
 	sessionBroker.recoverInterruptedRuns();
 
-	return async function fetch(request: Request) {
+	return async function fetch(request: Request, timeoutController?: RequestTimeoutController) {
 		const url = new URL(request.url);
 
 		try {
 			if (url.pathname.startsWith("/api/")) {
 				const { handleApiRequest } = await loadApiModule();
-				return applySecurityHeaders(await handleApiRequest(request));
+				return applySecurityHeaders(await handleApiRequest(request, timeoutController));
 			}
 
 			if (url.pathname === "/health") {

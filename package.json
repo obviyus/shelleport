@@ -40,7 +40,7 @@
 	"scripts": {
 		"build": "bun run ./scripts/build.ts",
 		"compile": "bun run ./scripts/package.ts local",
-		"dev": "bun run server.ts serve",
+		"dev": "bun --watch server.ts serve",
 		"start": "bun run build && cd ./build/server && NODE_ENV=production bun ./server.js serve",
 		"start:source": "NODE_ENV=production bun run server.ts serve",
 		"doctor": "bun run server.ts doctor",
