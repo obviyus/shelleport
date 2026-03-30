@@ -898,9 +898,7 @@ function SessionStatusBadge({
 	return (
 		<div
 			className={`flex items-center gap-1.5 rounded border px-2 py-1 ${
-				isActive
-					? "border-emerald-500/25 bg-emerald-500/8"
-					: "border-foreground/12"
+				isActive ? "border-emerald-500/25 bg-emerald-500/8" : "border-foreground/12"
 			}`}
 		>
 			<StatusDot status={session.status} />

@@ -27,7 +27,7 @@ html {
 	--background: oklch(0.06 0.015 260);
 	--foreground: oklch(0.92 0.008 250);
 
-	--card: oklch(0.10 0.012 260);
+	--card: oklch(0.1 0.012 260);
 	--card-foreground: oklch(0.92 0.008 250);
 
 	--popover: oklch(0.11 0.014 260);
@@ -49,15 +49,15 @@ html {
 	--destructive: oklch(0.55 0.2 25);
 
 	--border: oklch(0.28 0.015 260 / 50%);
-	--input: oklch(0.30 0.015 260 / 50%);
+	--input: oklch(0.3 0.015 260 / 50%);
 	--ring: oklch(0.82 0.12 75 / 40%);
 
 	/* Chart colors with actual hue variety */
 	--chart-1: oklch(0.82 0.12 75);
-	--chart-2: oklch(0.72 0.10 180);
+	--chart-2: oklch(0.72 0.1 180);
 	--chart-3: oklch(0.65 0.12 300);
-	--chart-4: oklch(0.60 0.10 140);
-	--chart-5: oklch(0.55 0.10 25);
+	--chart-4: oklch(0.6 0.1 140);
+	--chart-5: oklch(0.55 0.1 25);
 
 	/* Sidebar: slightly deeper, cooler */
 	--sidebar: oklch(0.05 0.018 265);
@@ -65,7 +65,7 @@ html {
 	--sidebar-primary: oklch(0.82 0.12 75);
 	--sidebar-primary-foreground: oklch(0.13 0.02 75);
 	--sidebar-accent: oklch(0.13 0.015 260);
-	--sidebar-accent-foreground: oklch(0.90 0.008 250);
+	--sidebar-accent-foreground: oklch(0.9 0.008 250);
 	--sidebar-border: oklch(0.25 0.015 260 / 45%);
 	--sidebar-ring: oklch(0.82 0.12 75 / 30%);
 }
@@ -117,7 +117,7 @@ html {
 		background-attachment: fixed;
 		background-image:
 			radial-gradient(circle at top, oklch(0.35 0.04 260 / 0.4), transparent 40%),
-			linear-gradient(180deg, oklch(0.20 0.03 260 / 0.3), transparent 25%);
+			linear-gradient(180deg, oklch(0.2 0.03 260 / 0.3), transparent 25%);
 		height: 100dvh;
 		overflow: hidden;
 		font-size: 14px;
