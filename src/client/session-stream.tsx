@@ -32,23 +32,23 @@ function MarkdownMessage({ text }: { text: string }) {
 			remarkPlugins={[remarkGfm]}
 			components={{
 				h1: ({ children }) => (
-					<h1 className="mt-4 mb-2 text-sm font-semibold text-foreground first:mt-0">{children}</h1>
+					<h1 className="mt-4 mb-2 text-base font-semibold text-foreground first:mt-0">{children}</h1>
 				),
 				h2: ({ children }) => (
-					<h2 className="mt-4 mb-2 text-xs font-semibold text-foreground first:mt-0">{children}</h2>
+					<h2 className="mt-4 mb-2 text-sm font-semibold text-foreground first:mt-0">{children}</h2>
 				),
 				h3: ({ children }) => (
-					<h3 className="mt-3 mb-1.5 text-xs font-medium text-foreground/92 first:mt-0">
+					<h3 className="mt-3 mb-1.5 text-sm font-medium text-foreground/92 first:mt-0">
 						{children}
 					</h3>
 				),
 				h4: ({ children }) => (
-					<h4 className="mt-3 mb-1.5 text-xs font-medium text-foreground/92 first:mt-0">
+					<h4 className="mt-3 mb-1.5 text-sm font-medium text-foreground/92 first:mt-0">
 						{children}
 					</h4>
 				),
 				h5: ({ children }) => (
-					<h5 className="mt-3 mb-1 text-xs font-medium text-foreground/90 first:mt-0">
+					<h5 className="mt-3 mb-1 text-sm font-medium text-foreground/90 first:mt-0">
 						{children}
 					</h5>
 				),
@@ -58,7 +58,7 @@ function MarkdownMessage({ text }: { text: string }) {
 					</h6>
 				),
 				p: ({ children }) => (
-					<p className="my-0 whitespace-pre-wrap text-xs leading-[1.8] text-foreground/90">
+					<p className="my-0 whitespace-pre-wrap text-sm leading-[1.8] text-foreground/90">
 						{children}
 					</p>
 				),
@@ -72,9 +72,9 @@ function MarkdownMessage({ text }: { text: string }) {
 						{children}
 					</a>
 				),
-				ul: ({ children }) => <ul className="my-2 list-disc space-y-1 pl-5 text-xs">{children}</ul>,
+				ul: ({ children }) => <ul className="my-2 list-disc space-y-1 pl-5 text-sm">{children}</ul>,
 				ol: ({ children }) => (
-					<ol className="my-2 list-decimal space-y-1 pl-5 text-xs">{children}</ol>
+					<ol className="my-2 list-decimal space-y-1 pl-5 text-sm">{children}</ol>
 				),
 				li: ({ children }) => (
 					<li className="text-foreground/90 marker:text-muted-foreground">{children}</li>
@@ -93,7 +93,7 @@ function MarkdownMessage({ text }: { text: string }) {
 					}
 
 					return (
-						<code className="rounded border border-foreground/10 bg-card px-1.5 py-0.5 text-xs text-foreground/92">
+						<code className="rounded border border-foreground/10 bg-card px-1 py-0.5 text-[0.8em] text-foreground/92">
 							{children}
 						</code>
 					);
@@ -120,7 +120,7 @@ function MarkdownMessage({ text }: { text: string }) {
 				},
 				table: ({ children }) => (
 					<div className="my-3 overflow-x-auto rounded-md border border-foreground/10">
-						<table className="w-full min-w-[20rem] border-collapse text-left text-xs">
+						<table className="w-full min-w-[20rem] border-collapse text-left text-sm">
 							{children}
 						</table>
 					</div>
@@ -1105,7 +1105,7 @@ function UserMessageRenderer({ event }: { event: HostEvent }) {
 		<div className="animate-event-enter group mb-4 flex justify-end">
 			<div className="max-w-[90%] min-w-0 md:min-w-[14rem]">
 				<div className="overflow-hidden rounded-lg border border-foreground/10 bg-card/95 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]">
-					<div className="px-4 py-3 text-xs leading-[1.8] text-foreground/92">
+					<div className="px-4 py-3 text-sm leading-[1.8] text-foreground/92">
 						<MarkdownMessage text={readString(event.data.text)} />
 					</div>
 					{attachments.length > 0 && (
@@ -1251,7 +1251,7 @@ function AssistantTextRunRenderer({
 				</div>
 			)}
 			<div className="overflow-hidden rounded-lg bg-card/95 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]">
-				<div className="px-4 py-3 text-xs leading-[1.8] text-foreground/92">
+				<div className="px-4 py-3 text-sm leading-[1.8] text-foreground/92">
 					<MarkdownMessage text={entries.map((entry) => readString(entry.data.text)).join("")} />
 				</div>
 			</div>
@@ -1267,7 +1267,7 @@ function ThinkingBlock({ text }: { text: string }) {
 				<span className="text-xs text-violet-400/80">Thinking</span>
 			</summary>
 			<div className="border-t border-foreground/12 bg-background/35 px-4 py-3">
-				<div className="text-xs leading-[1.8] text-foreground/80">
+				<div className="text-sm leading-[1.8] text-foreground/80">
 					<MarkdownMessage text={text} />
 				</div>
 			</div>
@@ -1295,7 +1295,7 @@ function EventRenderer({ event, showModelLabel }: { event: HostEvent; showModelL
 					</div>
 				)}
 				<div className="overflow-hidden rounded-lg bg-card/95 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.03)]">
-					<div className="px-4 py-3 text-xs leading-[1.8] text-foreground/92">
+					<div className="px-4 py-3 text-sm leading-[1.8] text-foreground/92">
 						<MarkdownMessage text={readString(event.data.text)} />
 					</div>
 				</div>
