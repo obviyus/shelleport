@@ -11,9 +11,6 @@ type TranscriptionPipeline = (
 
 let pipelinePromise: Promise<TranscriptionPipeline> | null = null;
 const whisperModelId = "onnx-community/whisper-tiny";
-const ortWasmUrls = {
-	wasm: new URL("./ort-wasm-simd-threaded.jsep.wasm", import.meta.resolve("@huggingface/transformers")).href,
-};
 
 export type VoiceInputState =
 	| { status: "idle" }
@@ -31,13 +28,12 @@ function getOrCreatePipeline(
 	if (pipelinePromise) return pipelinePromise;
 
 	const nextPipelinePromise = (async () => {
-		const { env, pipeline } = await import("@huggingface/transformers");
+		const { env, pipeline } = await import("./transformers-runtime");
 		env.backends.onnx = {
 			...env.backends.onnx,
 			wasm: {
 				...env.backends.onnx.wasm,
 				numThreads: 1,
-				wasmPaths: ortWasmUrls,
 			},
 		};
 		const transcriber = await pipeline("automatic-speech-recognition", whisperModelId, {
