@@ -196,6 +196,11 @@ ensureColumn(
 );
 ensureColumn("host_sessions", "model", "ALTER TABLE host_sessions ADD COLUMN model TEXT");
 ensureColumn("host_sessions", "effort", "ALTER TABLE host_sessions ADD COLUMN effort TEXT");
+ensureColumn(
+	"host_sessions",
+	"system_prompt",
+	"ALTER TABLE host_sessions ADD COLUMN system_prompt TEXT",
+);
 ensureColumn("host_sessions", "project_id", "ALTER TABLE host_sessions ADD COLUMN project_id TEXT");
 
 database.exec(`
@@ -219,6 +224,7 @@ type SqlSessionRow = {
 	project_id: string | null;
 	model: string | null;
 	effort: string | null;
+	system_prompt: string | null;
 	permission_mode: string;
 	allowed_tools_json: string;
 	queued_input_count: number;
@@ -351,6 +357,7 @@ function mapSession(row: SqlSessionRow): HostSession {
 		projectId: row.project_id,
 		model: row.model,
 		effort: row.effort as EffortLevel | null,
+		systemPrompt: row.system_prompt,
 		permissionMode: row.permission_mode as PermissionMode,
 		allowedTools: parseAllowedTools(row.allowed_tools_json),
 		queuedInputCount: row.queued_input_count,
@@ -414,8 +421,8 @@ function mapProtocolFrame(row: SqlProtocolFrameRow): ProviderProtocolFrame {
 
 const insertSessionStatement = database.query(
 	`INSERT INTO host_sessions (
-		id, provider, title, cwd, pinned, archived, status, status_detail_json, provider_session_ref, pid, imported, project_id, model, effort, permission_mode, allowed_tools_json, queued_input_count, usage_json, active_usage_json, last_event_sequence, create_time, update_time
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, provider, title, cwd, pinned, archived, status, status_detail_json, provider_session_ref, pid, imported, project_id, model, effort, system_prompt, permission_mode, allowed_tools_json, queued_input_count, usage_json, active_usage_json, last_event_sequence, create_time, update_time
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 );
 
 const listSessionsStatement = database.query<SqlSessionRow, []>(
@@ -436,7 +443,7 @@ const searchSessionsStatement = database.query<SqlSessionRow, [string]>(
 
 const updateSessionStatement = database.query(
 	`UPDATE host_sessions
-		SET status = ?, status_detail_json = ?, provider_session_ref = ?, pid = ?, title = ?, pinned = ?, archived = ?, project_id = ?, model = ?, effort = ?, permission_mode = ?, allowed_tools_json = ?, queued_input_count = ?, update_time = ?
+		SET status = ?, status_detail_json = ?, provider_session_ref = ?, pid = ?, title = ?, pinned = ?, archived = ?, project_id = ?, model = ?, effort = ?, system_prompt = ?, permission_mode = ?, allowed_tools_json = ?, queued_input_count = ?, update_time = ?
 		WHERE id = ?`,
 );
 
@@ -720,6 +727,7 @@ export type CreateStoredSessionInput = {
 	projectId?: string | null;
 	model?: string | null;
 	effort?: EffortLevel | null;
+	systemPrompt?: string | null;
 	providerSessionRef?: string | null;
 	permissionMode: PermissionMode;
 	allowedTools: string[];
@@ -739,6 +747,7 @@ type SessionUpdate = Partial<
 		| "projectId"
 		| "model"
 		| "effort"
+		| "systemPrompt"
 		| "permissionMode"
 		| "allowedTools"
 	>
@@ -765,6 +774,7 @@ export const sessionStore = {
 			projectId: input.projectId ?? null,
 			model: input.model ?? null,
 			effort: input.effort ?? null,
+			systemPrompt: input.systemPrompt ?? null,
 			permissionMode: input.permissionMode,
 			allowedTools: input.allowedTools,
 			queuedInputCount: 0,
@@ -789,6 +799,7 @@ export const sessionStore = {
 			session.projectId,
 			session.model,
 			session.effort,
+			session.systemPrompt,
 			session.permissionMode,
 			JSON.stringify(session.allowedTools),
 			session.queuedInputCount,
@@ -939,6 +950,7 @@ export const sessionStore = {
 			projectId: update.projectId === undefined ? current.projectId : update.projectId,
 			model: update.model === undefined ? current.model : update.model,
 			effort: update.effort === undefined ? current.effort : update.effort,
+			systemPrompt: update.systemPrompt === undefined ? current.systemPrompt : update.systemPrompt,
 			permissionMode: update.permissionMode ?? current.permissionMode,
 			allowedTools: update.allowedTools ?? current.allowedTools,
 			queuedInputCount: current.queuedInputCount,
@@ -956,6 +968,7 @@ export const sessionStore = {
 			next.projectId,
 			next.model,
 			next.effort,
+			next.systemPrompt,
 			next.permissionMode,
 			JSON.stringify(next.allowedTools),
 			next.queuedInputCount,
