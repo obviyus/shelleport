@@ -1820,8 +1820,7 @@ describe("handleApiRequest", () => {
 				detail.session.status === "idle" &&
 				detail.events.some(
 					(event) =>
-						event.kind === "state" &&
-						event.data.result === "After interrupt: after interrupt",
+						event.kind === "state" && event.data.result === "After interrupt: after interrupt",
 				)
 			) {
 				resumedDetail = detail;
@@ -1838,22 +1837,20 @@ describe("handleApiRequest", () => {
 		expect(resumedDetail.session.status).toBe("idle");
 		expect(resumedDetail.session.providerSessionRef).toBe(providerSessionRef);
 		expect(
-			resumedDetail.protocolFrames.some(
-				(frame) => {
-					const request =
-						frame.frame.request && typeof frame.frame.request === "object"
-							? frame.frame.request
-							: null;
+			resumedDetail.protocolFrames.some((frame) => {
+				const request =
+					frame.frame.request && typeof frame.frame.request === "object"
+						? frame.frame.request
+						: null;
 
-					return (
-						frame.direction === "out" &&
-						frame.frame.type === "control_request" &&
-						request !== null &&
-						"subtype" in request &&
-						request.subtype === "interrupt"
-					);
-				},
-			),
+				return (
+					frame.direction === "out" &&
+					frame.frame.type === "control_request" &&
+					request !== null &&
+					"subtype" in request &&
+					request.subtype === "interrupt"
+				);
+			}),
 		).toBe(true);
 	});
 

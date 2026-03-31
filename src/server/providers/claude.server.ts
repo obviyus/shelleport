@@ -560,8 +560,8 @@ function writeClaudeBridgeMessage(
 		direction: "out",
 		frame: message,
 	});
-	subprocess.stdin.write(`${JSON.stringify(message)}\n`);
-	subprocess.stdin.flush();
+	void subprocess.stdin.write(`${JSON.stringify(message)}\n`);
+	void subprocess.stdin.flush();
 }
 
 function normalizeClaudeResult(rawEvent: Record<string, unknown>) {
@@ -1167,7 +1167,7 @@ function createClaudeLiveSession(
 			}
 
 			try {
-				subprocess.stdin.end();
+				void subprocess.stdin.end();
 			} catch {}
 		},
 	};
@@ -1561,7 +1561,7 @@ export class ClaudeProviderAdapter implements ProviderAdapter {
 		});
 	}
 
-	canHandleControl(session: HostSession, input: SessionControlPayload) {
+	canHandleControl(session: HostSession) {
 		return activeClaudeSessions.has(session.id);
 	}
 
