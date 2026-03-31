@@ -1633,6 +1633,9 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 						}
 
 						setSession(message.payload);
+						if (message.payload.status !== "waiting") {
+							setPendingRequests([]);
+						}
 						replaceSession(message.payload);
 						return;
 					}

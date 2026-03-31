@@ -118,6 +118,16 @@ export type HostEvent = {
 	createTime: number;
 };
 
+export type ProviderProtocolFrame = {
+	id: string;
+	sessionId: string;
+	provider: ProviderId;
+	sequence: number;
+	direction: "in" | "out";
+	frame: Record<string, unknown>;
+	createTime: number;
+};
+
 export type PendingRequestKind = "approval" | "question";
 export type PendingRequestStatus = "pending" | "resolved" | "rejected";
 export type BlockReason = "permission" | "sandbox";
@@ -188,6 +198,7 @@ export type SessionDetail = {
 	totalEvents: number;
 	pendingRequests: PendingRequest[];
 	queuedInputs: QueuedSessionInput[];
+	protocolFrames: ProviderProtocolFrame[];
 };
 
 export type SessionStreamMessage =

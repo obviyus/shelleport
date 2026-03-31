@@ -3,9 +3,12 @@ import { getClaudeBin } from "~/server/config.server";
 import type {
 	HistoricalSession,
 	HostSession,
+	PendingRequest,
 	ProviderCapabilities,
 	ProviderSummary,
+	RequestResponsePayload,
 	SessionLimit,
+	SessionControlPayload,
 	SessionUsage,
 } from "~/shared/shelleport";
 import type {
@@ -14,6 +17,7 @@ import type {
 	ProviderAdapterRunInput,
 } from "~/server/providers/provider.server";
 import { listJsonlFiles, readHeadJsonl } from "~/server/providers/jsonl.server";
+import { sessionStore } from "~/server/store.server";
 
 const decoder = new TextDecoder();
 
@@ -24,17 +28,11 @@ const claudeCapabilities: ProviderCapabilities = {
 	canTerminate: true,
 	hasStructuredEvents: true,
 	supportsApprovals: true,
-	supportsQuestions: false,
+	supportsQuestions: true,
 	supportsAttachments: true,
 	supportsFork: false,
 	supportsWorktree: true,
 	liveResume: "managed-only",
-};
-
-type ClaudePermissionDenial = {
-	tool_name?: unknown;
-	tool_use_id?: unknown;
-	tool_input?: unknown;
 };
 
 type ClaudeRetryStatus = {
@@ -42,6 +40,44 @@ type ClaudeRetryStatus = {
 	attempt: number | null;
 	nextRetryTime: number | null;
 };
+
+type ClaudeBridgePendingRequest = {
+	requestId: string;
+	kind: PendingRequest["kind"];
+	blockReason: PendingRequest["blockReason"];
+	prompt: string;
+	data: Record<string, unknown>;
+	input: Record<string, unknown> | null;
+};
+
+type ClaudeTurnStream = {
+	push(event: ProviderAdapterEvent): void;
+	finish(): void;
+	fail(error: unknown): void;
+	iterate(): AsyncGenerator<ProviderAdapterEvent>;
+};
+
+type ClaudeLiveSession = {
+	sessionId: string;
+	cwd: string;
+	model: HostSession["model"];
+	effort: HostSession["effort"];
+	permissionMode: HostSession["permissionMode"];
+	allowedTools: string[];
+	subprocess: Bun.Subprocess<"pipe", "pipe", "pipe">;
+	mergeState: ClaudeStreamMergeState;
+	currentTurn: ClaudeTurnStream | null;
+	pendingRequests: Map<string, ClaudeBridgePendingRequest>;
+	idleTimer: ReturnType<typeof setTimeout> | null;
+	stopping: boolean;
+	terminateRequested: boolean;
+	write(message: Record<string, unknown>): void;
+	close(reason?: "idle" | "terminate" | "delete" | "restart"): void;
+};
+
+const CLAUDE_IDLE_TIMEOUT_MS = 10 * 60 * 1_000;
+
+const activeClaudeSessions = new Map<string, ClaudeLiveSession>();
 
 function parseTokenCount(value: unknown) {
 	return typeof value === "number" && Number.isFinite(value) ? value : 0;
@@ -158,15 +194,19 @@ function formatClaudePrompt(prompt: string, attachments: ProviderAdapterRunInput
 	return prompt.trim().length === 0 ? lines.join("\n") : `${lines.join("\n")}\n\n${prompt}`;
 }
 
-function createClaudeCommand(input: ProviderAdapterRunInput) {
-	const { session } = input;
+function createClaudeCommand(session: HostSession) {
 	const command = [
 		getClaudeBin(),
-		"-p",
 		"--verbose",
 		"--include-partial-messages",
+		"--print",
+		"--input-format",
+		"stream-json",
 		"--output-format",
 		"stream-json",
+		"--replay-user-messages",
+		"--permission-prompt-tool",
+		"stdio",
 		"--permission-mode",
 		session.permissionMode,
 	];
@@ -187,9 +227,82 @@ function createClaudeCommand(input: ProviderAdapterRunInput) {
 		command.push("-r", session.providerSessionRef);
 	}
 
-	command.push(formatClaudePrompt(input.prompt, input.attachments));
-
 	return command;
+}
+
+function createClaudeTurnStream(): ClaudeTurnStream {
+	const queue: ProviderAdapterEvent[] = [];
+	const waiters: Array<{
+		resolve(result: IteratorResult<ProviderAdapterEvent>): void;
+		reject(error: unknown): void;
+	}> = [];
+	let done = false;
+	let failure: unknown = null;
+
+	return {
+		push(event) {
+			if (done || failure) {
+				return;
+			}
+
+			const waiter = waiters.shift();
+
+			if (waiter) {
+				waiter.resolve({ value: event, done: false });
+				return;
+			}
+
+			queue.push(event);
+		},
+		finish() {
+			if (done || failure) {
+				return;
+			}
+
+			done = true;
+
+			for (const waiter of waiters.splice(0)) {
+				waiter.resolve({ value: undefined, done: true });
+			}
+		},
+		fail(error) {
+			if (done || failure) {
+				return;
+			}
+
+			failure = error;
+
+			for (const waiter of waiters.splice(0)) {
+				waiter.reject(error);
+			}
+		},
+		async *iterate() {
+			for (;;) {
+				if (queue.length > 0) {
+					yield queue.shift()!;
+					continue;
+				}
+
+				if (failure) {
+					throw failure;
+				}
+
+				if (done) {
+					return;
+				}
+
+				const result = await new Promise<IteratorResult<ProviderAdapterEvent>>((resolve, reject) =>
+					waiters.push({ resolve, reject }),
+				);
+
+				if (result.done) {
+					return;
+				}
+
+				yield result.value;
+			}
+		},
+	};
 }
 
 function getMessageContent(rawEvent: Record<string, unknown>) {
@@ -337,12 +450,105 @@ export function createClaudeApprovalPrompt(toolName: string, toolInput: Record<s
 	return `Approve ${toolName}`;
 }
 
-export function createClaudeResumePrompt(toolName: string, toolInput: Record<string, unknown>) {
-	if (toolName === "Bash" && typeof toolInput.command === "string") {
-		return `The user approved this command: ${toolInput.command}. Retry it if still needed, then continue the task.`;
+function readClaudeControlRequestSubtype(request: Record<string, unknown> | null) {
+	return typeof request?.subtype === "string" ? request.subtype : null;
+}
+
+function createClaudeQuestionPrompt(request: Record<string, unknown>, subtype: string) {
+	const promptFields = [
+		request.prompt,
+		request.message,
+		request.question,
+		request.description,
+	].filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+
+	return promptFields[0] ?? `Claude request: ${subtype}`;
+}
+
+function createClaudePendingRequest(
+	requestId: string,
+	request: Record<string, unknown>,
+): ClaudeBridgePendingRequest | null {
+	const subtype = readClaudeControlRequestSubtype(request);
+
+	if (!subtype || subtype === "interrupt") {
+		return null;
 	}
 
-	return `The user approved the blocked ${toolName} request. Retry it if still needed, then continue the task.`;
+	if (subtype === "can_use_tool") {
+		const toolName = typeof request.tool_name === "string" ? request.tool_name : null;
+		const toolUseId = typeof request.tool_use_id === "string" ? request.tool_use_id : null;
+		const input =
+			request.input && typeof request.input === "object"
+				? (request.input as Record<string, unknown>)
+				: {};
+
+		if (!toolName || !toolUseId) {
+			return null;
+		}
+
+		return {
+			requestId,
+			kind: "approval",
+			blockReason: "permission",
+			prompt: createClaudeApprovalPrompt(toolName, input),
+			data: {
+				requestId,
+				subtype,
+				toolUseId,
+				toolName,
+				toolInput: input,
+				toolRule:
+					toolName === "Bash" && typeof input.command === "string"
+						? createClaudeBashToolRule(input.command)
+						: toolName,
+				request,
+			},
+			input,
+		};
+	}
+
+	return {
+		requestId,
+		kind: "question",
+		blockReason: null,
+		prompt: createClaudeQuestionPrompt(request, subtype),
+		data: {
+			requestId,
+			subtype,
+			request,
+		},
+		input:
+			request.input && typeof request.input === "object"
+				? (request.input as Record<string, unknown>)
+				: null,
+	};
+}
+
+function createClaudeUserInputMessage(content: string) {
+	return {
+		type: "user",
+		session_id: "",
+		parent_tool_use_id: null,
+		message: {
+			role: "user",
+			content,
+		},
+	};
+}
+
+function writeClaudeBridgeMessage(
+	sessionId: string,
+	subprocess: Bun.Subprocess<"pipe", "pipe", "pipe">,
+	message: Record<string, unknown>,
+) {
+	sessionStore.appendProtocolFrame(sessionId, {
+		provider: "claude",
+		direction: "out",
+		frame: message,
+	});
+	subprocess.stdin.write(`${JSON.stringify(message)}\n`);
+	subprocess.stdin.flush();
 }
 
 function normalizeClaudeResult(rawEvent: Record<string, unknown>) {
@@ -359,37 +565,6 @@ function normalizeClaudeResult(rawEvent: Record<string, unknown>) {
 			rawProviderEvent: rawEvent,
 		},
 	];
-
-	const permissionDenials = Array.isArray(rawEvent.permission_denials)
-		? (rawEvent.permission_denials as ClaudePermissionDenial[])
-		: [];
-
-	for (const denial of permissionDenials) {
-		const toolName = typeof denial.tool_name === "string" ? denial.tool_name : null;
-		const toolUseId = typeof denial.tool_use_id === "string" ? denial.tool_use_id : null;
-		const toolInput = getToolInputRecord(denial.tool_input);
-
-		if (!toolName || !toolUseId) {
-			continue;
-		}
-
-		events.push({
-			type: "pending-request",
-			kind: "approval",
-			blockReason: "permission",
-			prompt: createClaudeApprovalPrompt(toolName, toolInput),
-			data: {
-				toolName,
-				toolUseId,
-				toolInput,
-				toolRule:
-					toolName === "Bash" && typeof toolInput.command === "string"
-						? createClaudeBashToolRule(toolInput.command)
-						: toolName,
-				resumePrompt: createClaudeResumePrompt(toolName, toolInput),
-			},
-		});
-	}
 
 	return events;
 }
@@ -844,86 +1019,295 @@ function resetClaudeStreamMergeStateAfterAssistant(
 async function* streamClaudeProcess(
 	runInput: ProviderAdapterRunInput,
 ): AsyncGenerator<ProviderAdapterEvent> {
-	const subprocess = Bun.spawn(createClaudeCommand(runInput), {
-		cwd: runInput.session.cwd,
+	let liveSession: ClaudeLiveSession | null = activeClaudeSessions.get(runInput.session.id) ?? null;
+
+	if (liveSession && !matchesClaudeLiveSession(liveSession, runInput.session)) {
+		liveSession.close("restart");
+		liveSession = null;
+	}
+
+	if (liveSession && !(await canReuseClaudeLiveSession(liveSession))) {
+		liveSession.close("restart");
+		liveSession = null;
+	}
+
+	const turn = createClaudeTurnStream();
+
+	if (!liveSession) {
+		liveSession = createClaudeLiveSession(runInput.session, turn);
+		activeClaudeSessions.set(runInput.session.id, liveSession);
+	} else {
+		if (liveSession.idleTimer) {
+			clearTimeout(liveSession.idleTimer);
+			liveSession.idleTimer = null;
+		}
+
+		if (liveSession.currentTurn) {
+			throw new Error("Claude session is already handling a turn");
+		}
+
+		liveSession.currentTurn = turn;
+	}
+
+	liveSession.write(
+		createClaudeUserInputMessage(formatClaudePrompt(runInput.prompt, runInput.attachments)),
+	);
+
+	yield* turn.iterate();
+}
+
+async function canReuseClaudeLiveSession(liveSession: ClaudeLiveSession) {
+	if (liveSession.stopping || liveSession.currentTurn !== null) {
+		return false;
+	}
+
+	const exited = await Promise.race([
+		liveSession.subprocess.exited.then(() => true),
+		Bun.sleep(10).then(() => false),
+	]);
+
+	return !exited;
+}
+
+function matchesClaudeLiveSession(liveSession: ClaudeLiveSession, session: HostSession) {
+	return (
+		liveSession.cwd === session.cwd &&
+		liveSession.model === session.model &&
+		liveSession.effort === session.effort &&
+		liveSession.permissionMode === session.permissionMode &&
+		liveSession.allowedTools.length === session.allowedTools.length &&
+		liveSession.allowedTools.every((toolRule, index) => toolRule === session.allowedTools[index])
+	);
+}
+
+function scheduleClaudeLiveSessionIdleClose(liveSession: ClaudeLiveSession) {
+	if (liveSession.idleTimer) {
+		clearTimeout(liveSession.idleTimer);
+	}
+
+	if (liveSession.currentTurn || liveSession.pendingRequests.size > 0 || liveSession.stopping) {
+		liveSession.idleTimer = null;
+		return;
+	}
+
+	liveSession.idleTimer = setTimeout(() => {
+		if (liveSession.currentTurn || liveSession.pendingRequests.size > 0) {
+			return;
+		}
+
+		liveSession.close("idle");
+	}, CLAUDE_IDLE_TIMEOUT_MS);
+}
+
+function createClaudeLiveSession(
+	session: HostSession,
+	initialTurn: ClaudeTurnStream,
+): ClaudeLiveSession {
+	const abortController = new AbortController();
+	const subprocess = Bun.spawn(createClaudeCommand(session), {
+		cwd: session.cwd,
+		stdin: "pipe",
 		stdout: "pipe",
 		stderr: "pipe",
-		signal: runInput.signal,
+		signal: abortController.signal,
 		env: Bun.env,
 	});
-	const stdoutReader = subprocess.stdout.getReader();
-	const stderrReader = subprocess.stderr.getReader();
+	const liveSession: ClaudeLiveSession = {
+		sessionId: session.id,
+		cwd: session.cwd,
+		model: session.model,
+		effort: session.effort,
+		permissionMode: session.permissionMode,
+		allowedTools: [...session.allowedTools],
+		subprocess,
+		mergeState: {
+			contentStateByIndex: new Map<number, ClaudeStreamContentState>(),
+			partialToolUseIds: new Set<string>(),
+			sawAssistantTextDelta: false,
+			sawThinkingBlock: false,
+			detectedModel: session.model,
+		},
+		currentTurn: initialTurn,
+		pendingRequests: new Map(),
+		idleTimer: null,
+		stopping: false,
+		terminateRequested: false,
+		write(message) {
+			writeClaudeBridgeMessage(session.id, subprocess, message);
+		},
+		close(reason = "idle") {
+			if (liveSession.stopping) {
+				return;
+			}
 
-	let buffer = "";
-	const mergeState: ClaudeStreamMergeState = {
-		contentStateByIndex: new Map<number, ClaudeStreamContentState>(),
-		partialToolUseIds: new Set<string>(),
-		sawAssistantTextDelta: false,
-		sawThinkingBlock: false,
-		detectedModel: runInput.session.model,
+			liveSession.stopping = true;
+			liveSession.terminateRequested = reason === "terminate";
+
+			if (liveSession.idleTimer) {
+				clearTimeout(liveSession.idleTimer);
+				liveSession.idleTimer = null;
+			}
+
+			if (activeClaudeSessions.get(session.id) === liveSession) {
+				activeClaudeSessions.delete(session.id);
+			}
+
+			try {
+				subprocess.stdin.end();
+			} catch {}
+		},
 	};
 
-	try {
-		function detectModel(rawEvent: Record<string, unknown>) {
-			if (mergeState.detectedModel) return;
+	void runClaudeLiveSession(liveSession);
 
-			const message =
-				rawEvent.message && typeof rawEvent.message === "object"
-					? (rawEvent.message as Record<string, unknown>)
-					: null;
+	return liveSession;
+}
 
-			if (typeof message?.model === "string") {
-				mergeState.detectedModel = message.model;
-				return;
-			}
+function pushClaudeTurnEvent(liveSession: ClaudeLiveSession, event: ProviderAdapterEvent) {
+	liveSession.currentTurn?.push(event);
+}
 
-			const usage = parseClaudeUsage(rawEvent);
+function finishClaudeTurn(liveSession: ClaudeLiveSession) {
+	liveSession.currentTurn?.finish();
+	liveSession.currentTurn = null;
+	scheduleClaudeLiveSessionIdleClose(liveSession);
+}
 
-			if (usage?.model) {
-				mergeState.detectedModel = usage.model;
-			}
+function failClaudeTurn(liveSession: ClaudeLiveSession, error: unknown) {
+	liveSession.currentTurn?.fail(error);
+	liveSession.currentTurn = null;
+}
+
+async function runClaudeLiveSession(liveSession: ClaudeLiveSession) {
+	const stdoutReader = liveSession.subprocess.stdout.getReader();
+	const stderrReader = liveSession.subprocess.stderr.getReader();
+	const stderrChunks: Uint8Array[] = [];
+	let buffer = "";
+
+	function detectModel(rawEvent: Record<string, unknown>) {
+		if (liveSession.mergeState.detectedModel) {
+			return;
 		}
 
-		function stampModel(event: ProviderAdapterEvent): ProviderAdapterEvent {
-			if (event.type !== "host-event" || !mergeState.detectedModel) {
-				return event;
-			}
+		const message =
+			rawEvent.message && typeof rawEvent.message === "object"
+				? (rawEvent.message as Record<string, unknown>)
+				: null;
 
-			return {
-				...event,
-				data: { ...event.data, model: mergeState.detectedModel },
-			};
+		if (typeof message?.model === "string") {
+			liveSession.mergeState.detectedModel = message.model;
+			return;
 		}
 
-		const emitClaudeStreamLine = function* (
-			rawEvent: Record<string, unknown>,
-		): Generator<ProviderAdapterEvent> {
-			detectModel(rawEvent);
+		const usage = parseClaudeUsage(rawEvent);
 
-			if (rawEvent.type === "stream_event") {
-				const partialEvents = normalizeClaudeStreamEvent(rawEvent, mergeState.contentStateByIndex);
-				updateClaudeStreamMergeState(mergeState, partialEvents);
+		if (usage?.model) {
+			liveSession.mergeState.detectedModel = usage.model;
+		}
+	}
 
-				for (const event of partialEvents) {
-					yield stampModel(event);
-				}
+	function stampModel(event: ProviderAdapterEvent): ProviderAdapterEvent {
+		if (event.type !== "host-event" || !liveSession.mergeState.detectedModel) {
+			return event;
+		}
 
-				return;
-			}
-
-			const normalizedEvents = filterClaudeStreamDuplicates(
-				rawEvent,
-				normalizeClaudeEvent(rawEvent),
-				mergeState,
-			);
-			resetClaudeStreamMergeStateAfterAssistant(rawEvent, mergeState);
-
-			for (const event of normalizedEvents) {
-				yield stampModel(event);
-			}
+		return {
+			...event,
+			data: { ...event.data, model: liveSession.mergeState.detectedModel },
 		};
+	}
 
-		while (true) {
+	function handleRawEvent(rawEvent: Record<string, unknown>) {
+		sessionStore.appendProtocolFrame(liveSession.sessionId, {
+			provider: "claude",
+			direction: "in",
+			frame: rawEvent,
+		});
+		detectModel(rawEvent);
+
+		if (rawEvent.type === "control_request") {
+			const request =
+				rawEvent.request && typeof rawEvent.request === "object"
+					? (rawEvent.request as Record<string, unknown>)
+					: null;
+			const requestId = typeof rawEvent.request_id === "string" ? rawEvent.request_id : null;
+
+			if (requestId && request) {
+				const pendingRequest = createClaudePendingRequest(requestId, request);
+
+				if (pendingRequest) {
+					liveSession.pendingRequests.set(requestId, pendingRequest);
+					pushClaudeTurnEvent(liveSession, {
+						type: "pending-request",
+						kind: pendingRequest.kind,
+						blockReason: pendingRequest.blockReason,
+						prompt: pendingRequest.prompt,
+						data: pendingRequest.data,
+					});
+				}
+			}
+
+			return;
+		}
+
+		if (rawEvent.type === "control_cancel_request") {
+			const requestId = typeof rawEvent.request_id === "string" ? rawEvent.request_id : null;
+
+			if (requestId) {
+				liveSession.pendingRequests.delete(requestId);
+			}
+
+			return;
+		}
+
+		if (rawEvent.type === "control_response") {
+			return;
+		}
+
+		if (rawEvent.type === "stream_event") {
+			const partialEvents = normalizeClaudeStreamEvent(
+				rawEvent,
+				liveSession.mergeState.contentStateByIndex,
+			);
+			updateClaudeStreamMergeState(liveSession.mergeState, partialEvents);
+
+			for (const event of partialEvents) {
+				pushClaudeTurnEvent(liveSession, stampModel(event));
+			}
+
+			return;
+		}
+
+		const normalizedEvents = filterClaudeStreamDuplicates(
+			rawEvent,
+			normalizeClaudeEvent(rawEvent),
+			liveSession.mergeState,
+		);
+		resetClaudeStreamMergeStateAfterAssistant(rawEvent, liveSession.mergeState);
+
+		for (const event of normalizedEvents) {
+			pushClaudeTurnEvent(liveSession, stampModel(event));
+		}
+
+		if (rawEvent.type === "result") {
+			finishClaudeTurn(liveSession);
+		}
+	}
+
+	const stderrPromise = (async () => {
+		for (;;) {
+			const { done, value } = await stderrReader.read();
+
+			if (done) {
+				return;
+			}
+
+			stderrChunks.push(value);
+		}
+	})();
+
+	try {
+		for (;;) {
 			const { done, value } = await stdoutReader.read();
 
 			if (done) {
@@ -941,49 +1325,51 @@ async function* streamClaudeProcess(
 					continue;
 				}
 
-				for (const event of emitClaudeStreamLine(JSON.parse(trimmed) as Record<string, unknown>)) {
-					yield event;
-				}
+				handleRawEvent(JSON.parse(trimmed) as Record<string, unknown>);
 			}
 		}
 
 		if (buffer.trim().length > 0) {
-			for (const event of emitClaudeStreamLine(
-				JSON.parse(buffer.trim()) as Record<string, unknown>,
-			)) {
-				yield event;
-			}
+			handleRawEvent(JSON.parse(buffer.trim()) as Record<string, unknown>);
 		}
-
-		const stderrChunks: Uint8Array[] = [];
-
-		while (true) {
-			const { done, value } = await stderrReader.read();
-
-			if (done) {
-				break;
-			}
-
-			stderrChunks.push(value);
-		}
-
-		const exitCode = await subprocess.exited;
-
-		if (exitCode !== 0) {
-			yield {
-				type: "host-event",
-				kind: "error",
-				summary: "Claude CLI error",
-				data: {
-					exitCode,
-					stderr: Buffer.concat(stderrChunks).toString("utf8").trim(),
-				},
-				rawProviderEvent: null,
-			};
-		}
+	} catch (error) {
+		failClaudeTurn(liveSession, error);
 	} finally {
+		await stderrPromise;
 		stdoutReader.releaseLock();
 		stderrReader.releaseLock();
+	}
+
+	const exitCode = await liveSession.subprocess.exited;
+
+	if (liveSession.idleTimer) {
+		clearTimeout(liveSession.idleTimer);
+		liveSession.idleTimer = null;
+	}
+
+	if (activeClaudeSessions.get(liveSession.sessionId) === liveSession) {
+		activeClaudeSessions.delete(liveSession.sessionId);
+	}
+
+	if (exitCode !== 0 && !liveSession.stopping) {
+		pushClaudeTurnEvent(liveSession, {
+			type: "host-event",
+			kind: "error",
+			summary: "Claude CLI error",
+			data: {
+				exitCode,
+				stderr: Buffer.concat(stderrChunks).toString("utf8").trim(),
+			},
+			rawProviderEvent: null,
+		});
+	}
+
+	if (liveSession.currentTurn) {
+		if (liveSession.terminateRequested) {
+			failClaudeTurn(liveSession, new Error("Claude session terminated"));
+		} else {
+			finishClaudeTurn(liveSession);
+		}
 	}
 }
 
@@ -1094,5 +1480,80 @@ export class ClaudeProviderAdapter implements ProviderAdapter {
 		return sessions
 			.filter((session) => session !== null)
 			.sort((left, right) => right.updateTime - left.updateTime);
+	}
+
+	canHandleRequestResponse(session: HostSession, request: PendingRequest) {
+		return activeClaudeSessions.has(session.id) && typeof request.data.requestId === "string";
+	}
+
+	async respondToRequest(
+		session: HostSession,
+		request: PendingRequest,
+		input: RequestResponsePayload,
+	) {
+		const handle = activeClaudeSessions.get(session.id);
+		const requestId = typeof request.data.requestId === "string" ? request.data.requestId : null;
+
+		if (!handle || !requestId) {
+			throw new Error("Claude bridge request is no longer active");
+		}
+
+		const pendingRequest = handle.pendingRequests.get(requestId);
+
+		if (!pendingRequest) {
+			throw new Error("Claude bridge request is no longer pending");
+		}
+
+		handle.pendingRequests.delete(requestId);
+		handle.write({
+			type: "control_response",
+			response: {
+				subtype: "success",
+				request_id: requestId,
+				response:
+					input.decision === "allow"
+						? pendingRequest.input
+							? {
+									behavior: "allow",
+									updatedInput: pendingRequest.input,
+								}
+							: {
+									behavior: "allow",
+								}
+						: {
+								behavior: "deny",
+								message: "User denied permission",
+							},
+			},
+		});
+	}
+
+	canHandleControl(session: HostSession, input: SessionControlPayload) {
+		return activeClaudeSessions.has(session.id);
+	}
+
+	async controlSession(session: HostSession, input: SessionControlPayload) {
+		const handle = activeClaudeSessions.get(session.id);
+
+		if (!handle) {
+			return;
+		}
+
+		if (input.action === "terminate") {
+			handle.close("terminate");
+			return;
+		}
+
+		handle.write({
+			type: "control_request",
+			request_id: Bun.randomUUIDv7(),
+			request: {
+				subtype: "interrupt",
+			},
+		});
+	}
+
+	async deleteSession(session: HostSession) {
+		activeClaudeSessions.get(session.id)?.close("delete");
 	}
 }

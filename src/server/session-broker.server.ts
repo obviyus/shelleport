@@ -241,7 +241,6 @@ async function consumeProviderRun(
 	}
 	let nextStatus: HostSession["status"] = "idle";
 	let nextStatusDetail = emptyStatusDetail();
-	let hasPendingRequest = false;
 	const generator =
 		mode === "resume"
 			? provider.resumeSession(session, {
@@ -273,7 +272,6 @@ async function consumeProviderRun(
 			}
 
 			if (event.type === "pending-request") {
-				hasPendingRequest = true;
 				const request = sessionStore.createPendingRequest({
 					sessionId,
 					provider: session.provider,
@@ -381,6 +379,10 @@ async function consumeProviderRun(
 		publishEvent(storedEvent);
 	} finally {
 		activeRuns.delete(sessionId);
+
+		const detail = sessionStore.getSessionDetail(sessionId);
+		const hasPendingRequest =
+			detail !== null && detail.pendingRequests.some((request) => request.status === "pending");
 
 		if (nextStatus === "idle" && hasPendingRequest) {
 			nextStatus = "waiting";
@@ -648,6 +650,20 @@ export const sessionBroker = {
 			throw new ApiError(409, "session_not_running", "Session is not running");
 		}
 
+		const session = sessionStore.getSession(sessionId);
+
+		if (session) {
+			const provider = getProvider(session.provider);
+
+			if (provider.canHandleControl?.(session, input)) {
+				void provider.controlSession?.(session, input);
+
+				if (input.action === "interrupt") {
+					return;
+				}
+			}
+		}
+
 		activeRun.abortController.abort();
 
 		if (input.action === "terminate") {
@@ -665,6 +681,23 @@ export const sessionBroker = {
 
 		if (!session) {
 			throw new ApiError(404, "session_not_found", `Unknown session: ${request.sessionId}`);
+		}
+
+		const provider = getProvider(session.provider);
+
+		if (provider.canHandleRequestResponse?.(session, request)) {
+			await provider.respondToRequest?.(session, request, input);
+			const resolvedRequest = sessionStore.resolvePendingRequest(
+				requestId,
+				input.decision === "allow" ? "resolved" : "rejected",
+				{
+					...request.data,
+					decision: input.decision,
+				},
+			);
+			publishRequest(resolvedRequest);
+			updateSessionStatus(session.id, "running");
+			return resolvedRequest;
 		}
 
 		const activeRun = activeRuns.get(session.id);
@@ -756,6 +789,7 @@ export const sessionBroker = {
 
 		const uploadDir = `${session.cwd}/.shelleport/uploads/${sessionId}`;
 		await Bun.$`rm -rf ${uploadDir}`.quiet();
+		await getProvider(session.provider).deleteSession?.(session);
 
 		sessionStore.deleteSession(sessionId);
 		subscribers.delete(sessionId);

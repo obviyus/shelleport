@@ -2,10 +2,12 @@ import type {
 	HistoricalSession,
 	HostEventKind,
 	HostSession,
+	PendingRequest,
+	RequestResponsePayload,
 	SessionAttachment,
+	SessionControlPayload,
 	SessionStatus,
 	SessionStatusDetail,
-	PendingRequest,
 	ProviderCapabilities,
 	ProviderId,
 	ProviderSummary,
@@ -54,4 +56,13 @@ export interface ProviderAdapter {
 		input: ProviderAdapterRunInput,
 	): AsyncGenerator<ProviderAdapterEvent>;
 	listHistoricalSessions(): Promise<HistoricalSession[]>;
+	canHandleRequestResponse?(session: HostSession, request: PendingRequest): boolean;
+	respondToRequest?(
+		session: HostSession,
+		request: PendingRequest,
+		input: RequestResponsePayload,
+	): Promise<void>;
+	canHandleControl?(session: HostSession, input: SessionControlPayload): boolean;
+	controlSession?(session: HostSession, input: SessionControlPayload): Promise<void>;
+	deleteSession?(session: HostSession): Promise<void>;
 }

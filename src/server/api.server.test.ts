@@ -21,7 +21,9 @@ type SessionStreamMessage =
 				}>;
 				pendingRequests: Array<{
 					id: string;
+					kind: string;
 					blockReason: string | null;
+					prompt: string;
 					status: string;
 					data: Record<string, unknown>;
 				}>;
@@ -55,7 +57,9 @@ type SessionStreamMessage =
 			type: "request";
 			payload: {
 				id: string;
+				kind: string;
 				blockReason: string | null;
+				prompt: string;
 				status: string;
 				data: Record<string, unknown>;
 			};
@@ -142,15 +146,6 @@ beforeAll(async () => {
 const args = process.argv.slice(2);
 const resumeIndex = args.indexOf("-r");
 const sessionId = resumeIndex === -1 ? "fake-claude-session" : args[resumeIndex + 1];
-const prompt = args.at(-1) ?? "";
-const allowedTools = [];
-
-for (let index = 0; index < args.length; index += 1) {
-  if (args[index] === "--allowedTools") {
-    allowedTools.push(args[index + 1]);
-  }
-}
-
 const emit = (payload) => console.log(JSON.stringify(payload));
 emit({
   type: "system",
@@ -158,35 +153,24 @@ emit({
   cwd: process.cwd(),
   session_id: sessionId,
 });
+const readline = require("node:readline");
+const rl = readline.createInterface({ input: process.stdin });
+let pendingRequest = null;
+let persistentSession = false;
 
-const denied = prompt.includes("git commit") && !allowedTools.includes("Bash(git commit:*)");
+function getPrompt(message) {
+  const content = message?.message?.content;
+  return typeof content === "string" ? content : "";
+}
 
-if (denied) {
+function emitSimpleResult(text) {
   emit({
     type: "assistant",
     message: {
       content: [
         {
-          type: "tool_use",
-          id: "tool-1",
-          name: "Bash",
-          input: {
-            command: "git commit --allow-empty -m test",
-            description: "Create empty commit with message test",
-          },
-        },
-      ],
-    },
-  });
-  emit({
-    type: "user",
-    message: {
-      content: [
-        {
-          type: "tool_result",
-          tool_use_id: "tool-1",
-          content: "This command requires approval",
-          is_error: true,
+          type: "text",
+          text,
         },
       ],
     },
@@ -195,178 +179,211 @@ if (denied) {
     type: "result",
     subtype: "success",
     is_error: false,
-    result: "blocked",
+    result: text,
     stop_reason: "end_turn",
     session_id: sessionId,
-    permission_denials: [
-      {
+    permission_denials: [],
+  });
+}
+
+function finish(text, linger = false) {
+  emitSimpleResult(text);
+  if (!linger) {
+    process.exit(0);
+  }
+}
+
+rl.on("close", () => {
+  process.exit(0);
+});
+
+rl.on("line", (line) => {
+  const message = JSON.parse(line);
+
+  if (pendingRequest) {
+    if (message.type === "control_request" && message.request?.subtype === "interrupt") {
+      emit({
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        result: "Interrupted.",
+        stop_reason: "end_turn",
+        session_id: sessionId,
+        permission_denials: [],
+      });
+      process.exit(0);
+    }
+
+    if (message.type !== "control_response") {
+      return;
+    }
+
+    const activeRequest = pendingRequest;
+    pendingRequest = null;
+    const behavior = message.response?.response?.behavior;
+
+    if (behavior !== "allow") {
+      emitSimpleResult("Denied.");
+      process.exit(0);
+    }
+
+    if (activeRequest === "approval") {
+      emit({
+        type: "assistant",
+        message: {
+          content: [
+            {
+              type: "tool_use",
+              id: "tool-2",
+              name: "Bash",
+              input: {
+                command: "git commit --allow-empty -m test",
+                description: "Create empty commit with message test",
+              },
+            },
+          ],
+        },
+      });
+      emit({
+        type: "user",
+        message: {
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "tool-2",
+              content: "[master (root-commit) deadbee] test",
+              is_error: false,
+            },
+          ],
+        },
+      });
+      finish("Done.");
+      return;
+    }
+
+    finish("Answered.");
+    return;
+  }
+
+  if (message.type !== "user") {
+    return;
+  }
+
+  const prompt = getPrompt(message);
+
+  if (prompt.includes("git commit")) {
+    pendingRequest = "approval";
+    emit({
+      type: "control_request",
+      request_id: "req-1",
+      request: {
+        subtype: "can_use_tool",
         tool_name: "Bash",
-        tool_use_id: "tool-1",
-        tool_input: {
+        input: {
           command: "git commit --allow-empty -m test",
           description: "Create empty commit with message test",
         },
+        tool_use_id: "tool-1",
       },
-    ],
-  });
-  process.exit(0);
-}
+    });
+    return;
+  }
 
-if (prompt.includes("approved this command")) {
-  emit({
-    type: "assistant",
-    message: {
-      content: [
-        {
-          type: "tool_use",
-          id: "tool-2",
-          name: "Bash",
-          input: {
-            command: "git commit --allow-empty -m test",
-            description: "Create empty commit with message test",
+  if (prompt.includes("ask me a question")) {
+    pendingRequest = "question";
+    emit({
+      type: "control_request",
+      request_id: "req-2",
+      request: {
+        subtype: "confirm",
+        prompt: "Claude needs confirmation to continue.",
+      },
+    });
+    return;
+  }
+
+  if (prompt.includes("trigger retry")) {
+    emit({
+      type: "progress",
+      data: {
+        toolUseResult: "Request failed with status code 429, retrying in 7s (attempt 2)",
+      },
+    });
+    finish("Recovered.");
+    return;
+  }
+
+  if (prompt.includes("track usage")) {
+    emit({
+      type: "assistant",
+      message: {
+        model: "claude-opus-4-6",
+        content: [
+          {
+            type: "text",
+            text: "Tracked.",
           },
+        ],
+        usage: {
+          input_tokens: 12,
+          output_tokens: 3,
+          cache_read_input_tokens: 1200,
+          cache_creation_input_tokens: 600,
         },
-      ],
-    },
-  });
-  emit({
-    type: "user",
-    message: {
-      content: [
-        {
-          type: "tool_result",
-          tool_use_id: "tool-2",
-          content: "[master (root-commit) deadbee] test",
-          is_error: false,
-        },
-      ],
-    },
-  });
-  emit({
-    type: "assistant",
-    message: {
-      content: [
-        {
-          type: "text",
-          text: "Done.",
-        },
-      ],
-    },
-  });
-  emit({
-    type: "result",
-    subtype: "success",
-    is_error: false,
-    result: "Done.",
-    stop_reason: "end_turn",
-    session_id: sessionId,
-    permission_denials: [],
-  });
-  process.exit(0);
-}
-
-if (prompt.includes("trigger retry")) {
-  emit({
-    type: "progress",
-    data: {
-      toolUseResult: "Request failed with status code 429, retrying in 7s (attempt 2)",
-    },
-  });
-  emit({
-    type: "assistant",
-    message: {
-      content: [
-        {
-          type: "text",
-          text: "Recovered.",
-        },
-      ],
-    },
-  });
-  emit({
-    type: "result",
-    subtype: "success",
-    is_error: false,
-    result: "Recovered.",
-    stop_reason: "end_turn",
-    session_id: sessionId,
-    permission_denials: [],
-  });
-  process.exit(0);
-}
-
-if (prompt.includes("track usage")) {
-  emit({
-    type: "assistant",
-    message: {
-      model: "claude-opus-4-6",
-      content: [
-        {
-          type: "text",
-          text: "Tracked.",
-        },
-      ],
+      },
+    });
+    emit({
+      type: "rate_limit_event",
+      rate_limit_info: {
+        status: "allowed",
+        resetsAt: 1774623600,
+        rateLimitType: "five_hour",
+        isUsingOverage: false,
+      },
+    });
+    emit({
+      type: "result",
+      subtype: "success",
+      is_error: false,
+      result: "Tracked.",
+      stop_reason: "end_turn",
+      session_id: sessionId,
+      total_cost_usd: 0.045784,
       usage: {
         input_tokens: 12,
-        output_tokens: 3,
+        output_tokens: 4,
         cache_read_input_tokens: 1200,
         cache_creation_input_tokens: 600,
       },
-    },
-  });
-  emit({
-    type: "rate_limit_event",
-    rate_limit_info: {
-      status: "allowed",
-      resetsAt: 1774623600,
-      rateLimitType: "five_hour",
-      isUsingOverage: false,
-    },
-  });
-  emit({
-    type: "result",
-    subtype: "success",
-    is_error: false,
-    result: "Tracked.",
-    stop_reason: "end_turn",
-    session_id: sessionId,
-    total_cost_usd: 0.045784,
-    usage: {
-      input_tokens: 12,
-      output_tokens: 4,
-      cache_read_input_tokens: 1200,
-      cache_creation_input_tokens: 600,
-    },
-    modelUsage: {
-      "claude-opus-4-6[1m]": {
-        inputTokens: 12,
-        outputTokens: 4,
+      modelUsage: {
+        "claude-opus-4-6[1m]": {
+          inputTokens: 12,
+          outputTokens: 4,
+        },
       },
-    },
-    permission_denials: [],
-  });
-  process.exit(0);
-}
+      permission_denials: [],
+    });
+    return;
+  }
 
-emit({
-  type: "assistant",
-  message: {
-    content: [
-      {
-        type: "text",
-        text: prompt,
-      },
-    ],
-  },
-});
-emit({
-  type: "result",
-  subtype: "success",
-  is_error: false,
-  result: prompt,
-  stop_reason: "end_turn",
-  session_id: sessionId,
-  permission_denials: [],
+  if (prompt.includes("stay open across turns")) {
+    persistentSession = true;
+    emitSimpleResult("First turn.");
+    return;
+  }
+
+  if (persistentSession) {
+    emitSimpleResult(\`Echo: \${prompt}\`);
+    process.exit(0);
+    return;
+  }
+
+  if (prompt.includes("linger after result")) {
+    finish("Lingered.", true);
+    return;
+  }
+
+  finish(prompt);
 });
 `,
 	);
@@ -1480,10 +1497,262 @@ describe("handleApiRequest", () => {
 			pendingRequests: Array<{
 				status: string;
 			}>;
+			protocolFrames: Array<{
+				direction: string;
+				frame: Record<string, unknown>;
+			}>;
 		}>(detailResponse);
 		expect(detail.session.status).toBe("idle");
-		expect(detail.session.allowedTools).toEqual(["Bash(git commit:*)"]);
+		expect(detail.session.allowedTools).toEqual([]);
 		expect(detail.pendingRequests).toHaveLength(0);
+		expect(
+			detail.protocolFrames.map((frame) => ({
+				direction: frame.direction,
+				type: frame.frame.type,
+			})),
+		).toEqual(
+			expect.arrayContaining([
+				{ direction: "out", type: "user" },
+				{ direction: "in", type: "control_request" },
+				{ direction: "out", type: "control_response" },
+				{ direction: "in", type: "assistant" },
+				{ direction: "in", type: "result" },
+			]),
+		);
+
+		await reader.cancel();
+	});
+
+	test("finishes sessions when Claude keeps the process open after a terminal result", async () => {
+		const createResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "claude",
+					cwd: testRoot,
+					prompt: "linger after result",
+				}),
+			}),
+		);
+		expect(createResponse.status).toBe(201);
+		const createJson = await readJson<{ session: { id: string } }>(createResponse);
+		const sessionId = createJson.session.id;
+
+		const eventsResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}/events`, {
+				headers: authHeader,
+			}),
+		);
+		expect(eventsResponse.status).toBe(200);
+
+		const reader = eventsResponse.body?.getReader();
+
+		if (!reader) {
+			throw new Error("Missing SSE body");
+		}
+
+		const streamState = { buffer: "" };
+		const lingeredMessage = await waitForMessage(
+			reader,
+			streamState,
+			(message) =>
+				message.type === "event" &&
+				message.payload.kind === "text" &&
+				message.payload.data.text === "Lingered.",
+		);
+		expect(lingeredMessage.type).toBe("event");
+
+		const idleMessage = await waitForMessage(
+			reader,
+			streamState,
+			(message) => message.type === "session" && message.payload.status === "idle",
+		);
+		expect(idleMessage.type).toBe("session");
+
+		await reader.cancel();
+	});
+
+	test("reuses a persistent Claude child across turns", async () => {
+		const createResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "claude",
+					cwd: testRoot,
+					prompt: "stay open across turns",
+				}),
+			}),
+		);
+		expect(createResponse.status).toBe(201);
+		const createJson = await readJson<{ session: { id: string } }>(createResponse);
+		const sessionId = createJson.session.id;
+
+		const eventsResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}/events`, {
+				headers: authHeader,
+			}),
+		);
+		expect(eventsResponse.status).toBe(200);
+
+		const reader = eventsResponse.body?.getReader();
+
+		if (!reader) {
+			throw new Error("Missing SSE body");
+		}
+
+		const streamState = { buffer: "" };
+		const firstTurnMessage = await waitForMessage(
+			reader,
+			streamState,
+			(message) =>
+				message.type === "event" &&
+				message.payload.kind === "text" &&
+				message.payload.data.text === "First turn.",
+		);
+		expect(firstTurnMessage.type).toBe("event");
+
+		const firstIdleMessage = await waitForMessage(
+			reader,
+			streamState,
+			(message) => message.type === "session" && message.payload.status === "idle",
+		);
+		expect(firstIdleMessage.type).toBe("session");
+
+		const formData = new FormData();
+		formData.set("prompt", "second turn");
+		const inputResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}/input`, {
+				method: "POST",
+				headers: authHeader,
+				body: formData,
+			}),
+		);
+		expect(inputResponse.status).toBe(202);
+
+		const secondTurnMessage = await waitForMessage(
+			reader,
+			streamState,
+			(message) =>
+				message.type === "event" &&
+				message.payload.kind === "text" &&
+				message.payload.data.text === "Echo: second turn",
+		);
+		expect(secondTurnMessage.type).toBe("event");
+
+		const detailResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}`, {
+				headers: authHeader,
+			}),
+		);
+		expect(detailResponse.status).toBe(200);
+		const detail = await readJson<{
+			protocolFrames: Array<{
+				frame: Record<string, unknown>;
+			}>;
+		}>(detailResponse);
+		expect(detail.protocolFrames.filter((frame) => frame.frame.type === "system")).toHaveLength(1);
+
+		await reader.cancel();
+	});
+
+	test("maps generic Claude control requests into pending questions", async () => {
+		const createResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "claude",
+					cwd: testRoot,
+					prompt: "Please ask me a question before continuing",
+				}),
+			}),
+		);
+		expect(createResponse.status).toBe(201);
+		const createJson = await readJson<{ session: { id: string } }>(createResponse);
+		const sessionId = createJson.session.id;
+
+		const eventsResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}/events`, {
+				headers: authHeader,
+			}),
+		);
+		expect(eventsResponse.status).toBe(200);
+
+		const reader = eventsResponse.body?.getReader();
+
+		if (!reader) {
+			throw new Error("Missing SSE body");
+		}
+
+		const streamState = { buffer: "" };
+		const questionMessage = await waitForMessage(
+			reader,
+			streamState,
+			(message) =>
+				(message.type === "request" && message.payload.status === "pending") ||
+				(message.type === "snapshot" && message.payload.pendingRequests.length > 0),
+		);
+
+		let pendingRequest: {
+			id: string;
+			kind: string;
+			blockReason: string | null;
+			prompt: string;
+			status: string;
+			data: Record<string, unknown>;
+		} | null = null;
+
+		if (questionMessage.type === "request") {
+			pendingRequest = questionMessage.payload;
+		}
+
+		if (questionMessage.type === "snapshot") {
+			pendingRequest = questionMessage.payload.pendingRequests[0] ?? null;
+		}
+
+		if (!pendingRequest) {
+			throw new Error("Expected pending request");
+		}
+
+		expect(pendingRequest.kind).toBe("question");
+		expect(pendingRequest.blockReason).toBe(null);
+		expect(pendingRequest.prompt).toBe("Claude needs confirmation to continue.");
+		expect(pendingRequest.data.subtype).toBe("confirm");
+
+		const respondResponse = await handleApiRequest(
+			new Request(`http://localhost/api/requests/${pendingRequest.id}/respond`, {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					decision: "allow",
+				}),
+			}),
+		);
+		expect(respondResponse.status).toBe(200);
+
+		const answeredMessage = await waitForMessage(
+			reader,
+			streamState,
+			(message) =>
+				message.type === "event" &&
+				message.payload.kind === "text" &&
+				message.payload.data.text === "Answered.",
+		);
+		expect(answeredMessage.type).toBe("event");
 
 		await reader.cancel();
 	});

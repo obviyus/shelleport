@@ -44,6 +44,7 @@ const testSessionDetail: SessionDetail = {
 	events: [],
 	totalEvents: 0,
 	pendingRequests: [],
+	protocolFrames: [],
 	queuedInputs: [],
 	session: testSession,
 };

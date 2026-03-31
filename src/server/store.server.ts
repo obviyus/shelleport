@@ -12,6 +12,7 @@ import type {
 	Project,
 	ProviderLimitState,
 	ProviderId,
+	ProviderProtocolFrame,
 	QueuedSessionInput,
 	SessionDetail,
 	SessionLimit,
@@ -73,6 +74,16 @@ database.exec(`
 		data_json TEXT NOT NULL,
 		create_time INTEGER NOT NULL,
 		update_time INTEGER NOT NULL
+	);
+	CREATE TABLE IF NOT EXISTS provider_protocol_frames (
+		id TEXT PRIMARY KEY,
+		session_id TEXT NOT NULL,
+		provider TEXT NOT NULL,
+		sequence INTEGER NOT NULL,
+		direction TEXT NOT NULL,
+		frame_json TEXT NOT NULL,
+		create_time INTEGER NOT NULL,
+		UNIQUE(session_id, sequence)
 	);
 	CREATE TABLE IF NOT EXISTS app_auth (
 		id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -268,6 +279,16 @@ type SqlQueuedInputRow = {
 	create_time: number;
 };
 
+type SqlProtocolFrameRow = {
+	id: string;
+	session_id: string;
+	provider: string;
+	sequence: number;
+	direction: string;
+	frame_json: string;
+	create_time: number;
+};
+
 type SqlSessionSearchRow = {
 	id: string;
 	title: string;
@@ -379,6 +400,18 @@ function mapQueuedInput(row: SqlQueuedInputRow): QueuedSessionInput {
 	};
 }
 
+function mapProtocolFrame(row: SqlProtocolFrameRow): ProviderProtocolFrame {
+	return {
+		id: row.id,
+		sessionId: row.session_id,
+		provider: row.provider as ProviderId,
+		sequence: row.sequence,
+		direction: row.direction as ProviderProtocolFrame["direction"],
+		frame: parseJsonRecord(row.frame_json),
+		createTime: row.create_time,
+	};
+}
+
 const insertSessionStatement = database.query(
 	`INSERT INTO host_sessions (
 		id, provider, title, cwd, pinned, archived, status, status_detail_json, provider_session_ref, pid, imported, project_id, model, effort, permission_mode, allowed_tools_json, queued_input_count, usage_json, active_usage_json, last_event_sequence, create_time, update_time
@@ -435,6 +468,20 @@ const countEventsStatement = database.query<{ total: number }, [string]>(
 
 const listEventsAfterStatement = database.query<SqlEventRow, [string, number]>(
 	"SELECT * FROM host_events WHERE session_id = ? AND sequence > ? ORDER BY sequence ASC",
+);
+
+const getNextProtocolFrameSequenceStatement = database.query<{ sequence: number }, [string]>(
+	"SELECT COALESCE(MAX(sequence), 0) + 1 AS sequence FROM provider_protocol_frames WHERE session_id = ?",
+);
+
+const insertProtocolFrameStatement = database.query(
+	`INSERT INTO provider_protocol_frames (
+		id, session_id, provider, sequence, direction, frame_json, create_time
+	) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+);
+
+const listProtocolFramesStatement = database.query<SqlProtocolFrameRow, [string, number]>(
+	"SELECT * FROM (SELECT * FROM provider_protocol_frames WHERE session_id = ? ORDER BY sequence DESC LIMIT ?) ORDER BY sequence ASC",
 );
 
 const insertRequestStatement = database.query(
@@ -792,6 +839,7 @@ export const sessionStore = {
 			totalEvents,
 			pendingRequests: listRequestsStatement.all(sessionId).map(mapRequest),
 			queuedInputs: listQueuedInputsStatement.all(sessionId).map(mapQueuedInput),
+			protocolFrames: listProtocolFramesStatement.all(sessionId, 500).map(mapProtocolFrame),
 		};
 	},
 	getAuthState() {
@@ -958,6 +1006,40 @@ export const sessionStore = {
 		updateSessionSequenceStatement.run(event.sequence, event.createTime, sessionId);
 
 		return event;
+	},
+	appendProtocolFrame(
+		sessionId: string,
+		input: {
+			provider: ProviderId;
+			direction: ProviderProtocolFrame["direction"];
+			frame: Record<string, unknown>;
+		},
+	) {
+		if (!this.getSession(sessionId)) {
+			throw new Error(`Unknown session: ${sessionId}`);
+		}
+
+		const frame: ProviderProtocolFrame = {
+			id: createId(),
+			sessionId,
+			provider: input.provider,
+			sequence: getNextProtocolFrameSequenceStatement.get(sessionId)?.sequence ?? 1,
+			direction: input.direction,
+			frame: input.frame,
+			createTime: createTimestamp(),
+		};
+
+		insertProtocolFrameStatement.run(
+			frame.id,
+			frame.sessionId,
+			frame.provider,
+			frame.sequence,
+			frame.direction,
+			JSON.stringify(frame.frame),
+			frame.createTime,
+		);
+
+		return frame;
 	},
 	createPendingRequest(input: {
 		sessionId: string;

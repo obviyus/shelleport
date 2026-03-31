@@ -86,7 +86,7 @@ describe("normalizeClaudeEvent", () => {
 		]);
 	});
 
-	test("maps permission denials into approval requests", () => {
+	test("maps result events without synthesizing approval requests", () => {
 		const events = normalizeClaudeEvent({
 			type: "result",
 			subtype: "success",
@@ -104,15 +104,12 @@ describe("normalizeClaudeEvent", () => {
 			],
 		});
 
-		expect(events).toHaveLength(2);
-		expect(events[1]).toMatchObject({
-			type: "pending-request",
-			kind: "approval",
-			blockReason: "permission",
+		expect(events).toHaveLength(1);
+		expect(events[0]).toMatchObject({
+			type: "host-event",
+			kind: "state",
 			data: {
-				toolName: "Bash",
-				toolUseId: "tool-1",
-				toolRule: "Bash(git commit:*)",
+				result: "blocked",
 			},
 		});
 	});

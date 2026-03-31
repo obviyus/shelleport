@@ -1,8 +1,9 @@
 import type { ProviderId } from "~/shared/shelleport";
 import { ClaudeProviderAdapter } from "~/server/providers/claude.server";
 import { CodexProviderAdapter } from "~/server/providers/codex.server";
+import type { ProviderAdapter } from "~/server/providers/provider.server";
 
-const providers = {
+const providers: Record<ProviderId, ProviderAdapter> = {
 	claude: new ClaudeProviderAdapter(),
 	codex: new CodexProviderAdapter(),
 };
