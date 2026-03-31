@@ -69,13 +69,13 @@ const ROOT_PATH = "/";
 const COLUMN_WIDTH_PX = 256;
 const COLUMN_GAP_PX = 12;
 
-const LAST_MODEL_KEY = 'shelleport.last-model';
-const LAST_EFFORT_KEY = 'shelleport.last-effort';
+const LAST_MODEL_KEY = "shelleport.last-model";
+const LAST_EFFORT_KEY = "shelleport.last-effort";
 
 function readLastModel(models: ProviderModel[], fallback: string | null): string | null {
 	try {
 		const stored =
-			typeof window !== 'undefined' ? window.localStorage.getItem(LAST_MODEL_KEY) : null;
+			typeof window !== "undefined" ? window.localStorage.getItem(LAST_MODEL_KEY) : null;
 		if (stored && models.some((m) => m.id === stored)) return stored;
 	} catch {}
 	return fallback;
@@ -84,12 +84,12 @@ function readLastModel(models: ProviderModel[], fallback: string | null): string
 function readLastEffort(): EffortLevel {
 	try {
 		const stored =
-			typeof window !== 'undefined' ? window.localStorage.getItem(LAST_EFFORT_KEY) : null;
-		if (stored === 'low' || stored === 'medium' || stored === 'high' || stored === 'max') {
+			typeof window !== "undefined" ? window.localStorage.getItem(LAST_EFFORT_KEY) : null;
+		if (stored === "low" || stored === "medium" || stored === "high" || stored === "max") {
 			return stored;
 		}
 	} catch {}
-	return 'medium';
+	return "medium";
 }
 
 function getPathChain(path: string) {
@@ -475,7 +475,9 @@ export function SessionLauncher({
 	const columnRefs = useRef<Record<string, HTMLElement | null>>({});
 	const [focusPath, setFocusPath] = useState<string | null>(null);
 	const defaultModel = models.find((m) => m.id === "sonnet")?.id ?? models[0]?.id ?? null;
-	const [selectedModel, setSelectedModel] = useState<string | null>(() => readLastModel(models, defaultModel));
+	const [selectedModel, setSelectedModel] = useState<string | null>(() =>
+		readLastModel(models, defaultModel),
+	);
 	const [selectedEffort, setSelectedEffort] = useState<EffortLevel>(() => readLastEffort());
 	const [permissionMode, setPermissionMode] = useState<PermissionMode>(
 		createProviderId ? getDefaultPermissionMode(createProviderId) : "default",
@@ -492,12 +494,16 @@ export function SessionLauncher({
 
 	useEffect(() => {
 		if (selectedModel) {
-			try { window.localStorage.setItem(LAST_MODEL_KEY, selectedModel); } catch {}
+			try {
+				window.localStorage.setItem(LAST_MODEL_KEY, selectedModel);
+			} catch {}
 		}
 	}, [selectedModel]);
 
 	useEffect(() => {
-		try { window.localStorage.setItem(LAST_EFFORT_KEY, selectedEffort); } catch {}
+		try {
+			window.localStorage.setItem(LAST_EFFORT_KEY, selectedEffort);
+		} catch {}
 	}, [selectedEffort]);
 
 	useEffect(() => {
