@@ -353,7 +353,7 @@ describe("groupStream", () => {
 		]);
 	});
 
-	test("matches specific tool results against the earliest eligible pending call", () => {
+	test("matches specific tool results to the call with the same toolUseId", () => {
 		const grouped = groupStream([
 			{
 				id: "call-1",
@@ -412,12 +412,12 @@ describe("groupStream", () => {
 		expect(grouped[0]).toMatchObject({
 			type: "tool",
 			call: { id: "call-1" },
-			result: { id: "result-1" },
+			result: null,
 		});
 		expect(grouped[1]).toMatchObject({
 			type: "tool",
 			call: { id: "call-2" },
-			result: { id: "result-2" },
+			result: { id: "result-1" },
 		});
 	});
 

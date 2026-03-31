@@ -1,4 +1,4 @@
-import { Check, ChevronRight, Copy, FileIcon, Loader2, X } from "lucide-react";
+import { ChevronRight, CircleCheck, CircleX, Copy, FileIcon, Loader2 } from "lucide-react";
 import { createElement, Suspense, lazy, useCallback, useState } from "react";
 import type { RefCallback } from "react";
 import ReactMarkdown from "react-markdown";
@@ -947,19 +947,10 @@ export function groupStream(entries: HostEvent[]): GroupedEntry[] {
 			if (toolUseId === null) {
 				groupIndex = peekPending(pendingToolOrder, matchedGroupIndexes);
 			} else {
-				const anonymousGroupIndex = peekPending(pendingAnonymousTools, matchedGroupIndexes);
-				const specificGroupIndex = peekPending(
+				groupIndex = peekPending(
 					pendingToolsById.get(toolUseId) ?? { cursor: 0, indices: [] },
 					matchedGroupIndexes,
 				);
-
-				if (anonymousGroupIndex === null) {
-					groupIndex = specificGroupIndex;
-				} else if (specificGroupIndex === null) {
-					groupIndex = anonymousGroupIndex;
-				} else {
-					groupIndex = Math.min(anonymousGroupIndex, specificGroupIndex);
-				}
 			}
 
 			if (groupIndex !== null) {
@@ -1159,13 +1150,30 @@ export function hasMixedAssistantModels(groups: GroupedEntry[]): boolean {
 
 export function GroupedEntryRenderer({
 	group,
+	pendingRequests = [],
+	onRespond,
 	showModelLabel = false,
 }: {
 	group: GroupedEntry;
+	pendingRequests?: PendingRequest[];
+	onRespond?: (id: string, payload: RequestResponsePayload) => void;
 	showModelLabel?: boolean;
 }) {
 	if (group.type === "tool") {
-		return <ToolCard call={group.call} result={group.result} />;
+		const toolUseId =
+			typeof group.call.data.toolUseId === "string" ? group.call.data.toolUseId : null;
+		const pendingRequest =
+			toolUseId === null
+				? null
+				: pendingRequests.find((request) => request.data.toolUseId === toolUseId) ?? null;
+		return (
+			<ToolCard
+				call={group.call}
+				result={group.result}
+				pendingRequest={pendingRequest}
+				onRespond={onRespond}
+			/>
+		);
 	}
 
 	if (group.type === "assistant-text-run") {
@@ -1251,7 +1259,93 @@ export function getToolOutput(call: HostEvent, result: HostEvent | null) {
 	return getWriteContent(call) ?? resultOutput;
 }
 
-function ToolCard({ call, result }: { call: HostEvent; result: HostEvent | null }) {
+function ToolApprovalActions({
+	request,
+	onRespond,
+	compact = false,
+}: {
+	request: PendingRequest;
+	onRespond: (id: string, payload: RequestResponsePayload) => void;
+	compact?: boolean;
+}) {
+	return (
+		<div
+			className={
+				compact
+					? "flex shrink-0 items-center gap-1.5"
+					: "flex flex-wrap items-center gap-2 border-b border-foreground/8 bg-background/45 px-3 py-2"
+			}
+		>
+			{compact ? null : (
+				<div className="min-w-0 flex-1">
+					<p className="truncate text-[11px] font-medium tracking-[0.02em] text-foreground/86">
+						{request.prompt}
+					</p>
+				</div>
+			)}
+			<div className="flex shrink-0 items-center gap-1">
+				<button
+					type="button"
+					onClick={(event) => {
+						event.preventDefault();
+						event.stopPropagation();
+						onRespond(request.id, { decision: "allow" });
+					}}
+					className={`inline-flex items-center justify-center rounded-full border border-emerald-500/20 bg-emerald-500/10 font-medium text-emerald-600 transition hover:border-emerald-500/35 hover:bg-emerald-500/18 ${
+						compact
+							? "size-6 text-[10px]"
+							: "h-7 gap-1.5 px-3 text-[11px]"
+					}`}
+					title="Approve"
+				>
+					{compact ? (
+						<CircleCheck className="size-3.5" />
+					) : (
+						<>
+							<CircleCheck className="size-3" />
+							Approve
+						</>
+					)}
+				</button>
+				<button
+					type="button"
+					onClick={(event) => {
+						event.preventDefault();
+						event.stopPropagation();
+						onRespond(request.id, { decision: "deny" });
+					}}
+					className={`inline-flex items-center justify-center rounded-full border border-red-500/20 bg-red-500/10 font-medium text-red-600 transition hover:border-red-500/35 hover:bg-red-500/18 ${
+						compact
+							? "size-6 text-[10px]"
+							: "h-7 gap-1.5 px-3 text-[11px]"
+					}`}
+					title="Deny"
+				>
+					{compact ? (
+						<CircleX className="size-3.5" />
+					) : (
+						<>
+							<CircleX className="size-3" />
+							Deny
+						</>
+					)}
+				</button>
+			</div>
+		</div>
+	);
+}
+
+function ToolCard({
+	call,
+	result,
+	pendingRequest,
+	onRespond,
+}: {
+	call: HostEvent;
+	result: HostEvent | null;
+	pendingRequest: PendingRequest | null;
+	onRespond?: (id: string, payload: RequestResponsePayload) => void;
+}) {
 	const [shouldRenderCode, setShouldRenderCode] = useState(false);
 	const output = getToolOutput(call, result);
 	const hasOutput = output.length > 0;
@@ -1271,21 +1365,39 @@ function ToolCard({ call, result }: { call: HostEvent; result: HostEvent | null 
 				}
 			}}
 		>
-			<summary className="flex cursor-pointer list-none items-center gap-2 py-1 transition hover:bg-accent/30">
+			<summary className="flex list-none items-center gap-2 py-1 transition hover:bg-accent/30">
 				<ChevronRight className="size-2.5 shrink-0 text-muted-foreground transition group-open:rotate-90" />
-				<span className="text-xs font-medium text-sky-300 shrink-0">
-					{call.data.toolName as string}
-				</span>
-				{isRunning ? (
-					<Loader2 className="size-2.5 shrink-0 animate-spin text-primary" />
-				) : result?.data.isError ? (
-					<X className="size-2.5 shrink-0 text-destructive" />
-				) : (
-					<Check className="size-2.5 shrink-0 text-emerald-400" />
-				)}
-				<span className="min-w-0 truncate text-xs text-muted-foreground">
-					{getToolPreview(call)}
-				</span>
+				<button
+					type="button"
+					className="flex min-w-0 flex-1 items-center gap-2 text-left"
+					onClick={(event) => {
+						const details = event.currentTarget.closest("details");
+						if (!(details instanceof HTMLDetailsElement)) {
+							return;
+						}
+						details.open = !details.open;
+						if (details.open) {
+							setShouldRenderCode(true);
+						}
+					}}
+				>
+					<span className="text-xs font-medium text-sky-300 shrink-0">
+						{call.data.toolName as string}
+					</span>
+					{isRunning ? (
+						<Loader2 className="size-3 shrink-0 animate-spin text-muted-foreground" />
+					) : result?.data.isError ? (
+						<CircleX className="size-3 shrink-0 text-red-400/80" />
+					) : (
+						<CircleCheck className="size-3 shrink-0 text-emerald-400/80" />
+					)}
+					<span className="min-w-0 truncate text-xs text-muted-foreground">
+						{getToolPreview(call)}
+					</span>
+				</button>
+				{pendingRequest && onRespond ? (
+					<ToolApprovalActions request={pendingRequest} onRespond={onRespond} compact />
+				) : null}
 			</summary>
 			<div className="mb-1 mt-0.5 overflow-hidden rounded-md border border-foreground/10 bg-card/90">
 				{hasOutput ? (

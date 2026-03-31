@@ -2140,7 +2140,6 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const queuedInputCount = sessionQueuedInputs.length;
 	const canSend = !!selectedId && (prompt.trim().length > 0 || draftAttachments.length > 0);
 	const permissionModeLabel = sessionView ? formatPermissionModeLabel(sessionView) : null;
-	const pendingRequest = sessionPendingRequests[0] ?? null;
 	const showReconnectIndicator = shouldShowReconnectIndicator(isSessionPending, streamState);
 	const statusMessage = sessionView ? getStatusMessage(sessionView) : null;
 	const firstRunReadiness = getFirstRunReadiness(providers);
@@ -2686,7 +2685,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 							loadEarlier={selectedId ? loadEarlierEvents : null}
 							onPrependEarlier={prependEarlierEvents}
 							onRespond={handleRespond}
-							pendingRequest={pendingRequest}
+							pendingRequests={sessionPendingRequests}
 							session={sessionView}
 							statusMessage={statusMessage}
 						/>

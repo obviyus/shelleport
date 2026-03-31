@@ -35,7 +35,7 @@ export const SessionTranscript = memo(function SessionTranscript({
 	loadEarlier,
 	onPrependEarlier,
 	onRespond,
-	pendingRequest,
+	pendingRequests,
 	session,
 	statusMessage,
 }: {
@@ -47,7 +47,7 @@ export const SessionTranscript = memo(function SessionTranscript({
 	loadEarlier: ((before: number) => Promise<EarlierEventPage>) | null;
 	onPrependEarlier: (page: EarlierEventPage) => void;
 	onRespond: (id: string, payload: RequestResponsePayload) => void;
-	pendingRequest: PendingRequest | null;
+	pendingRequests: PendingRequest[];
 	session: HostSession | null;
 	statusMessage: string | null;
 }) {
@@ -159,6 +159,8 @@ export const SessionTranscript = memo(function SessionTranscript({
 								<GroupedEntryRenderer
 									key={getGroupedEntryKey(group)}
 									group={group}
+									pendingRequests={pendingRequests}
+									onRespond={onRespond}
 									showModelLabel={showAssistantModelLabels}
 								/>
 							))}
@@ -187,9 +189,12 @@ export const SessionTranscript = memo(function SessionTranscript({
 				)}
 			</div>
 
-			{session && pendingRequest && (
-				<PendingRequestBanner request={pendingRequest} onRespond={onRespond} />
-			)}
+			{session &&
+				pendingRequests
+					.filter((request) => typeof request.data.toolUseId !== "string")
+					.map((request) => (
+						<PendingRequestBanner key={request.id} request={request} onRespond={onRespond} />
+					))}
 		</>
 	);
 });
