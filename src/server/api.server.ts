@@ -165,7 +165,6 @@ function validateSystemPrompt(systemPrompt: unknown) {
 		);
 	}
 }
-
 async function validateEffortForModel(
 	providerId: CreateSessionInput["provider"],
 	model: string | null,
@@ -311,7 +310,11 @@ async function validateMetaInput(
 	);
 
 	if (!hasField) {
-		throw new ApiError(400, "invalid_session_meta", "title, pinned, model, or effort is required");
+		throw new ApiError(
+			400,
+			"invalid_session_meta",
+			"title, pinned, model, effort, or systemPrompt is required",
+		);
 	}
 }
 
