@@ -13,9 +13,11 @@ const models = [
 
 function installStorage(entries: Record<string, string> = {}) {
 	const store = new Map(Object.entries(entries));
-	(globalThis as typeof globalThis & {
-		window?: { localStorage: Storage };
-	}).window = {
+	(
+		globalThis as unknown as {
+			window?: { localStorage: Storage };
+		}
+	).window = {
 		localStorage: {
 			getItem(key) {
 				return store.get(key) ?? null;
@@ -41,7 +43,7 @@ function installStorage(entries: Record<string, string> = {}) {
 }
 
 afterEach(() => {
-	delete (globalThis as typeof globalThis & { window?: unknown }).window;
+	delete (globalThis as unknown as { window?: unknown }).window;
 });
 
 describe("session preferences", () => {

@@ -509,6 +509,7 @@ export const sessionBroker = {
 			projectId: input.projectId,
 			model: input.model,
 			effort: input.effort,
+			systemPrompt: input.systemPrompt,
 			permissionMode: input.permissionMode ?? getDefaultPermissionMode(input.provider),
 			allowedTools: normalizeAllowedTools(input.allowedTools ?? []),
 		});
@@ -606,6 +607,7 @@ export const sessionBroker = {
 			projectId: input.projectId,
 			model: input.model,
 			effort: input.effort,
+			systemPrompt: input.systemPrompt,
 		});
 
 		if (!session) {

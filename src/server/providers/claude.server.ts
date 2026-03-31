@@ -62,6 +62,7 @@ type ClaudeLiveSession = {
 	cwd: string;
 	model: HostSession["model"];
 	effort: HostSession["effort"];
+	systemPrompt: HostSession["systemPrompt"];
 	permissionMode: HostSession["permissionMode"];
 	allowedTools: string[];
 	subprocess: Bun.Subprocess<"pipe", "pipe", "pipe">;
@@ -218,6 +219,10 @@ function createClaudeCommand(session: HostSession) {
 
 	if (session.effort) {
 		command.push("--effort", session.effort);
+	}
+
+	if (session.systemPrompt) {
+		command.push("--append-system-prompt", session.systemPrompt);
 	}
 
 	for (const toolRule of session.allowedTools) {
@@ -1087,6 +1092,7 @@ function matchesClaudeLiveSession(liveSession: ClaudeLiveSession, session: HostS
 		liveSession.cwd === session.cwd &&
 		liveSession.model === session.model &&
 		liveSession.effort === session.effort &&
+		liveSession.systemPrompt === session.systemPrompt &&
 		liveSession.permissionMode === session.permissionMode &&
 		liveSession.allowedTools.length === session.allowedTools.length &&
 		liveSession.allowedTools.every((toolRule, index) => toolRule === session.allowedTools[index])
@@ -1130,6 +1136,7 @@ function createClaudeLiveSession(
 		cwd: session.cwd,
 		model: session.model,
 		effort: session.effort,
+		systemPrompt: session.systemPrompt,
 		permissionMode: session.permissionMode,
 		allowedTools: [...session.allowedTools],
 		subprocess,

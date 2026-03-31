@@ -97,6 +97,7 @@ export type HostSession = {
 	projectId: string | null;
 	model: string | null;
 	effort: EffortLevel | null;
+	systemPrompt: string | null;
 	permissionMode: PermissionMode;
 	allowedTools: string[];
 	queuedInputCount: number;
@@ -230,6 +231,7 @@ export type CreateSessionInput = {
 	title?: string;
 	model?: string;
 	effort?: EffortLevel;
+	systemPrompt?: string;
 	projectId?: string;
 	permissionMode?: PermissionMode;
 	allowedTools?: string[];
@@ -259,6 +261,7 @@ export type SessionMetaPayload = {
 	pinned?: boolean;
 	model?: string | null;
 	effort?: EffortLevel | null;
+	systemPrompt?: string | null;
 	projectId?: string | null;
 };
 

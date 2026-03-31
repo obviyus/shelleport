@@ -8,6 +8,7 @@ import {
 	CircleX,
 	ClipboardCopy,
 	EllipsisVertical,
+	FileText,
 	Eye,
 	EyeOff,
 	File,
@@ -778,6 +779,8 @@ function SessionActionsPopover({
 	onExportMarkdown,
 	onExportJson,
 	onArchive,
+	canEditSystemPrompt,
+	onEditSystemPrompt,
 }: {
 	session: HostSession;
 	projects: Project[];
@@ -794,6 +797,8 @@ function SessionActionsPopover({
 	onExportMarkdown: () => void;
 	onExportJson: () => void;
 	onArchive: (id: string, archived: boolean) => void;
+	canEditSystemPrompt: boolean;
+	onEditSystemPrompt: () => void;
 }) {
 	const [open, setOpen] = useState(false);
 	const buttonRef = useRef<HTMLButtonElement>(null);
@@ -869,6 +874,19 @@ function SessionActionsPopover({
 							<Pencil className="size-3.5" />
 							Rename
 						</button>
+						{canEditSystemPrompt && (
+							<button
+								type="button"
+								onClick={() => {
+									onEditSystemPrompt();
+									setOpen(false);
+								}}
+								className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+							>
+								<FileText className="size-3.5" />
+								{session.systemPrompt ? "Edit system prompt" : "Add system prompt"}
+							</button>
+						)}
 						<button
 							type="button"
 							onClick={() => {
@@ -1309,6 +1327,10 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	});
 	const [fileBrowserOpen, setFileBrowserOpen] = useState(false);
 	const [renameState, setRenameState] = useState<{ sessionId: string; title: string } | null>(null);
+	const [systemPromptEdit, setSystemPromptEdit] = useState<{
+		sessionId: string;
+		systemPrompt: string;
+	} | null>(null);
 	const [sidebarOpen, setSidebarOpen] = useState(false);
 	const [sessionQuery, setSessionQuery] = useState("");
 	const [deleteProjectConfirmId, setDeleteProjectConfirmId] = useState<string | null>(null);
@@ -1440,6 +1462,9 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const showsClaudeBypassWarning = showsClaudeLauncherWarning && !hasDismissedClaudeBypassWarning;
 	const isRenaming = renameState !== null && renameState.sessionId === sessionView?.id;
 	const renameDraft = isRenaming ? renameState.title : (sessionView?.title ?? "");
+	const isEditingSystemPrompt =
+		systemPromptEdit !== null && systemPromptEdit.sessionId === sessionView?.id;
+	const systemPromptDraft = isEditingSystemPrompt ? systemPromptEdit.systemPrompt : "";
 	const editingQueuedInputId = queuedInputEdit?.id ?? null;
 	const queuedInputDraft = queuedInputEdit?.prompt ?? "";
 	const canUseVoiceInput = typeof window !== "undefined" && window.isSecureContext;
@@ -1713,15 +1738,16 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	}, []);
 
 	const handleCreateSession = useCallback(
-		async (
-			cwd: string,
-			title: string,
-			permissionMode: PermissionMode,
-			model?: string,
-			effort?: EffortLevel | null,
-			projectId?: string,
-		) => {
-			if (!cwd.trim() || !createProvider) {
+		async (input: {
+			cwd: string;
+			title: string;
+			permissionMode: PermissionMode;
+			model?: string;
+			effort?: EffortLevel | null;
+			systemPrompt?: string;
+			projectId?: string;
+		}) => {
+			if (!input.cwd.trim() || !createProvider) {
 				return;
 			}
 
@@ -1730,12 +1756,13 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			try {
 				const result = await createSession({
 					provider: createProvider.id,
-					cwd: cwd.trim(),
-					permissionMode,
-					title: title || undefined,
-					model,
-					effort: effort ?? undefined,
-					projectId,
+					cwd: input.cwd.trim(),
+					permissionMode: input.permissionMode,
+					title: input.title || undefined,
+					model: input.model,
+					effort: input.effort ?? undefined,
+					systemPrompt: input.systemPrompt,
+					projectId: input.projectId,
 				});
 				await refreshSessions(sessionQuery);
 				navigate(`/sessions/${result.session.id}`);
@@ -1869,7 +1896,15 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 				showToast("error", "Failed to update archive state");
 			}
 		},
-		[isArchivedView, navigate, refreshSessions, replaceSession, selectedId, sessionQuery, showToast],
+		[
+			isArchivedView,
+			navigate,
+			refreshSessions,
+			replaceSession,
+			selectedId,
+			sessionQuery,
+			showToast,
+		],
 	);
 
 	const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -2096,6 +2131,26 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		}
 	}, [applySessionMetaUpdate, isRenaming, renameDraft, sessionView, showToast]);
 
+	const handleSaveSystemPrompt = useCallback(async () => {
+		if (!sessionView || !isEditingSystemPrompt) {
+			return;
+		}
+
+		const nextPrompt = systemPromptDraft.trim() || null;
+
+		if (nextPrompt === (sessionView.systemPrompt ?? null)) {
+			setSystemPromptEdit(null);
+			return;
+		}
+
+		try {
+			await applySessionMetaUpdate(sessionView.id, { systemPrompt: nextPrompt });
+			setSystemPromptEdit(null);
+		} catch {
+			showToast("error", "Failed to update system prompt");
+		}
+	}, [applySessionMetaUpdate, isEditingSystemPrompt, sessionView, showToast, systemPromptDraft]);
+
 	const addDraftAttachments = useCallback(async (files: File[]) => {
 		const normalized = await Promise.all(files.map(normalizeDraftAttachment));
 		setDraftAttachments((previous) => [...previous, ...normalized]);
@@ -2231,6 +2286,55 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 							className="inline-flex h-9 items-center justify-center rounded-md bg-foreground px-4 text-sm font-medium text-background transition hover:bg-foreground/90"
 						>
 							Continue
+						</button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
+			{/* System prompt edit modal */}
+			<Dialog
+				open={isEditingSystemPrompt}
+				onOpenChange={(open) => {
+					if (!open) {
+						setSystemPromptEdit(null);
+					}
+				}}
+			>
+				<DialogContent showCloseButton={false} className="max-w-xl border-foreground/14 bg-card">
+					<DialogHeader className="text-left">
+						<DialogTitle className="text-sm font-medium tracking-[-0.02em] text-foreground">
+							System prompt
+						</DialogTitle>
+						<DialogDescription className="text-[11px] leading-[1.6] text-muted-foreground">
+							Appended to the default system prompt on every turn. Clear to remove.
+						</DialogDescription>
+					</DialogHeader>
+					<textarea
+						value={systemPromptDraft}
+						onChange={(event) =>
+							setSystemPromptEdit((current) =>
+								current ? { ...current, systemPrompt: event.target.value } : null,
+							)
+						}
+						rows={6}
+						maxLength={10000}
+						autoFocus
+						placeholder="Custom instructions for this session…"
+						className="w-full resize-y rounded-md border border-foreground/10 bg-background/55 px-3 py-2.5 text-xs leading-[1.7] text-foreground outline-none transition placeholder:text-muted-foreground focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
+					/>
+					<DialogFooter className="gap-2">
+						<button
+							type="button"
+							onClick={() => setSystemPromptEdit(null)}
+							className="inline-flex h-8 items-center justify-center rounded-md border border-foreground/10 px-3 text-xs font-medium text-foreground/80 transition hover:bg-accent"
+						>
+							Cancel
+						</button>
+						<button
+							type="button"
+							onClick={() => void handleSaveSystemPrompt()}
+							className="inline-flex h-8 items-center justify-center rounded-md bg-foreground px-3 text-xs font-medium text-background transition hover:bg-foreground/90"
+						>
+							Save
 						</button>
 					</DialogFooter>
 				</DialogContent>
@@ -2659,6 +2763,13 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 												);
 											}}
 											onArchive={(id, archived) => handleArchive(id, archived)}
+											canEditSystemPrompt={sessionView.provider === "claude"}
+											onEditSystemPrompt={() =>
+												setSystemPromptEdit({
+													sessionId: sessionView.id,
+													systemPrompt: sessionView.systemPrompt ?? "",
+												})
+											}
 										/>
 									)}
 									{sessionView &&

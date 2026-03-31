@@ -57,14 +57,15 @@ type SessionLauncherProps = {
 	defaultPath: string;
 	isCreating: boolean;
 	models: ProviderModel[];
-	onCreate: (
-		cwd: string,
-		title: string,
-		permissionMode: PermissionMode,
-		model?: string,
-		effort?: EffortLevel | null,
-		projectId?: string,
-	) => void | Promise<void>;
+	onCreate: (input: {
+		cwd: string;
+		title: string;
+		permissionMode: PermissionMode;
+		model?: string;
+		effort?: EffortLevel | null;
+		systemPrompt?: string;
+		projectId?: string;
+	}) => void | Promise<void>;
 	projects: Project[];
 	onProjectCreated: (project: Project) => void;
 };
@@ -470,6 +471,7 @@ export function SessionLauncher({
 	const [isCreatingProject, setIsCreatingProject] = useState(false);
 	const [saveAsProject, setSaveAsProject] = useState(false);
 	const [saveAsProjectName, setSaveAsProjectName] = useState("");
+	const [systemPrompt, setSystemPrompt] = useState("");
 	const effortLevels = getEffortLevels(selectedModel);
 
 	useEffect(() => {
@@ -668,14 +670,15 @@ export function SessionLauncher({
 									}
 								}
 
-								await onCreate(
-									currentPath,
-									title.trim(),
+								await onCreate({
+									cwd: currentPath,
+									title: title.trim(),
 									permissionMode,
-									selectedModel ?? undefined,
-									normalizeEffortLevel(selectedModel, selectedEffort),
-									projectIdToUse ?? undefined,
-								);
+									model: selectedModel ?? undefined,
+									effort: normalizeEffortLevel(selectedModel, selectedEffort) ?? undefined,
+									systemPrompt: systemPrompt.trim() || undefined,
+									projectId: projectIdToUse ?? undefined,
+								});
 							}}
 							disabled={isCreating || createDisabledReason !== null}
 							className="flex h-8 shrink-0 items-center gap-1.5 rounded-md bg-foreground px-3 text-[11px] font-medium text-background transition hover:bg-foreground/90 focus-visible:ring-2 focus-visible:ring-foreground/20 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-30"
@@ -902,6 +905,21 @@ export function SessionLauncher({
 								</div>
 							</div>
 						)}
+
+						{/* System prompt (right column) */}
+						<div className="space-y-1.5">
+							<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+								System prompt
+							</p>
+							<textarea
+								value={systemPrompt}
+								onChange={(event) => setSystemPrompt(event.target.value)}
+								placeholder="Custom instructions for this session…"
+								rows={2}
+								maxLength={10000}
+								className="w-full resize-y rounded-md border border-foreground/10 bg-card/90 px-2.5 py-2 text-[10px] leading-[1.6] text-foreground outline-none transition placeholder:text-muted-foreground focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
+							/>
+						</div>
 					</div>
 
 					{/* Selected directory bar */}

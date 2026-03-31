@@ -142,9 +142,29 @@ function validateCreateSessionInput(payload: CreateSessionInput) {
 	assertPermissionMode(payload.permissionMode);
 	assertAllowedTools(payload.allowedTools);
 	validateEffortForModel(payload.model ?? null, payload.effort);
+	validateSystemPrompt(payload.systemPrompt);
 	return assertDirectory(payload.cwd, "cwd");
 }
 
+const MAX_SYSTEM_PROMPT_LENGTH = 10000;
+
+function validateSystemPrompt(systemPrompt: unknown) {
+	if (systemPrompt === undefined || systemPrompt === null) {
+		return;
+	}
+
+	if (typeof systemPrompt !== "string") {
+		throw new ApiError(400, "invalid_system_prompt", "systemPrompt must be a string or null");
+	}
+
+	if (systemPrompt.length > MAX_SYSTEM_PROMPT_LENGTH) {
+		throw new ApiError(
+			400,
+			"invalid_system_prompt",
+			`systemPrompt must be at most ${MAX_SYSTEM_PROMPT_LENGTH} characters`,
+		);
+	}
+}
 function validateEffortForModel(model: string | null, effort: EffortLevel | null | undefined) {
 	if (effort === undefined) {
 		return;
@@ -270,6 +290,10 @@ function validateMetaInput(
 		}
 	}
 
+	if (payload.systemPrompt !== undefined) {
+		hasField = true;
+		validateSystemPrompt(payload.systemPrompt);
+	}
 	validateEffortForModel(
 		payload.model === undefined ? current.model : payload.model,
 		payload.effort === undefined ? current.effort : payload.effort,

@@ -1,4 +1,13 @@
-import { ChevronRight, CircleCheck, CircleX, Copy, FileIcon, Loader2, X } from "lucide-react";
+import {
+	Check,
+	ChevronRight,
+	CircleCheck,
+	CircleX,
+	Copy,
+	FileIcon,
+	Loader2,
+	X,
+} from "lucide-react";
 import { createElement, Suspense, lazy, useCallback, useState } from "react";
 import type { RefCallback } from "react";
 import ReactMarkdown from "react-markdown";
@@ -1166,7 +1175,7 @@ export function GroupedEntryRenderer({
 		const pendingRequest =
 			toolUseId === null
 				? null
-				: pendingRequests.find((request) => request.data.toolUseId === toolUseId) ?? null;
+				: (pendingRequests.find((request) => request.data.toolUseId === toolUseId) ?? null);
 		return (
 			<ToolCard
 				call={group.call}
@@ -1293,9 +1302,7 @@ function ToolApprovalActions({
 						onRespond(request.id, { decision: "allow" });
 					}}
 					className={`inline-flex items-center justify-center rounded-full border border-emerald-500/20 bg-emerald-500/10 font-medium text-emerald-600 transition hover:border-emerald-500/35 hover:bg-emerald-500/18 ${
-						compact
-							? "size-6 text-[10px]"
-							: "h-7 gap-1.5 px-3 text-[11px]"
+						compact ? "size-6 text-[10px]" : "h-7 gap-1.5 px-3 text-[11px]"
 					}`}
 					title="Approve"
 				>
@@ -1316,9 +1323,7 @@ function ToolApprovalActions({
 						onRespond(request.id, { decision: "deny" });
 					}}
 					className={`inline-flex items-center justify-center rounded-full border border-red-500/20 bg-red-500/10 font-medium text-red-600 transition hover:border-red-500/35 hover:bg-red-500/18 ${
-						compact
-							? "size-6 text-[10px]"
-							: "h-7 gap-1.5 px-3 text-[11px]"
+						compact ? "size-6 text-[10px]" : "h-7 gap-1.5 px-3 text-[11px]"
 					}`}
 					title="Deny"
 				>
