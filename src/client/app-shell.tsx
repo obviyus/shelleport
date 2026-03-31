@@ -2945,6 +2945,8 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 																	type="button"
 																	onClick={() => void handleSend()}
 																	disabled={!canSend}
+																	title="Send message"
+																	aria-label="Send message"
 																	className="flex size-7 items-center justify-center rounded bg-foreground text-background shadow-[0_0_18px_oklch(1_0_0_/_0.12)] transition hover:bg-foreground/85 disabled:opacity-20"
 																>
 																	<Send className="size-3.5" />

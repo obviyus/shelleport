@@ -694,7 +694,44 @@ describe("getSidebarMeta", () => {
 				},
 				180_000,
 			),
-		).toBe("1m ago");
+		).toBe("1m ago · /tmp/project");
+	});
+
+	test("shows cwd for waiting sessions", () => {
+		expect(
+			getSidebarMeta(
+				{
+					allowedTools: [],
+					archived: false,
+					createTime: 0,
+					cwd: "/tmp/project",
+					id: "session-1",
+					imported: false,
+					projectId: null,
+					model: null,
+					effort: null,
+					lastEventSequence: 0,
+					permissionMode: "default",
+					pid: null,
+					pinned: false,
+					provider: "claude",
+					providerSessionRef: null,
+					queuedInputCount: 0,
+					status: "waiting",
+					statusDetail: {
+						attempt: null,
+						blockReason: null,
+						message: null,
+						nextRetryTime: null,
+						waitKind: "approval",
+					},
+					title: "Queued",
+					updateTime: 120_000,
+					usage: null,
+				},
+				180_000,
+			),
+		).toBe("waiting approval · /tmp/project");
 	});
 });
 

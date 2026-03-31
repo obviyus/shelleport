@@ -1,4 +1,4 @@
-import { ChevronRight, CircleCheck, CircleX, Copy, FileIcon, Loader2 } from "lucide-react";
+import { ChevronRight, CircleCheck, CircleX, Copy, FileIcon, Loader2, X } from "lucide-react";
 import { createElement, Suspense, lazy, useCallback, useState } from "react";
 import type { RefCallback } from "react";
 import ReactMarkdown from "react-markdown";
@@ -761,22 +761,23 @@ function formatRelativeTime(now: number, time: number) {
 export function getSidebarMeta(session: HostSession, now: number) {
 	if (session.status === "retrying" && session.statusDetail.nextRetryTime !== null) {
 		const seconds = Math.max(0, Math.ceil((session.statusDetail.nextRetryTime - now) / 1000));
-		return `retrying in ${seconds}s`;
+		return `retrying in ${seconds}s · ${session.cwd}`;
 	}
 
 	if (session.status === "waiting") {
-		return session.statusDetail.waitKind === "approval" ? "waiting approval" : "waiting";
+		const label = session.statusDetail.waitKind === "approval" ? "waiting approval" : "waiting";
+		return `${label} · ${session.cwd}`;
 	}
 
 	if (session.status === "failed") {
-		return session.statusDetail.message ?? "failed";
+		return `${session.statusDetail.message ?? "failed"} · ${session.cwd}`;
 	}
 
 	if (session.status === "running") {
 		return session.cwd;
 	}
 
-	return formatRelativeTime(now, session.updateTime);
+	return `${formatRelativeTime(now, session.updateTime)} · ${session.cwd}`;
 }
 
 export type SessionHeaderBadge = {
