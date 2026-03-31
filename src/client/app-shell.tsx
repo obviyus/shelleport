@@ -779,6 +779,7 @@ function SessionActionsPopover({
 	onExportMarkdown,
 	onExportJson,
 	onArchive,
+	canEditSystemPrompt,
 	onEditSystemPrompt,
 }: {
 	session: HostSession;
@@ -796,6 +797,7 @@ function SessionActionsPopover({
 	onExportMarkdown: () => void;
 	onExportJson: () => void;
 	onArchive: (id: string, archived: boolean) => void;
+	canEditSystemPrompt: boolean;
 	onEditSystemPrompt: () => void;
 }) {
 	const [open, setOpen] = useState(false);
@@ -872,17 +874,19 @@ function SessionActionsPopover({
 							<Pencil className="size-3.5" />
 							Rename
 						</button>
-						<button
-							type="button"
-							onClick={() => {
-								onEditSystemPrompt();
-								setOpen(false);
-							}}
-							className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-						>
-							<FileText className="size-3.5" />
-							{session.systemPrompt ? "Edit system prompt" : "Add system prompt"}
-						</button>
+						{canEditSystemPrompt && (
+							<button
+								type="button"
+								onClick={() => {
+									onEditSystemPrompt();
+									setOpen(false);
+								}}
+								className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+							>
+								<FileText className="size-3.5" />
+								{session.systemPrompt ? "Edit system prompt" : "Add system prompt"}
+							</button>
+						)}
 						<button
 							type="button"
 							onClick={() => {
@@ -1458,6 +1462,9 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const showsClaudeBypassWarning = showsClaudeLauncherWarning && !hasDismissedClaudeBypassWarning;
 	const isRenaming = renameState !== null && renameState.sessionId === sessionView?.id;
 	const renameDraft = isRenaming ? renameState.title : (sessionView?.title ?? "");
+	const isEditingSystemPrompt =
+		systemPromptEdit !== null && systemPromptEdit.sessionId === sessionView?.id;
+	const systemPromptDraft = isEditingSystemPrompt ? systemPromptEdit.systemPrompt : "";
 	const editingQueuedInputId = queuedInputEdit?.id ?? null;
 	const queuedInputDraft = queuedInputEdit?.prompt ?? "";
 	const canUseVoiceInput = typeof window !== "undefined" && window.isSecureContext;
@@ -2125,11 +2132,11 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	}, [applySessionMetaUpdate, isRenaming, renameDraft, sessionView, showToast]);
 
 	const handleSaveSystemPrompt = useCallback(async () => {
-		if (!sessionView || !systemPromptEdit) {
+		if (!sessionView || !isEditingSystemPrompt) {
 			return;
 		}
 
-		const nextPrompt = systemPromptEdit.systemPrompt.trim() || null;
+		const nextPrompt = systemPromptDraft.trim() || null;
 
 		if (nextPrompt === (sessionView.systemPrompt ?? null)) {
 			setSystemPromptEdit(null);
@@ -2142,7 +2149,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		} catch {
 			showToast("error", "Failed to update system prompt");
 		}
-	}, [applySessionMetaUpdate, sessionView, systemPromptEdit, showToast]);
+	}, [applySessionMetaUpdate, isEditingSystemPrompt, sessionView, showToast, systemPromptDraft]);
 
 	const addDraftAttachments = useCallback(async (files: File[]) => {
 		const normalized = await Promise.all(files.map(normalizeDraftAttachment));
@@ -2285,7 +2292,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			</Dialog>
 			{/* System prompt edit modal */}
 			<Dialog
-				open={systemPromptEdit !== null}
+				open={isEditingSystemPrompt}
 				onOpenChange={(open) => {
 					if (!open) {
 						setSystemPromptEdit(null);
@@ -2302,7 +2309,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 						</DialogDescription>
 					</DialogHeader>
 					<textarea
-						value={systemPromptEdit?.systemPrompt ?? ""}
+						value={systemPromptDraft}
 						onChange={(event) =>
 							setSystemPromptEdit((current) =>
 								current ? { ...current, systemPrompt: event.target.value } : null,
@@ -2756,6 +2763,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 												);
 											}}
 											onArchive={(id, archived) => handleArchive(id, archived)}
+											canEditSystemPrompt={sessionView.provider === "claude"}
 											onEditSystemPrompt={() =>
 												setSystemPromptEdit({
 													sessionId: sessionView.id,
