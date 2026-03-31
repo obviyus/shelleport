@@ -41,7 +41,7 @@ export const LazyEditDiff = lazy(async () => {
 		newPath: string;
 		newContents: string;
 	}) {
-		const { ref } = useFileDiffInstance({
+		const diff = useFileDiffInstance({
 			oldFile: { name: oldPath, contents: oldContents },
 			newFile: { name: newPath, contents: newContents },
 			fileDiff: undefined,
@@ -52,7 +52,7 @@ export const LazyEditDiff = lazy(async () => {
 			hasGutterRenderUtility: false,
 		});
 		return createElement("diffs-container" as "div", {
-			ref: ref as RefCallback<HTMLDivElement>,
+			ref: ((node) => diff.ref(node)) as RefCallback<HTMLDivElement>,
 		});
 	}
 
