@@ -712,6 +712,7 @@ describe("getSidebarMeta", () => {
 					projectId: null,
 					model: null,
 					effort: null,
+					systemPrompt: null,
 					lastEventSequence: 0,
 					permissionMode: "default",
 					pid: null,
