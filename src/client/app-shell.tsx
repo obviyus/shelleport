@@ -1503,7 +1503,6 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const systemPromptDraft = isEditingSystemPrompt ? systemPromptEdit.systemPrompt : "";
 	const editingQueuedInputId = queuedInputEdit?.id ?? null;
 	const queuedInputDraft = queuedInputEdit?.prompt ?? "";
-	const canUseVoiceInput = typeof window !== "undefined" && window.isSecureContext;
 	const isVoiceBusy = voiceState.status === "loading-model" || voiceState.status === "transcribing";
 	const activeVoiceSession = voiceState.status === "recording" ? voiceSessionRef.current : null;
 	const isVoiceRecording = activeVoiceSession !== null;
@@ -3108,9 +3107,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 																		<Loader2 className="size-3.5 animate-spin" />
 																	</button>
 																</>
-															) : prompt.trim().length > 0 ||
-															  draftAttachments.length > 0 ||
-															  !canUseVoiceInput ? (
+															) : prompt.trim().length > 0 || draftAttachments.length > 0 ? (
 																<button
 																	type="button"
 																	onClick={() => void handleSend()}
