@@ -22,6 +22,10 @@ import {
 import { createProject, fetchDirectory } from "~/client/api";
 import { useToast } from "~/client/components/toast";
 import {
+	readLastSessionPreferences,
+	writeLastSessionPreferences,
+} from "~/client/session-preferences";
+import {
 	getDefaultPermissionMode,
 	getSupportedEffortLevels,
 	normalizeEffortLevel,
@@ -452,8 +456,9 @@ export function SessionLauncher({
 	const columnRefs = useRef<Record<string, HTMLElement | null>>({});
 	const [focusPath, setFocusPath] = useState<string | null>(null);
 	const defaultModel = models.find((m) => m.id === "sonnet")?.id ?? models[0]?.id ?? null;
-	const [selectedModel, setSelectedModel] = useState<string | null>(defaultModel);
-	const [selectedEffort, setSelectedEffort] = useState<EffortLevel>("medium");
+	const [initialPreferences] = useState(() => readLastSessionPreferences(models, defaultModel));
+	const [selectedModel, setSelectedModel] = useState<string | null>(initialPreferences.model);
+	const [selectedEffort, setSelectedEffort] = useState<EffortLevel>(initialPreferences.effort);
 	const [permissionMode, setPermissionMode] = useState<PermissionMode>(
 		createProviderId ? getDefaultPermissionMode(createProviderId) : "default",
 	);
@@ -466,6 +471,10 @@ export function SessionLauncher({
 	const [saveAsProject, setSaveAsProject] = useState(false);
 	const [saveAsProjectName, setSaveAsProjectName] = useState("");
 	const effortLevels = getEffortLevels(selectedModel);
+
+	useEffect(() => {
+		writeLastSessionPreferences(selectedModel, selectedEffort);
+	}, [selectedEffort, selectedModel]);
 
 	useEffect(() => {
 		const mql = window.matchMedia("(max-width: 767px)");

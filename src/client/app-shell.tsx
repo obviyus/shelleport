@@ -44,6 +44,7 @@ import type { AppBootData } from "~/client/boot";
 import { useNow } from "~/client/use-now";
 import { SessionLauncher } from "~/client/components/session-launcher";
 import { SessionTranscript } from "~/client/components/session-transcript";
+import { writeLastSessionPreferences } from "~/client/session-preferences";
 import { useToast } from "~/client/components/toast";
 import { Sheet, SheetContent, SheetTitle } from "~/client/components/ui/sheet";
 import { matchAppRoute } from "~/client/routes";
@@ -2067,6 +2068,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 					session.id,
 					effort === session.effort ? { model } : { model, effort },
 				);
+				writeLastSessionPreferences(model, effort);
 			} catch {
 				showToast("error", "Failed to update model");
 			}
@@ -2075,9 +2077,10 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	);
 
 	const handleChangeEffort = useCallback(
-		async (sessionId: string, effort: EffortLevel | null) => {
+		async (session: HostSession, effort: EffortLevel | null) => {
 			try {
-				await applySessionMetaUpdate(sessionId, { effort });
+				await applySessionMetaUpdate(session.id, { effort });
+				writeLastSessionPreferences(session.model, effort);
 			} catch {
 				showToast("error", "Failed to update effort");
 			}
@@ -2854,7 +2857,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 																<InputEffortPicker
 																	session={sessionView}
 																	onChangeEffort={(effort) =>
-																		void handleChangeEffort(sessionView.id, effort)
+																		void handleChangeEffort(sessionView, effort)
 																	}
 																/>
 															)}
@@ -2919,7 +2922,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 																<InputEffortPicker
 																	session={sessionView}
 																	onChangeEffort={(effort) =>
-																		void handleChangeEffort(sessionView.id, effort)
+																		void handleChangeEffort(sessionView, effort)
 																	}
 																/>
 															)}
