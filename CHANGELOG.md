@@ -7,6 +7,7 @@ All notable changes to shelleport are documented here.
 ### Added
 
 - Claude sessions can now choose an explicit effort level at launch and from the session composer, with support for the new `sonnet[1m]` and `opus[1m]` model aliases plus per-session effort badges in the header (#72) (thanks @kesava500)
+- New sessions now remember the last selected Claude model and effort across launcher opens, and session toolbar changes keep that browser-local preference in sync (#74) (thanks @kesava500)
 
 ### Fixed
 
