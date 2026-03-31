@@ -157,6 +157,8 @@ const readline = require("node:readline");
 const rl = readline.createInterface({ input: process.stdin });
 let pendingRequest = null;
 let persistentSession = false;
+let interruptibleSession = false;
+let interruptTimer = null;
 
 function getPrompt(message) {
   const content = message?.message?.content;
@@ -200,8 +202,35 @@ rl.on("close", () => {
 rl.on("line", (line) => {
   const message = JSON.parse(line);
 
-  if (pendingRequest) {
-    if (message.type === "control_request" && message.request?.subtype === "interrupt") {
+  if (message.type === "control_request" && message.request?.subtype === "interrupt") {
+    if (interruptTimer) {
+      clearTimeout(interruptTimer);
+      interruptTimer = null;
+    }
+
+    if (interruptibleSession) {
+      emit({
+        type: "result",
+        subtype: "error_during_execution",
+        is_error: true,
+        result: null,
+        stop_reason: null,
+        session_id: sessionId,
+        total_cost_usd: 0,
+        usage: {
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_read_input_tokens: 0,
+          cache_creation_input_tokens: 0,
+        },
+        modelUsage: {},
+        permission_denials: [],
+        errors: ["interrupted"],
+      });
+      return;
+    }
+
+    if (pendingRequest) {
       emit({
         type: "result",
         subtype: "success",
@@ -213,7 +242,9 @@ rl.on("line", (line) => {
       });
       process.exit(0);
     }
+  }
 
+  if (pendingRequest) {
     if (message.type !== "control_response") {
       return;
     }
@@ -372,8 +403,35 @@ rl.on("line", (line) => {
     return;
   }
 
+  if (prompt.includes("interrupt me")) {
+    interruptibleSession = true;
+    emit({
+      type: "stream_event",
+      event: {
+        type: "content_block_delta",
+        index: 0,
+        delta: {
+          type: "text_delta",
+          text: "Working...",
+        },
+      },
+      session_id: sessionId,
+    });
+    interruptTimer = setTimeout(() => {
+      interruptTimer = null;
+      emitSimpleResult("Too late.");
+    }, 1_000);
+    return;
+  }
+
   if (persistentSession) {
     emitSimpleResult(\`Echo: \${prompt}\`);
+    process.exit(0);
+    return;
+  }
+
+  if (interruptibleSession) {
+    emitSimpleResult(\`After interrupt: \${prompt}\`);
     process.exit(0);
     return;
   }
@@ -1661,6 +1719,142 @@ describe("handleApiRequest", () => {
 		expect(detail.protocolFrames.filter((frame) => frame.frame.type === "system")).toHaveLength(1);
 
 		await reader.cancel();
+	});
+
+	test("interrupts a persistent Claude run without failing the session", async () => {
+		const createResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "claude",
+					cwd: testRoot,
+					prompt: "interrupt me",
+				}),
+			}),
+		);
+		expect(createResponse.status).toBe(201);
+		const createJson = await readJson<{ session: { id: string } }>(createResponse);
+		const sessionId = createJson.session.id;
+
+		const interruptResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}/control`, {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({ action: "interrupt" }),
+			}),
+		);
+		expect(interruptResponse.status).toBe(200);
+
+		let interruptedDetail: {
+			session: { providerSessionRef: string | null; status: string };
+			events: Array<{ kind: string }>;
+		} | null = null;
+
+		for (let attempt = 0; attempt < 20; attempt += 1) {
+			const detailResponse = await handleApiRequest(
+				new Request(`http://localhost/api/sessions/${sessionId}`, {
+					headers: authHeader,
+				}),
+			);
+			expect(detailResponse.status).toBe(200);
+			const detail = await readJson<{
+				session: { providerSessionRef: string | null; status: string };
+				events: Array<{ kind: string }>;
+			}>(detailResponse);
+
+			if (detail.session.status === "interrupted") {
+				interruptedDetail = detail;
+				break;
+			}
+
+			await Bun.sleep(50);
+		}
+
+		if (!interruptedDetail) {
+			throw new Error("Session did not interrupt");
+		}
+
+		const providerSessionRef = interruptedDetail.session.providerSessionRef;
+		expect(interruptedDetail.session.status).toBe("interrupted");
+		expect(providerSessionRef).not.toBeNull();
+		expect(interruptedDetail.events.some((event) => event.kind === "error")).toBe(false);
+
+		const formData = new FormData();
+		formData.set("prompt", "after interrupt");
+		const inputResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}/input`, {
+				method: "POST",
+				headers: authHeader,
+				body: formData,
+			}),
+		);
+		expect(inputResponse.status).toBe(202);
+
+		let resumedDetail: {
+			session: { providerSessionRef: string | null; status: string };
+			protocolFrames: Array<{ direction: string; frame: Record<string, unknown> }>;
+			events: Array<{ kind: string; data: Record<string, unknown> }>;
+		} | null = null;
+
+		for (let attempt = 0; attempt < 40; attempt += 1) {
+			const resumedDetailResponse = await handleApiRequest(
+				new Request(`http://localhost/api/sessions/${sessionId}`, {
+					headers: authHeader,
+				}),
+			);
+			expect(resumedDetailResponse.status).toBe(200);
+			const detail = await readJson<{
+				session: { providerSessionRef: string | null; status: string };
+				protocolFrames: Array<{ direction: string; frame: Record<string, unknown> }>;
+				events: Array<{ kind: string; data: Record<string, unknown> }>;
+			}>(resumedDetailResponse);
+
+			if (
+				detail.session.status === "idle" &&
+				detail.events.some(
+					(event) =>
+						event.kind === "state" &&
+						event.data.result === "After interrupt: after interrupt",
+				)
+			) {
+				resumedDetail = detail;
+				break;
+			}
+
+			await Bun.sleep(50);
+		}
+
+		if (!resumedDetail) {
+			throw new Error("Session did not resume after interrupt");
+		}
+
+		expect(resumedDetail.session.status).toBe("idle");
+		expect(resumedDetail.session.providerSessionRef).toBe(providerSessionRef);
+		expect(
+			resumedDetail.protocolFrames.some(
+				(frame) => {
+					const request =
+						frame.frame.request && typeof frame.frame.request === "object"
+							? frame.frame.request
+							: null;
+
+					return (
+						frame.direction === "out" &&
+						frame.frame.type === "control_request" &&
+						request !== null &&
+						"subtype" in request &&
+						request.subtype === "interrupt"
+					);
+				},
+			),
+		).toBe(true);
 	});
 
 	test("maps generic Claude control requests into pending questions", async () => {

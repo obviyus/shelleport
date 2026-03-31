@@ -291,6 +291,19 @@ async function consumeProviderRun(
 
 			if (event.type === "session-status") {
 				session = updateSessionStatus(sessionId, event.status, event.detail) ?? session;
+
+				if (
+					event.status !== "running" &&
+					event.status !== "retrying" &&
+					event.status !== "waiting"
+				) {
+					nextStatus = event.status;
+					nextStatusDetail = {
+						...emptyStatusDetail(),
+						...event.detail,
+					};
+				}
+
 				continue;
 			}
 

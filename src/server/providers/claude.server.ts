@@ -70,6 +70,7 @@ type ClaudeLiveSession = {
 	pendingRequests: Map<string, ClaudeBridgePendingRequest>;
 	idleTimer: ReturnType<typeof setTimeout> | null;
 	stopping: boolean;
+	interruptRequested: boolean;
 	terminateRequested: boolean;
 	write(message: Record<string, unknown>): void;
 	close(reason?: "idle" | "terminate" | "delete" | "restart"): void;
@@ -303,6 +304,18 @@ function createClaudeTurnStream(): ClaudeTurnStream {
 			}
 		},
 	};
+}
+
+function isClaudeInterruptedResult(
+	liveSession: ClaudeLiveSession,
+	rawEvent: Record<string, unknown>,
+) {
+	return (
+		liveSession.interruptRequested &&
+		rawEvent.type === "result" &&
+		rawEvent.is_error === true &&
+		rawEvent.subtype === "error_during_execution"
+	);
 }
 
 function getMessageContent(rawEvent: Record<string, unknown>) {
@@ -1131,6 +1144,7 @@ function createClaudeLiveSession(
 		pendingRequests: new Map(),
 		idleTimer: null,
 		stopping: false,
+		interruptRequested: false,
 		terminateRequested: false,
 		write(message) {
 			writeClaudeBridgeMessage(session.id, subprocess, message);
@@ -1264,6 +1278,24 @@ async function runClaudeLiveSession(liveSession: ClaudeLiveSession) {
 			return;
 		}
 
+		if (isClaudeInterruptedResult(liveSession, rawEvent)) {
+			liveSession.interruptRequested = false;
+			pushClaudeTurnEvent(liveSession, {
+				type: "host-event",
+				kind: "system",
+				summary: "Session interrupted",
+				data: {},
+				rawProviderEvent: rawEvent,
+			});
+			pushClaudeTurnEvent(liveSession, {
+				type: "session-status",
+				status: "interrupted",
+				detail: {},
+			});
+			finishClaudeTurn(liveSession);
+			return;
+		}
+
 		if (rawEvent.type === "stream_event") {
 			const partialEvents = normalizeClaudeStreamEvent(
 				rawEvent,
@@ -1290,6 +1322,7 @@ async function runClaudeLiveSession(liveSession: ClaudeLiveSession) {
 		}
 
 		if (rawEvent.type === "result") {
+			liveSession.interruptRequested = false;
 			finishClaudeTurn(liveSession);
 		}
 	}
@@ -1544,6 +1577,7 @@ export class ClaudeProviderAdapter implements ProviderAdapter {
 			return;
 		}
 
+		handle.interruptRequested = true;
 		handle.write({
 			type: "control_request",
 			request_id: Bun.randomUUIDv7(),
