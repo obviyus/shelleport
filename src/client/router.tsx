@@ -23,14 +23,15 @@ export function BrowserRouterProvider({
 	children: React.ReactNode;
 	initialRoute: AppRoute;
 }) {
-	const [route, setRoute] = useState(initialRoute);
+	const [route, setRoute] = useState(() =>
+		initialRoute.pathname === window.location.pathname ? initialRoute : createBrowserRoute(),
+	);
 
 	useEffect(() => {
 		function syncRoute() {
 			setRoute(createBrowserRoute());
 		}
 
-		syncRoute();
 		window.addEventListener("popstate", syncRoute);
 
 		return () => window.removeEventListener("popstate", syncRoute);

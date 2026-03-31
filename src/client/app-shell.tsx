@@ -33,7 +33,6 @@ import {
 	useCallback,
 	useDeferredValue,
 	useEffect,
-	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
@@ -1283,7 +1282,9 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const [providerLimits, setProviderLimits] = useState<ProviderLimitState>(boot.providerLimits);
 	const [projects, setProjects] = useState<Project[]>(boot.projects);
 	const [sessions, setSessions] = useState<HostSession[]>(boot.sessions);
-	const [session, setSession] = useState<HostSession | null>(initialDetail?.session ?? null);
+	const [detailSessionId, setDetailSessionId] = useState<string | null>(
+		initialDetail?.session.id ?? null,
+	);
 	const [stream, setStream] = useState<HostEvent[]>(initialDetail?.events ?? []);
 	const [totalEvents, setTotalEvents] = useState<number>(initialDetail?.totalEvents ?? 0);
 	const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>(
@@ -1325,14 +1326,19 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		() => (selectedId ? (sessions.find((candidate) => candidate.id === selectedId) ?? null) : null),
 		[selectedId, sessions],
 	);
-	const sessionView = session?.id === selectedId ? session : selectedSession;
+	const sessionView = selectedSession;
 	const hideThinking = !selectedId || hiddenThinkingSessionIds.includes(selectedId);
 	const [voiceState, setVoiceState] = useState<VoiceInputState>({ status: "idle" });
 	const voiceSetupRef = useRef<ReturnType<typeof createVoiceSession> | null>(null);
 	const voiceSessionRef =
 		useRef<Awaited<ReturnType<ReturnType<typeof createVoiceSession>["start"]>>>(null);
 	const voiceStateUpdatesEnabledRef = useRef(true);
-	const isSessionPending = isSessionRoute && (sessionView === null || session?.id !== selectedId);
+	const hasSelectedSessionDetail = selectedId !== null && detailSessionId === selectedId;
+	const isSessionPending = isSessionRoute && (sessionView === null || !hasSelectedSessionDetail);
+	const sessionStream = hasSelectedSessionDetail ? stream : [];
+	const sessionTotalEvents = hasSelectedSessionDetail ? totalEvents : 0;
+	const sessionPendingRequests = hasSelectedSessionDetail ? pendingRequests : [];
+	const sessionQueuedInputs = hasSelectedSessionDetail ? queuedInputs : [];
 	const { activeSessions, archivedSessions, projectGroups } = useMemo(() => {
 		const active: HostSession[] = [];
 		const archived: HostSession[] = [];
@@ -1394,10 +1400,10 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			projectGroups: groups,
 		};
 	}, [sessions, projects]);
-	const fileDiffs = useMemo(() => getStreamEditDiffs(stream), [stream]);
+	const fileDiffs = useMemo(() => getStreamEditDiffs(sessionStream), [sessionStream]);
 
 	const grouped = useMemo(() => {
-		const groups = groupStream(stream);
+		const groups = groupStream(sessionStream);
 		if (!hideThinking) return groups;
 		return groups.filter(
 			(group) =>
@@ -1407,7 +1413,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 					group.entry.data.role === "thinking"
 				),
 		);
-	}, [stream, hideThinking]);
+	}, [sessionStream, hideThinking]);
 	const sessionHeaderBadges = useMemo(() => getSessionHeaderBadges(sessionView), [sessionView]);
 	const claudeLimits = useMemo(
 		() => orderSessionLimits(providerLimits.claude),
@@ -1568,31 +1574,13 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		return () => clearInterval(interval);
 	}, [hasRunningSession, deferredSessionQuery, refreshSessions]);
 
-	useLayoutEffect(() => {
-		if (selectedId === null) {
-			if (session === null) {
-				return;
-			}
-
-			setSession(null);
-			resetSessionViewState();
-			return;
-		}
-
-		if (session?.id === selectedId) {
-			return;
-		}
-
-		setSession(selectedSession);
-		resetSessionViewState();
-	}, [selectedId, selectedSession, session, session?.id]);
-
 	useEffect(() => {
-		if (!selectedId) {
-			return;
+		resetSessionViewState();
+
+		if (selectedId) {
+			requestNotificationPermission();
 		}
 
-		requestNotificationPermission();
 		setFileBrowserOpen(false);
 	}, [selectedId]);
 
@@ -1614,7 +1602,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 				startTransition(() => {
 					if (message.type === "snapshot") {
 						previousSessionStatus.current = message.payload.session.status;
-						setSession(message.payload.session);
+						setDetailSessionId(message.payload.session.id);
 						setStream(message.payload.events);
 						setTotalEvents(message.payload.totalEvents ?? message.payload.events.length);
 						setPendingRequests(
@@ -1633,7 +1621,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 							notifySessionComplete(message.payload);
 						}
 
-						setSession(message.payload);
+						setDetailSessionId(message.payload.id);
 						if (message.payload.status !== "waiting") {
 							setPendingRequests([]);
 						}
@@ -1865,7 +1853,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			try {
 				const result = await setSessionArchived(sessionId, archived);
 				await refreshSessions(sessionQuery);
-				setSession((previous) => (previous?.id === result.session.id ? result.session : previous));
+				replaceSession(result.session);
 
 				if (archived) {
 					if (selectedId === sessionId) {
@@ -1881,7 +1869,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 				showToast("error", "Failed to update archive state");
 			}
 		},
-		[isArchivedView, navigate, refreshSessions, selectedId, sessionQuery, showToast],
+		[isArchivedView, navigate, refreshSessions, replaceSession, selectedId, sessionQuery, showToast],
 	);
 
 	const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -1922,11 +1910,11 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	);
 
 	const handleCopyConversation = useCallback(() => {
-		void copyToClipboard(streamToMarkdown(stream)).then(() => {
+		void copyToClipboard(streamToMarkdown(sessionStream)).then(() => {
 			setCopiedConversation(true);
 			setTimeout(() => setCopiedConversation(false), 2000);
 		});
-	}, [stream]);
+	}, [sessionStream]);
 
 	const loadEarlierEvents = useCallback(
 		async (before: number) => {
@@ -1950,7 +1938,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 
 	const handleRespond = useCallback(
 		async (requestId: string, payload: RequestResponsePayload) => {
-			const previousPendingRequests = pendingRequests;
+			const previousPendingRequests = sessionPendingRequests;
 			setPendingRequests((previous) => previous.filter((request) => request.id !== requestId));
 			try {
 				await respondToRequest(requestId, payload);
@@ -1959,7 +1947,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 				showToast("error", "Failed to respond to request");
 			}
 		},
-		[pendingRequests, showToast],
+		[sessionPendingRequests, showToast],
 	);
 
 	const handleStartQueuedInputEdit = useCallback((queuedInput: QueuedSessionInput) => {
@@ -2028,10 +2016,10 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		async (sessionId: string, payload: SessionMetaPayload) => {
 			const result = await updateSessionMeta(sessionId, payload);
 			await refreshSessions(sessionQuery);
-			setSession((previous) => (previous?.id === result.session.id ? result.session : previous));
+			replaceSession(result.session);
 			return result.session;
 		},
-		[refreshSessions, sessionQuery],
+		[refreshSessions, replaceSession, sessionQuery],
 	);
 
 	const handlePinned = useCallback(
@@ -2050,13 +2038,13 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			if (!selectedId) return;
 			try {
 				const result = await updateSessionMeta(selectedId, { projectId });
-				setSession((previous) => (previous?.id === result.session.id ? result.session : previous));
+				replaceSession(result.session);
 				await refreshSessions(sessionQuery);
 			} catch {
 				showToast("error", "Failed to move session to project");
 			}
 		},
-		[selectedId, refreshSessions, sessionQuery, showToast],
+		[selectedId, refreshSessions, replaceSession, sessionQuery, showToast],
 	);
 
 	const handleChangeModel = useCallback(
@@ -2089,24 +2077,24 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	);
 
 	const handleRename = useCallback(async () => {
-		if (!session || !isRenaming) {
+		if (!sessionView || !isRenaming) {
 			return;
 		}
 
 		const title = renameDraft.trim();
 
-		if (title.length === 0 || title === session.title) {
+		if (title.length === 0 || title === sessionView.title) {
 			setRenameState(null);
 			return;
 		}
 
 		try {
-			await applySessionMetaUpdate(session.id, { title });
+			await applySessionMetaUpdate(sessionView.id, { title });
 			setRenameState(null);
 		} catch {
 			showToast("error", "Failed to rename session");
 		}
-	}, [applySessionMetaUpdate, isRenaming, renameDraft, session, showToast]);
+	}, [applySessionMetaUpdate, isRenaming, renameDraft, sessionView, showToast]);
 
 	const addDraftAttachments = useCallback(async (files: File[]) => {
 		const normalized = await Promise.all(files.map(normalizeDraftAttachment));
@@ -2149,10 +2137,10 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		sessionView?.status === "running" ||
 		sessionView?.status === "retrying" ||
 		sessionView?.status === "waiting";
-	const queuedInputCount = queuedInputs.length;
+	const queuedInputCount = sessionQueuedInputs.length;
 	const canSend = !!selectedId && (prompt.trim().length > 0 || draftAttachments.length > 0);
 	const permissionModeLabel = sessionView ? formatPermissionModeLabel(sessionView) : null;
-	const pendingRequest = pendingRequests[0] ?? null;
+	const pendingRequest = sessionPendingRequests[0] ?? null;
 	const showReconnectIndicator = shouldShowReconnectIndicator(isSessionPending, streamState);
 	const statusMessage = sessionView ? getStatusMessage(sessionView) : null;
 	const firstRunReadiness = getFirstRunReadiness(providers);
@@ -2616,7 +2604,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 										<SessionActionsPopover
 											session={sessionView}
 											projects={projects}
-											stream={stream}
+											stream={sessionStream}
 											copiedConversation={copiedConversation}
 											hideThinking={hideThinking}
 											fileBrowserOpen={fileBrowserOpen}
@@ -2642,7 +2630,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 												})
 											}
 											onExportMarkdown={() => {
-												const markdown = `# ${sessionView.title}\n\n${streamToMarkdown(stream)}`;
+												const markdown = `# ${sessionView.title}\n\n${streamToMarkdown(sessionStream)}`;
 												downloadFile(
 													markdown,
 													`${sanitizeFilename(sessionView.title)}.md`,
@@ -2658,7 +2646,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 													model: sessionView.model,
 													createdAt: sessionView.createTime,
 													usage: sessionView.usage,
-													events: stream.map((event) => ({
+													events: sessionStream.map((event) => ({
 														id: event.id,
 														kind: event.kind,
 														sequence: event.sequence,
@@ -2690,9 +2678,9 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 						</header>
 
 						<SessionTranscript
-							firstSequence={stream[0]?.sequence ?? null}
+							firstSequence={sessionStream[0]?.sequence ?? null}
 							grouped={grouped}
-							hasEarlier={totalEvents > stream.length}
+							hasEarlier={sessionTotalEvents > sessionStream.length}
 							isRunning={sessionView?.status === "running" || sessionView?.status === "retrying"}
 							isSessionPending={isSessionPending}
 							loadEarlier={selectedId ? loadEarlierEvents : null}
@@ -2737,13 +2725,13 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 													))}
 												</div>
 											)}
-											{queuedInputs.length > 0 && (
+											{sessionQueuedInputs.length > 0 && (
 												<div className="border-b border-border px-4 py-3">
 													<div className="mb-2 text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
 														Queued
 													</div>
 													<div className="space-y-2">
-														{queuedInputs.map((queuedInput, index) => {
+														{sessionQueuedInputs.map((queuedInput, index) => {
 															const attachmentLabel = formatQueuedAttachmentLabel(queuedInput);
 															const isEditing = editingQueuedInputId === queuedInput.id;
 															const isBusy = busyQueuedInputId === queuedInput.id;
