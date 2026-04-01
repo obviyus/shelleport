@@ -53,7 +53,7 @@ export async function buildAppBootData(
 		? ({
 				authenticated: true,
 				defaultCwd: options.defaultCwd,
-				providers: listProviders(),
+				providers: await listProviders(),
 				providerLimits: sessionStore.getProviderLimits(),
 				projects: sessionStore.listProjects(),
 				route,

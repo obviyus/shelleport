@@ -1481,7 +1481,7 @@ export class ClaudeProviderAdapter implements ProviderAdapter {
 		return claudeCapabilities;
 	}
 
-	summary(): ProviderSummary {
+	async summary(): Promise<ProviderSummary> {
 		const isAvailable = Bun.which(getClaudeBin()) !== null;
 
 		return {

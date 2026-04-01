@@ -74,6 +74,7 @@ import {
 	updateSessionMeta,
 } from "~/client/api";
 import {
+	getDefaultEffortLevel,
 	getSupportedEffortLevels,
 	normalizeEffortLevel,
 	type DirectoryListing,
@@ -364,15 +365,20 @@ const EFFORT_LEVELS: { id: EffortLevel; label: string }[] = [
 	{ id: "max", label: "Max" },
 ];
 
-function getEffortLevels(modelId: string | null): { id: EffortLevel; label: string }[] {
-	const supportedLevels = getSupportedEffortLevels(modelId);
+function getEffortLevels(
+	modelId: string | null,
+	models: ProviderModel[],
+): { id: EffortLevel; label: string }[] {
+	const supportedLevels = getSupportedEffortLevels(modelId, models);
 	return EFFORT_LEVELS.filter((level) => supportedLevels.includes(level.id));
 }
 
 function InputEffortPicker({
+	models,
 	session,
 	onChangeEffort,
 }: {
+	models: ProviderModel[];
 	session: HostSession;
 	onChangeEffort: (effort: EffortLevel | null) => void;
 }) {
@@ -382,7 +388,7 @@ function InputEffortPicker({
 	const [pos, setPos] = useState({ bottom: 0, left: 0 });
 	usePopoverDismiss(open, setOpen, buttonRef, dropdownRef);
 
-	const levels = getEffortLevels(session.model);
+	const levels = getEffortLevels(session.model, models);
 	if (levels.length === 0) return null;
 
 	const effectiveEffort = session.effort ?? "medium";
@@ -2097,15 +2103,17 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	);
 
 	const handleChangeModel = useCallback(
-		async (session: HostSession, model: string) => {
-			const effort = normalizeEffortLevel(model, session.effort);
+		async (session: HostSession, model: string, models: ProviderModel[]) => {
+			const effort =
+				normalizeEffortLevel(model, session.effort, models) ??
+				getDefaultEffortLevel(model, models);
 
 			try {
 				await applySessionMetaUpdate(
 					session.id,
 					effort === session.effort ? { model } : { model, effort },
 				);
-				writeLastSessionPreferences(model, effort);
+				writeLastSessionPreferences(model, effort, models);
 			} catch {
 				showToast("error", "Failed to update model");
 			}
@@ -2114,10 +2122,10 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	);
 
 	const handleChangeEffort = useCallback(
-		async (session: HostSession, effort: EffortLevel | null) => {
+		async (session: HostSession, effort: EffortLevel | null, models: ProviderModel[]) => {
 			try {
 				await applySessionMetaUpdate(session.id, { effort });
-				writeLastSessionPreferences(session.model, effort);
+				writeLastSessionPreferences(session.model, effort, models);
 			} catch {
 				showToast("error", "Failed to update effort");
 			}
@@ -2961,15 +2969,24 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 																	session={sessionView}
 																	models={sessionProvider?.models ?? []}
 																	onChangeModel={(model) =>
-																		void handleChangeModel(sessionView, model)
+																		void handleChangeModel(
+																			sessionView,
+																			model,
+																			sessionProvider?.models ?? [],
+																		)
 																	}
 																/>
 															)}
 															{sessionView && (
 																<InputEffortPicker
+																	models={sessionProvider?.models ?? []}
 																	session={sessionView}
 																	onChangeEffort={(effort) =>
-																		void handleChangeEffort(sessionView, effort)
+																		void handleChangeEffort(
+																			sessionView,
+																			effort,
+																			sessionProvider?.models ?? [],
+																		)
 																	}
 																/>
 															)}
@@ -3026,15 +3043,24 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 																	session={sessionView}
 																	models={sessionProvider?.models ?? []}
 																	onChangeModel={(model) =>
-																		void handleChangeModel(sessionView, model)
+																		void handleChangeModel(
+																			sessionView,
+																			model,
+																			sessionProvider?.models ?? [],
+																		)
 																	}
 																/>
 															)}
 															{sessionView && (
 																<InputEffortPicker
+																	models={sessionProvider?.models ?? []}
 																	session={sessionView}
 																	onChangeEffort={(effort) =>
-																		void handleChangeEffort(sessionView, effort)
+																		void handleChangeEffort(
+																			sessionView,
+																			effort,
+																			sessionProvider?.models ?? [],
+																		)
 																	}
 																/>
 															)}

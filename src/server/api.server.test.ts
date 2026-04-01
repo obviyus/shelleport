@@ -704,6 +704,39 @@ rl.on("line", (line) => {
     return;
   }
 
+  if (message.method === "model/list") {
+    respond(message.id, {
+      data: [
+        {
+          id: "gpt-5.4",
+          model: "gpt-5.4",
+          displayName: "gpt-5.4",
+          hidden: false,
+          supportedReasoningEfforts: [
+            { reasoningEffort: "low", description: "" },
+            { reasoningEffort: "medium", description: "" },
+            { reasoningEffort: "high", description: "" },
+            { reasoningEffort: "xhigh", description: "" },
+          ],
+          defaultReasoningEffort: "medium",
+        },
+        {
+          id: "gpt-5.1-codex-mini",
+          model: "gpt-5.1-codex-mini",
+          displayName: "gpt-5.1-codex-mini",
+          hidden: false,
+          supportedReasoningEfforts: [
+            { reasoningEffort: "medium", description: "" },
+            { reasoningEffort: "high", description: "" },
+          ],
+          defaultReasoningEffort: "medium",
+        },
+      ],
+      nextCursor: null,
+    });
+    return;
+  }
+
   if (message.method === "thread/resume") {
     threadId = message.params?.threadId ?? threadId;
     respond(message.id, {
@@ -932,6 +965,11 @@ describe("handleApiRequest", () => {
 					supportsApprovals: boolean;
 				};
 				id: string;
+				models: Array<{
+					id: string;
+					label: string;
+					supportedEfforts?: string[];
+				}>;
 				status: string;
 			}>;
 		}>(response);
@@ -942,6 +980,18 @@ describe("handleApiRequest", () => {
 				canCreate: true,
 				supportsApprovals: true,
 			},
+			models: [
+				{
+					id: "gpt-5.4",
+					label: "gpt-5.4",
+					supportedEfforts: ["low", "medium", "high", "max"],
+				},
+				{
+					id: "gpt-5.1-codex-mini",
+					label: "gpt-5.1-codex-mini",
+					supportedEfforts: ["medium", "high"],
+				},
+			],
 		});
 	});
 
@@ -1620,7 +1670,7 @@ describe("handleApiRequest", () => {
 	});
 
 	test("paginates session events from newest to oldest", async () => {
-		const session = sessionBroker.createSession({
+		const session = await sessionBroker.createSession({
 			provider: "claude",
 			cwd: testRoot,
 			permissionMode: "default",
@@ -1672,7 +1722,7 @@ describe("handleApiRequest", () => {
 	});
 
 	test("rejects invalid event pagination parameters", async () => {
-		const session = sessionBroker.createSession({
+		const session = await sessionBroker.createSession({
 			provider: "claude",
 			cwd: testRoot,
 			permissionMode: "default",

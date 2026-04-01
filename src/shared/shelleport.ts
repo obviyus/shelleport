@@ -36,6 +36,8 @@ export type ProviderCapabilities = {
 export type ProviderModel = {
 	id: string;
 	label: string;
+	defaultEffort?: EffortLevel | null;
+	supportedEfforts?: EffortLevel[];
 };
 
 export type ProviderSummary = {
@@ -52,7 +54,20 @@ export type EffortLevel = "low" | "medium" | "high" | "max";
 const BASIC_EFFORT_LEVELS: EffortLevel[] = ["low", "medium", "high"];
 const OPUS_EFFORT_LEVELS: EffortLevel[] = [...BASIC_EFFORT_LEVELS, "max"];
 
-export function getSupportedEffortLevels(modelId: string | null): EffortLevel[] {
+function getProviderModel(models: ProviderModel[] | undefined, modelId: string | null) {
+	return modelId ? models?.find((model) => model.id === modelId) ?? null : null;
+}
+
+export function getSupportedEffortLevels(
+	modelId: string | null,
+	models?: ProviderModel[],
+): EffortLevel[] {
+	const providerModel = getProviderModel(models, modelId);
+
+	if (providerModel?.supportedEfforts) {
+		return providerModel.supportedEfforts;
+	}
+
 	if (modelId?.includes("haiku")) {
 		return [];
 	}
@@ -64,23 +79,41 @@ export function getSupportedEffortLevels(modelId: string | null): EffortLevel[] 
 	return BASIC_EFFORT_LEVELS;
 }
 
-export function supportsEffortLevel(modelId: string | null, effort: EffortLevel | null): boolean {
-	return effort === null || getSupportedEffortLevels(modelId).includes(effort);
+export function getDefaultEffortLevel(
+	modelId: string | null,
+	models?: ProviderModel[],
+): EffortLevel | null {
+	const providerModel = getProviderModel(models, modelId);
+
+	if (providerModel?.defaultEffort !== undefined) {
+		return providerModel.defaultEffort;
+	}
+
+	return getSupportedEffortLevels(modelId, models).at(-1) ?? null;
+}
+
+export function supportsEffortLevel(
+	modelId: string | null,
+	effort: EffortLevel | null,
+	models?: ProviderModel[],
+): boolean {
+	return effort === null || getSupportedEffortLevels(modelId, models).includes(effort);
 }
 
 export function normalizeEffortLevel(
 	modelId: string | null,
 	effort: EffortLevel | null,
+	models?: ProviderModel[],
 ): EffortLevel | null {
 	if (effort === null) {
 		return null;
 	}
 
-	if (supportsEffortLevel(modelId, effort)) {
+	if (supportsEffortLevel(modelId, effort, models)) {
 		return effort;
 	}
 
-	return getSupportedEffortLevels(modelId).at(-1) ?? null;
+	return getSupportedEffortLevels(modelId, models).at(-1) ?? null;
 }
 
 export type HostSession = {

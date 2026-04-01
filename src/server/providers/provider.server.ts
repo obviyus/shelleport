@@ -53,7 +53,7 @@ export interface ProviderAdapter {
 	readonly id: ProviderId;
 	readonly label: string;
 	capabilities(): ProviderCapabilities;
-	summary(): ProviderSummary;
+	summary(): Promise<ProviderSummary>;
 	sendInput(input: ProviderAdapterRunInput): AsyncGenerator<ProviderAdapterEvent>;
 	resumeSession(
 		session: HostSession,

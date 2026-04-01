@@ -499,9 +499,9 @@ export const sessionBroker = {
 			}
 		};
 	},
-	createSession(input: CreateSessionInput) {
+	async createSession(input: CreateSessionInput) {
 		const provider = getProvider(input.provider);
-		const providerSummary = provider.summary();
+		const providerSummary = await provider.summary();
 
 		if (!provider.capabilities().canCreate) {
 			throw new ApiError(

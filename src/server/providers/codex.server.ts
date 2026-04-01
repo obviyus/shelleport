@@ -1,9 +1,11 @@
 import { basename } from "node:path";
 import type {
+	EffortLevel,
 	HistoricalSession,
 	HostSession,
 	PendingRequest,
 	ProviderCapabilities,
+	ProviderModel,
 	ProviderSummary,
 	RequestResponsePayload,
 	SessionAttachment,
@@ -20,6 +22,7 @@ import { sessionStore } from "~/server/store.server";
 
 const decoder = new TextDecoder();
 const CODEX_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+const CODEX_MODEL_CACHE_TTL_MS = 5 * 60 * 1000;
 
 type CodexJsonObject = { [key: string]: unknown };
 type CodexRpcId = number | string;
@@ -68,6 +71,13 @@ type CodexLiveSession = {
 };
 
 const activeCodexSessions = new Map<string, CodexLiveSession>();
+let codexModelCache:
+	| {
+			expiresAt: number;
+			models: ProviderModel[];
+	  }
+	| null = null;
+let codexModelRequest: Promise<ProviderModel[]> | null = null;
 
 const codexCapabilities: ProviderCapabilities = {
 	canCreate: true,
@@ -117,6 +127,38 @@ function getCodexEffort(effort: HostSession["effort"]) {
 	}
 
 	return effort === "max" ? "xhigh" : effort;
+}
+
+function readCodexProviderEffort(value: unknown): EffortLevel | null {
+	if (value === "low" || value === "medium" || value === "high") {
+		return value;
+	}
+
+	if (value === "xhigh") {
+		return "max";
+	}
+
+	return null;
+}
+
+function mapCodexModel(model: CodexJsonObject): ProviderModel | null {
+	const id = readString(model.id);
+	const label = readString(model.displayName);
+	const supportedEfforts = readArray(model.supportedReasoningEfforts)
+		.filter(isRecord)
+		.map((option) => readCodexProviderEffort(option.reasoningEffort))
+		.filter((effort): effort is EffortLevel => effort !== null);
+
+	if (!id || !label) {
+		return null;
+	}
+
+	return {
+		defaultEffort: readCodexProviderEffort(model.defaultReasoningEffort),
+		id,
+		label,
+		supportedEfforts,
+	};
 }
 
 function createCodexTurnStream(): CodexTurnStream {
@@ -872,6 +914,184 @@ function sendCodexErrorResponse(
 	});
 }
 
+async function requestCodexAppServer(
+	subprocess: Bun.Subprocess<"pipe", "pipe", "pipe">,
+	pendingResponses: Map<string, CodexPendingResponse>,
+	method: string,
+	params?: CodexJsonObject,
+) {
+	const requestId = Bun.randomUUIDv7();
+
+	return await new Promise<CodexJsonObject>((resolve, reject) => {
+		pendingResponses.set(requestId, { resolve, reject });
+		void subprocess.stdin.write(
+			`${JSON.stringify(params ? { id: requestId, method, params } : { id: requestId, method })}\n`,
+		);
+		void subprocess.stdin.flush();
+	});
+}
+
+async function loadCodexModels() {
+	const subprocess = Bun.spawn([getCodexBin(), "app-server", "--listen", "stdio://"], {
+		cwd: process.cwd(),
+		env: Bun.env,
+		stdin: "pipe",
+		stdout: "pipe",
+		stderr: "pipe",
+	});
+	const stdoutReader = subprocess.stdout.getReader();
+	const stderrReader = subprocess.stderr.getReader();
+	const pendingResponses = new Map<string, CodexPendingResponse>();
+	const stderrChunks: Uint8Array[] = [];
+	let buffer = "";
+
+	const stderrPromise = (async () => {
+		for (;;) {
+			const { done, value } = await stderrReader.read();
+
+			if (done) {
+				return;
+			}
+
+			stderrChunks.push(value);
+		}
+	})();
+
+	const stdoutPromise = (async () => {
+		for (;;) {
+			const { done, value } = await stdoutReader.read();
+
+			if (done) {
+				return;
+			}
+
+			buffer += decoder.decode(value);
+			const lines = buffer.split("\n");
+			buffer = lines.pop() ?? "";
+
+			for (const line of lines) {
+				const trimmed = line.trim();
+
+				if (trimmed.length === 0) {
+					continue;
+				}
+
+				const frame = JSON.parse(trimmed);
+
+				if (!isRecord(frame)) {
+					continue;
+				}
+
+				const requestId = stringifyRpcId(frame.id);
+
+				if (!requestId) {
+					continue;
+				}
+
+				const pendingResponse = pendingResponses.get(requestId);
+
+				if (!pendingResponse) {
+					continue;
+				}
+
+				pendingResponses.delete(requestId);
+
+				if (frame.error !== undefined) {
+					pendingResponse.reject(new Error(readCodexError(frame.error)));
+					continue;
+				}
+
+				pendingResponse.resolve(isRecord(frame.result) ? frame.result : {});
+			}
+		}
+	})();
+
+	try {
+		await requestCodexAppServer(subprocess, pendingResponses, "initialize", {
+			capabilities: {
+				experimentalApi: false,
+				optOutNotificationMethods: [],
+			},
+			clientInfo: {
+				name: "shelleport",
+				title: "Shelleport",
+				version: "0.0.0",
+			},
+		});
+		void subprocess.stdin.write(`${JSON.stringify({ method: "initialized" })}\n`);
+		void subprocess.stdin.flush();
+
+		const models: ProviderModel[] = [];
+		let cursor: string | null = null;
+
+		for (;;) {
+			const result = await requestCodexAppServer(subprocess, pendingResponses, "model/list", {
+				cursor: cursor ?? undefined,
+				includeHidden: false,
+				limit: 100,
+			});
+			const data = readArray(result.data).filter(isRecord);
+
+			for (const entry of data) {
+				const model = mapCodexModel(entry);
+
+				if (model) {
+					models.push(model);
+				}
+			}
+
+			cursor = readString(result.nextCursor);
+
+			if (!cursor) {
+				return models;
+			}
+		}
+	} finally {
+		for (const [requestId, pendingResponse] of pendingResponses) {
+			pendingResponses.delete(requestId);
+			pendingResponse.reject(new Error("Codex app-server closed"));
+		}
+
+		try {
+			void subprocess.stdin.end();
+		} catch {}
+
+		await stdoutPromise.catch(() => {});
+		await stderrPromise;
+		stdoutReader.releaseLock();
+		stderrReader.releaseLock();
+
+		const exitCode = await subprocess.exited;
+
+		if (exitCode !== 0) {
+			const stderr = Buffer.concat(stderrChunks).toString("utf8").trim();
+			throw new Error(stderr || `Codex app-server exited with code ${exitCode}`);
+		}
+	}
+}
+
+async function getCodexModels() {
+	if (codexModelCache && codexModelCache.expiresAt > Date.now()) {
+		return codexModelCache.models;
+	}
+
+	if (!codexModelRequest) {
+		codexModelRequest = loadCodexModels()
+			.then((models) => {
+				codexModelCache = {
+					expiresAt: Date.now() + CODEX_MODEL_CACHE_TTL_MS,
+					models,
+				};
+				return models;
+			})
+			.finally(() => {
+				codexModelRequest = null;
+			});
+	}
+
+	return await codexModelRequest;
+}
+
 function handleCodexServerRequest(
 	liveSession: CodexLiveSession,
 	requestId: CodexRpcId,
@@ -1559,8 +1779,9 @@ export class CodexProviderAdapter implements ProviderAdapter {
 		return codexCapabilities;
 	}
 
-	summary(): ProviderSummary {
+	async summary(): Promise<ProviderSummary> {
 		const isAvailable = Bun.which(getCodexBin()) !== null;
+		const models = isAvailable ? await getCodexModels().catch(() => []) : [];
 
 		return {
 			id: this.id,
@@ -1570,7 +1791,7 @@ export class CodexProviderAdapter implements ProviderAdapter {
 				? null
 				: "Codex CLI not found in PATH. Install it or set SHELLEPORT_CODEX_BIN.",
 			capabilities: this.capabilities(),
-			models: [],
+			models,
 		};
 	}
 

@@ -1,4 +1,9 @@
-import { normalizeEffortLevel, type EffortLevel, type ProviderModel } from "~/shared/shelleport";
+import {
+	getDefaultEffortLevel,
+	normalizeEffortLevel,
+	type EffortLevel,
+	type ProviderModel,
+} from "~/shared/shelleport";
 
 const LAST_MODEL_KEY = "shelleport.last-model";
 const LAST_EFFORT_KEY = "shelleport.last-effort";
@@ -24,18 +29,26 @@ export function readLastSessionPreferences(
 	fallbackModel: string | null,
 ): { model: string | null; effort: EffortLevel } {
 	const storedModel = readStorage(LAST_MODEL_KEY);
-	const model =
-		storedModel && models.some((entry) => entry.id === storedModel) ? storedModel : fallbackModel;
+	const model = storedModel && models.some((entry) => entry.id === storedModel) ? storedModel : fallbackModel;
 	const effort =
-		normalizeEffortLevel(model, parseEffortLevel(readStorage(LAST_EFFORT_KEY))) ?? "medium";
+		normalizeEffortLevel(model, parseEffortLevel(readStorage(LAST_EFFORT_KEY)), models) ??
+		getDefaultEffortLevel(model, models) ??
+		"medium";
 	return { model, effort };
 }
 
-export function writeLastSessionPreferences(model: string | null, effort: EffortLevel | null) {
+export function writeLastSessionPreferences(
+	model: string | null,
+	effort: EffortLevel | null,
+	models?: ProviderModel[],
+) {
 	try {
 		if (model) {
 			window.localStorage.setItem(LAST_MODEL_KEY, model);
 		}
-		window.localStorage.setItem(LAST_EFFORT_KEY, normalizeEffortLevel(model, effort) ?? "medium");
+		window.localStorage.setItem(
+			LAST_EFFORT_KEY,
+			normalizeEffortLevel(model, effort, models) ?? getDefaultEffortLevel(model, models) ?? "medium",
+		);
 	} catch {}
 }

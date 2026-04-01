@@ -26,6 +26,7 @@ import {
 	writeLastSessionPreferences,
 } from "~/client/session-preferences";
 import {
+	getDefaultEffortLevel,
 	getDefaultPermissionMode,
 	getSupportedEffortLevels,
 	normalizeEffortLevel,
@@ -46,8 +47,8 @@ const EFFORT_LEVELS: { id: EffortLevel; label: string }[] = [
 	{ id: "max", label: "Max" },
 ];
 
-function getEffortLevels(modelId: string | null) {
-	const supportedLevels = getSupportedEffortLevels(modelId);
+function getEffortLevels(modelId: string | null, models: ProviderModel[]) {
+	const supportedLevels = getSupportedEffortLevels(modelId, models);
 	return EFFORT_LEVELS.filter((level) => supportedLevels.includes(level.id));
 }
 
@@ -479,11 +480,11 @@ export function SessionLauncher({
 	const [saveAsProject, setSaveAsProject] = useState(false);
 	const [saveAsProjectName, setSaveAsProjectName] = useState("");
 	const [systemPrompt, setSystemPrompt] = useState("");
-	const effortLevels = getEffortLevels(selectedModel);
+	const effortLevels = getEffortLevels(selectedModel, models);
 
 	useEffect(() => {
-		writeLastSessionPreferences(selectedModel, selectedEffort);
-	}, [selectedEffort, selectedModel]);
+		writeLastSessionPreferences(selectedModel, selectedEffort, models);
+	}, [models, selectedEffort, selectedModel]);
 
 	useEffect(() => {
 		const fallbackModel = models.find((model) => model.id === "sonnet")?.id ?? models[0]?.id ?? null;
@@ -693,7 +694,8 @@ export function SessionLauncher({
 									title: title.trim(),
 									permissionMode,
 									model: selectedModel ?? undefined,
-									effort: normalizeEffortLevel(selectedModel, selectedEffort) ?? undefined,
+									effort:
+										normalizeEffortLevel(selectedModel, selectedEffort, models) ?? undefined,
 									systemPrompt: systemPrompt.trim() || undefined,
 									projectId: projectIdToUse ?? undefined,
 								});
@@ -872,7 +874,10 @@ export function SessionLauncher({
 											onClick={() => {
 												setSelectedModel(model.id);
 												setSelectedEffort(
-													(current) => normalizeEffortLevel(model.id, current) ?? "medium",
+													(current) =>
+														normalizeEffortLevel(model.id, current, models) ??
+														getDefaultEffortLevel(model.id, models) ??
+														"medium",
 												);
 											}}
 											className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
