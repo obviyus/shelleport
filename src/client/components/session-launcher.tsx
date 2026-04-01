@@ -1,5 +1,6 @@
 import { motion } from "motion/react";
 import {
+	ChevronDown,
 	ChevronLeft,
 	ChevronRight,
 	FileText,
@@ -8,6 +9,7 @@ import {
 	Loader2,
 	Plus,
 	Search,
+	Settings2,
 } from "lucide-react";
 import {
 	type KeyboardEvent,
@@ -480,6 +482,7 @@ export function SessionLauncher({
 	const [saveAsProject, setSaveAsProject] = useState(false);
 	const [saveAsProjectName, setSaveAsProjectName] = useState("");
 	const [systemPrompt, setSystemPrompt] = useState("");
+	const [showMobileOptions, setShowMobileOptions] = useState(false);
 	const effortLevels = getEffortLevels(selectedModel, models);
 
 	useEffect(() => {
@@ -667,6 +670,35 @@ export function SessionLauncher({
 		return () => observer.disconnect();
 	}, []);
 
+	const handleCreate = async () => {
+		let projectIdToUse = selectedProjectId;
+
+		if (saveAsProject && !selectedProjectId) {
+			try {
+				const result = await createProject({
+					name: saveAsProjectName.trim() || title.trim() || "Untitled Project",
+					cwd: currentPath,
+					permissionMode,
+				});
+				onProjectCreated(result.project);
+				projectIdToUse = result.project.id;
+			} catch {
+				showToast("error", "Failed to create project");
+				return;
+			}
+		}
+
+		await onCreate({
+			cwd: currentPath,
+			title: title.trim(),
+			permissionMode,
+			model: selectedModel ?? undefined,
+			effort: normalizeEffortLevel(selectedModel, selectedEffort, models) ?? undefined,
+			systemPrompt: systemPrompt.trim() || undefined,
+			projectId: projectIdToUse ?? undefined,
+		});
+	};
+
 	return (
 		<div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:overflow-hidden">
 			<div className="border-b border-border px-3 md:px-6 py-3">
@@ -680,38 +712,12 @@ export function SessionLauncher({
 								Pick a workspace. Launch from the path itself.
 							</h1>
 						</div>
+						{/* Desktop create button */}
 						<button
 							type="button"
-							onClick={async () => {
-								let projectIdToUse = selectedProjectId;
-
-								if (saveAsProject && !selectedProjectId) {
-									try {
-										const result = await createProject({
-											name: saveAsProjectName.trim() || title.trim() || "Untitled Project",
-											cwd: currentPath,
-											permissionMode,
-										});
-										onProjectCreated(result.project);
-										projectIdToUse = result.project.id;
-									} catch {
-										showToast("error", "Failed to create project");
-										return;
-									}
-								}
-
-								await onCreate({
-									cwd: currentPath,
-									title: title.trim(),
-									permissionMode,
-									model: selectedModel ?? undefined,
-									effort: normalizeEffortLevel(selectedModel, selectedEffort, models) ?? undefined,
-									systemPrompt: systemPrompt.trim() || undefined,
-									projectId: projectIdToUse ?? undefined,
-								});
-							}}
+							onClick={handleCreate}
 							disabled={isCreating || createDisabledReason !== null}
-							className="flex h-8 shrink-0 items-center gap-1.5 rounded-md bg-foreground px-3 text-[11px] font-medium text-background transition hover:bg-foreground/90 focus-visible:ring-2 focus-visible:ring-foreground/20 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-30"
+							className="hidden md:flex h-8 shrink-0 items-center gap-1.5 rounded-md bg-foreground px-3 text-[11px] font-medium text-background transition hover:bg-foreground/90 focus-visible:ring-2 focus-visible:ring-foreground/20 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-30"
 						>
 							{isCreating ? (
 								<Loader2 aria-hidden="true" className="size-3 animate-spin" />
@@ -722,8 +728,212 @@ export function SessionLauncher({
 						</button>
 					</div>
 
-					{/* Compact config grid */}
-					<div className="mt-3 grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-x-4 gap-y-2.5">
+					{/* Mobile: inline model selector + options toggle */}
+					{isMobile && (
+						<div className="mt-2.5 space-y-2">
+							{/* Model chips always visible on mobile */}
+							{models.length > 0 && (
+								<div className="flex items-center gap-2">
+									<div className="flex flex-1 flex-wrap gap-1.5">
+										{models.map((model) => (
+											<button
+												key={model.id}
+												type="button"
+												onClick={() => {
+													setSelectedModel(model.id);
+													setSelectedEffort(
+														(current) =>
+															normalizeEffortLevel(model.id, current, models) ??
+															getDefaultEffortLevel(model.id, models) ??
+															"medium",
+													);
+												}}
+												className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+													selectedModel === model.id
+														? "border-foreground/20 bg-foreground text-background"
+														: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
+												}`}
+											>
+												{model.label}
+											</button>
+										))}
+									</div>
+									<button
+										type="button"
+										onClick={() => setShowMobileOptions((v) => !v)}
+										className="flex h-7 items-center gap-1 rounded-md border border-foreground/10 bg-card/90 px-2 text-[10px] text-foreground/70 transition active:bg-accent"
+									>
+										<Settings2 className="size-3" />
+										<ChevronDown className={`size-3 transition-transform ${showMobileOptions ? "rotate-180" : ""}`} />
+									</button>
+								</div>
+							)}
+
+							{/* Collapsible options on mobile */}
+							{showMobileOptions && (
+								<div className="space-y-2 rounded-md border border-foreground/8 bg-card/40 p-2.5">
+									{createProviders.length > 1 && (
+										<div className="space-y-1">
+											<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">Provider</p>
+											<div className="flex flex-wrap gap-1.5">
+												{createProviders.map((provider) => (
+													<button
+														key={provider.id}
+														type="button"
+														onClick={() => onCreateProviderChange(provider.id)}
+														className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+															createProviderId === provider.id
+																? "border-foreground/20 bg-foreground text-background"
+																: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
+														}`}
+													>
+														{provider.label}
+													</button>
+												))}
+											</div>
+										</div>
+									)}
+
+									{/* Project */}
+									<div className="space-y-1">
+										<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">Project</p>
+										<div className="flex flex-wrap gap-1.5">
+											<button
+												type="button"
+												onClick={() => {
+													setSelectedProjectId(null);
+													setShowNewProject(false);
+												}}
+												className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+													selectedProjectId === null && !showNewProject
+														? "border-foreground/20 bg-foreground text-background"
+														: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
+												}`}
+											>
+												None
+											</button>
+											{projects.map((project) => (
+												<button
+													key={project.id}
+													type="button"
+													onClick={() => {
+														setSelectedProjectId(project.id);
+														setShowNewProject(false);
+														if (project.cwd) setCurrentPath(project.cwd);
+														if (project.permissionMode) setPermissionMode(project.permissionMode);
+													}}
+													className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+														selectedProjectId === project.id
+															? "border-foreground/20 bg-foreground text-background"
+															: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
+													}`}
+												>
+													{project.name}
+												</button>
+											))}
+											<button
+												type="button"
+												onClick={() => {
+													setShowNewProject(true);
+													setSelectedProjectId(null);
+												}}
+												className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+													showNewProject
+														? "border-foreground/20 bg-foreground text-background"
+														: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
+												}`}
+											>
+												+ New
+											</button>
+										</div>
+									</div>
+
+									{/* Title */}
+									<div className="space-y-1">
+										<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">Title</p>
+										<input
+											type="text"
+											value={title}
+											onChange={(event) => setTitle(event.target.value)}
+											autoComplete="off"
+											placeholder="Optional session title…"
+											className="h-7 w-full rounded-md border border-foreground/10 bg-card/90 px-2.5 text-[10px] text-foreground outline-none transition placeholder:text-muted-foreground focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
+										/>
+									</div>
+
+									{/* Effort */}
+									{effortLevels.length > 0 && (
+										<div className="space-y-1">
+											<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">Effort</p>
+											<div className="flex flex-wrap gap-1.5">
+												{effortLevels.map((level) => (
+													<button
+														key={level.id}
+														type="button"
+														onClick={() => setSelectedEffort(level.id)}
+														className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+															selectedEffort === level.id
+																? "border-foreground/20 bg-foreground text-background"
+																: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
+														}`}
+													>
+														{level.label}
+													</button>
+												))}
+											</div>
+										</div>
+									)}
+
+									{/* Permissions */}
+									{showsPermissionMode && (
+										<div className="space-y-1">
+											<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">Permissions</p>
+											<div className="flex gap-1.5">
+												<button
+													type="button"
+													onClick={() => setPermissionMode("bypassPermissions")}
+													className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+														permissionMode === "bypassPermissions"
+															? "border-foreground/20 bg-foreground text-background"
+															: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
+													}`}
+												>
+													Bypass
+												</button>
+												<button
+													type="button"
+													onClick={() => setPermissionMode("default")}
+													className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+														permissionMode === "default"
+															? "border-foreground/20 bg-foreground text-background"
+															: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
+													}`}
+												>
+													Ask for approvals
+												</button>
+											</div>
+										</div>
+									)}
+
+									{/* System prompt */}
+									<div className="space-y-1">
+										<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">System prompt</p>
+										<textarea
+											value={systemPrompt}
+											onChange={(event) => setSystemPrompt(event.target.value)}
+											placeholder="Custom instructions for this session…"
+											rows={2}
+											maxLength={10000}
+											className="w-full resize-y rounded-md border border-foreground/10 bg-card/90 px-2.5 py-2 text-[10px] leading-[1.6] text-foreground outline-none transition placeholder:text-muted-foreground focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
+										/>
+									</div>
+								</div>
+							)}
+						</div>
+					)}
+
+					{/* Desktop config grid */}
+					<div className={`mt-3 grid-cols-1 md:grid-cols-[1fr_1fr] gap-x-4 gap-y-2.5 ${isMobile ? "hidden" : "grid"}`}>
 						{createProviders.length > 1 && (
 							<div className="space-y-1.5">
 								<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
@@ -1020,7 +1230,7 @@ export function SessionLauncher({
 				</div>
 			</div>
 
-			<div className="px-3 py-3 md:min-h-0 md:flex-1 md:px-6 md:py-4">
+			<div className={`px-3 py-3 md:min-h-0 md:flex-1 md:px-6 md:py-4 ${isMobile ? "pb-20" : ""}`}>
 				{isMobile && pathChain.length > 1 && (
 					<div className="mx-auto flex max-w-[110rem] items-center gap-2 mb-3">
 						<button
@@ -1105,6 +1315,33 @@ export function SessionLauncher({
 					})}
 				</div>
 			</div>
+
+			{/* Mobile sticky bottom create bar */}
+			{isMobile && (
+				<div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 px-3 backdrop-blur-sm" style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}>
+					<div className="flex items-center gap-3 pt-3">
+						<div className="min-w-0 flex-1">
+							<div className="flex items-center gap-1.5">
+								<FolderOpen aria-hidden="true" className="size-3 shrink-0 text-foreground/55" />
+								<p className="min-w-0 truncate text-[10px] text-foreground/70">{currentPath}</p>
+							</div>
+						</div>
+						<button
+							type="button"
+							onClick={handleCreate}
+							disabled={isCreating || createDisabledReason !== null}
+							className="flex h-10 shrink-0 items-center gap-1.5 rounded-lg bg-foreground px-4 text-[12px] font-medium text-background transition active:bg-foreground/90 disabled:opacity-30"
+						>
+							{isCreating ? (
+								<Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
+							) : (
+								<Plus aria-hidden="true" className="size-3.5" />
+							)}
+							Launch
+						</button>
+					</div>
+				</div>
+			)}
 		</div>
 	);
 }
