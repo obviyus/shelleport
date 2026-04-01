@@ -513,6 +513,11 @@ export function SessionLauncher({
 	);
 
 	useEffect(() => {
+		if (isMobile) {
+			setFocusPath(null);
+			return;
+		}
+
 		if (focusPath === null) {
 			return;
 		}
@@ -524,9 +529,14 @@ export function SessionLauncher({
 
 		column.focus();
 		setFocusPath(null);
-	}, [focusPath, visiblePathChain]);
+	}, [focusPath, isMobile, visiblePathChain]);
 
 	useEffect(() => {
+		if (isMobile) {
+			setActiveColumnPath((current) => (current === currentPath ? current : currentPath));
+			return;
+		}
+
 		const lastVisiblePath = visiblePathChain.at(-1);
 		if (!lastVisiblePath) {
 			return;
@@ -545,7 +555,7 @@ export function SessionLauncher({
 
 		setActiveColumnPath(lastVisiblePath);
 		setFocusPath(lastVisiblePath);
-	}, [visiblePathChain]);
+	}, [currentPath, isMobile, visiblePathChain]);
 
 	useEffect(() => {
 		setWindowStartIndex((current) => {
