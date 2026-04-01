@@ -26,6 +26,7 @@ import {
 	writeLastSessionPreferences,
 } from "~/client/session-preferences";
 import {
+	getDefaultEffortLevel,
 	getDefaultPermissionMode,
 	getSupportedEffortLevels,
 	normalizeEffortLevel,
@@ -35,6 +36,7 @@ import {
 	type PermissionMode,
 	type ProviderModel,
 	type ProviderId,
+	type ProviderSummary,
 	type Project,
 } from "~/shared/shelleport";
 
@@ -45,8 +47,8 @@ const EFFORT_LEVELS: { id: EffortLevel; label: string }[] = [
 	{ id: "max", label: "Max" },
 ];
 
-function getEffortLevels(modelId: string | null) {
-	const supportedLevels = getSupportedEffortLevels(modelId);
+function getEffortLevels(modelId: string | null, models: ProviderModel[]) {
+	const supportedLevels = getSupportedEffortLevels(modelId, models);
 	return EFFORT_LEVELS.filter((level) => supportedLevels.includes(level.id));
 }
 
@@ -54,6 +56,7 @@ type SessionLauncherProps = {
 	createDisabledReason: string | null;
 	createLabel: string;
 	createProviderId: ProviderId | null;
+	createProviders: ProviderSummary[];
 	defaultPath: string;
 	isCreating: boolean;
 	models: ProviderModel[];
@@ -66,6 +69,7 @@ type SessionLauncherProps = {
 		systemPrompt?: string;
 		projectId?: string;
 	}) => void | Promise<void>;
+	onCreateProviderChange: (providerId: ProviderId) => void;
 	projects: Project[];
 	onProjectCreated: (project: Project) => void;
 };
@@ -436,10 +440,12 @@ export function SessionLauncher({
 	createDisabledReason,
 	createLabel,
 	createProviderId,
+	createProviders,
 	defaultPath,
 	isCreating,
 	models,
 	onCreate,
+	onCreateProviderChange,
 	projects,
 	onProjectCreated,
 }: SessionLauncherProps) {
@@ -463,7 +469,9 @@ export function SessionLauncher({
 	const [permissionMode, setPermissionMode] = useState<PermissionMode>(
 		createProviderId ? getDefaultPermissionMode(createProviderId) : "default",
 	);
-	const showsPermissionMode = createProviderId === "claude";
+	const showsPermissionMode =
+		createProviders.find((provider) => provider.id === createProviderId)?.capabilities
+			.supportsApprovals ?? false;
 	const [isMobile, setIsMobile] = useState(false);
 	const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 	const [showNewProject, setShowNewProject] = useState(false);
@@ -472,11 +480,22 @@ export function SessionLauncher({
 	const [saveAsProject, setSaveAsProject] = useState(false);
 	const [saveAsProjectName, setSaveAsProjectName] = useState("");
 	const [systemPrompt, setSystemPrompt] = useState("");
-	const effortLevels = getEffortLevels(selectedModel);
+	const effortLevels = getEffortLevels(selectedModel, models);
 
 	useEffect(() => {
-		writeLastSessionPreferences(selectedModel, selectedEffort);
-	}, [selectedEffort, selectedModel]);
+		writeLastSessionPreferences(selectedModel, selectedEffort, models);
+	}, [models, selectedEffort, selectedModel]);
+
+	useEffect(() => {
+		const fallbackModel = models.find((model) => model.id === "sonnet")?.id ?? models[0]?.id ?? null;
+		const nextPreferences = readLastSessionPreferences(models, fallbackModel);
+		setSelectedModel(nextPreferences.model);
+		setSelectedEffort(nextPreferences.effort);
+
+		if (selectedProjectId === null && !showNewProject) {
+			setPermissionMode(createProviderId ? getDefaultPermissionMode(createProviderId) : "default");
+		}
+	}, [createProviderId, models, selectedProjectId, showNewProject]);
 
 	useEffect(() => {
 		const mql = window.matchMedia("(max-width: 767px)");
@@ -675,7 +694,8 @@ export function SessionLauncher({
 									title: title.trim(),
 									permissionMode,
 									model: selectedModel ?? undefined,
-									effort: normalizeEffortLevel(selectedModel, selectedEffort) ?? undefined,
+									effort:
+										normalizeEffortLevel(selectedModel, selectedEffort, models) ?? undefined,
 									systemPrompt: systemPrompt.trim() || undefined,
 									projectId: projectIdToUse ?? undefined,
 								});
@@ -694,6 +714,30 @@ export function SessionLauncher({
 
 					{/* Compact config grid */}
 					<div className="mt-3 grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-x-4 gap-y-2.5">
+						{createProviders.length > 1 && (
+							<div className="space-y-1.5">
+								<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+									Provider
+								</p>
+								<div className="flex flex-wrap gap-1.5">
+									{createProviders.map((provider) => (
+										<button
+											key={provider.id}
+											type="button"
+											onClick={() => onCreateProviderChange(provider.id)}
+											className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+												createProviderId === provider.id
+													? "border-foreground/20 bg-foreground text-background"
+													: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
+											}`}
+										>
+											{provider.label}
+										</button>
+									))}
+								</div>
+							</div>
+						)}
+
 						{/* Row 1: Project */}
 						<div className="space-y-1.5">
 							<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
@@ -830,7 +874,10 @@ export function SessionLauncher({
 											onClick={() => {
 												setSelectedModel(model.id);
 												setSelectedEffort(
-													(current) => normalizeEffortLevel(model.id, current) ?? "medium",
+													(current) =>
+														normalizeEffortLevel(model.id, current, models) ??
+														getDefaultEffortLevel(model.id, models) ??
+														"medium",
 												);
 											}}
 											className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${

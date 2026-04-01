@@ -1,7 +1,7 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
-import { config, ensureDataDir, getClaudeBin } from "~/server/config.server";
+import { config, ensureDataDir, getClaudeBin, getCodexBin } from "~/server/config.server";
 import clientShell from "./src/client/index.html";
 import packageJson from "./package.json";
 
@@ -38,6 +38,7 @@ export async function getServiceEnvironment(home = Bun.env.HOME ?? process.cwd()
 	);
 	const path = [...new Set(pathEntries)].join(":");
 	const claudeBinCandidate = `${home}/.local/bin/claude`;
+	const codexBinCandidate = `${home}/.local/bin/codex`;
 	const claudeBin =
 		process.env.SHELLEPORT_CLAUDE_BIN ??
 		((await Bun.file(claudeBinCandidate)
@@ -47,9 +48,19 @@ export async function getServiceEnvironment(home = Bun.env.HOME ?? process.cwd()
 			: Bun.which(getClaudeBin())
 				? getClaudeBin()
 				: null);
+	const codexBin =
+		process.env.SHELLEPORT_CODEX_BIN ??
+		((await Bun.file(codexBinCandidate)
+			.stat()
+			.catch(() => null))
+			? codexBinCandidate
+			: Bun.which(getCodexBin())
+				? getCodexBin()
+				: null);
 
 	return {
 		claudeBin,
+		codexBin,
 		path,
 	};
 }
@@ -383,7 +394,7 @@ WorkingDirectory=${serviceHome}
 ExecStart=${linuxBinaryPath} serve --host=${host} --port=${port}
 Restart=always
 Environment=HOME=${serviceHome}
-${serviceEnvironment.path ? `Environment=PATH=${serviceEnvironment.path}\n` : ""}${serviceEnvironment.claudeBin ? `Environment=SHELLEPORT_CLAUDE_BIN=${serviceEnvironment.claudeBin}\n` : ""}
+${serviceEnvironment.path ? `Environment=PATH=${serviceEnvironment.path}\n` : ""}${serviceEnvironment.claudeBin ? `Environment=SHELLEPORT_CLAUDE_BIN=${serviceEnvironment.claudeBin}\n` : ""}${serviceEnvironment.codexBin ? `Environment=SHELLEPORT_CODEX_BIN=${serviceEnvironment.codexBin}\n` : ""}
 
 [Install]
 WantedBy=multi-user.target
@@ -683,7 +694,7 @@ async function runDoctor(options: CliOptions) {
 		},
 		{
 			label: "codex_cli",
-			command: ["codex", "--version"],
+			command: [getCodexBin(), "--version"],
 		},
 	];
 
@@ -743,6 +754,7 @@ ${command.map((part) => `		<string>${part}</string>`).join("\n")}
 		<string>${host}</string>
 		${serviceEnvironment.path ? `<key>PATH</key>\n\t\t<string>${serviceEnvironment.path}</string>` : ""}
 		${serviceEnvironment.claudeBin ? `<key>SHELLEPORT_CLAUDE_BIN</key>\n\t\t<string>${serviceEnvironment.claudeBin}</string>` : ""}
+		${serviceEnvironment.codexBin ? `<key>SHELLEPORT_CODEX_BIN</key>\n\t\t<string>${serviceEnvironment.codexBin}</string>` : ""}
 	</dict>
 </dict>
 </plist>

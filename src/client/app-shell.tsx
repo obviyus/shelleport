@@ -74,6 +74,7 @@ import {
 	updateSessionMeta,
 } from "~/client/api";
 import {
+	getDefaultEffortLevel,
 	getSupportedEffortLevels,
 	normalizeEffortLevel,
 	type DirectoryListing,
@@ -83,6 +84,7 @@ import {
 	type PendingRequest,
 	type PermissionMode,
 	type Project,
+	type ProviderId,
 	type ProviderLimitState,
 	type ProviderModel,
 	type ProviderSummary,
@@ -363,15 +365,20 @@ const EFFORT_LEVELS: { id: EffortLevel; label: string }[] = [
 	{ id: "max", label: "Max" },
 ];
 
-function getEffortLevels(modelId: string | null): { id: EffortLevel; label: string }[] {
-	const supportedLevels = getSupportedEffortLevels(modelId);
+function getEffortLevels(
+	modelId: string | null,
+	models: ProviderModel[],
+): { id: EffortLevel; label: string }[] {
+	const supportedLevels = getSupportedEffortLevels(modelId, models);
 	return EFFORT_LEVELS.filter((level) => supportedLevels.includes(level.id));
 }
 
 function InputEffortPicker({
+	models,
 	session,
 	onChangeEffort,
 }: {
+	models: ProviderModel[];
 	session: HostSession;
 	onChangeEffort: (effort: EffortLevel | null) => void;
 }) {
@@ -381,7 +388,7 @@ function InputEffortPicker({
 	const [pos, setPos] = useState({ bottom: 0, left: 0 });
 	usePopoverDismiss(open, setOpen, buttonRef, dropdownRef);
 
-	const levels = getEffortLevels(session.model);
+	const levels = getEffortLevels(session.model, models);
 	if (levels.length === 0) return null;
 
 	const effectiveEffort = session.effort ?? "medium";
@@ -1278,6 +1285,22 @@ export function getFirstRunReadiness(providers: ProviderSummary[]) {
 	};
 }
 
+function getComposerPlaceholder(
+	providerLabel: string,
+	isBusy: boolean,
+	canAttach: boolean,
+) {
+	if (isBusy) {
+		return `${providerLabel} is working... press Enter to queue`;
+	}
+
+	if (canAttach) {
+		return `Message ${providerLabel}... attach files or paste images`;
+	}
+
+	return `Message ${providerLabel}... (Enter to send)`;
+}
+
 export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated: true }> }) {
 	const route = useCurrentRoute();
 	const renderRoute =
@@ -1448,7 +1471,20 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			),
 		[providers],
 	);
-	const createProvider = creatableProviders[0] ?? null;
+	const [createProviderId, setCreateProviderId] = useState<ProviderId | null>(null);
+	useEffect(() => {
+		setCreateProviderId((current) => {
+			if (current && creatableProviders.some((provider) => provider.id === current)) {
+				return current;
+			}
+
+			return creatableProviders[0]?.id ?? null;
+		});
+	}, [creatableProviders]);
+	const createProvider =
+		(createProviderId
+			? creatableProviders.find((provider) => provider.id === createProviderId)
+			: null) ?? creatableProviders[0] ?? null;
 	const createDisabledReason =
 		createProvider !== null
 			? null
@@ -2083,15 +2119,17 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	);
 
 	const handleChangeModel = useCallback(
-		async (session: HostSession, model: string) => {
-			const effort = normalizeEffortLevel(model, session.effort);
+		async (session: HostSession, model: string, models: ProviderModel[]) => {
+			const effort =
+				normalizeEffortLevel(model, session.effort, models) ??
+				getDefaultEffortLevel(model, models);
 
 			try {
 				await applySessionMetaUpdate(
 					session.id,
 					effort === session.effort ? { model } : { model, effort },
 				);
-				writeLastSessionPreferences(model, effort);
+				writeLastSessionPreferences(model, effort, models);
 			} catch {
 				showToast("error", "Failed to update model");
 			}
@@ -2100,10 +2138,10 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	);
 
 	const handleChangeEffort = useCallback(
-		async (session: HostSession, effort: EffortLevel | null) => {
+		async (session: HostSession, effort: EffortLevel | null, models: ProviderModel[]) => {
 			try {
 				await applySessionMetaUpdate(session.id, { effort });
-				writeLastSessionPreferences(session.model, effort);
+				writeLastSessionPreferences(session.model, effort, models);
 			} catch {
 				showToast("error", "Failed to update effort");
 			}
@@ -2187,6 +2225,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const sessionProvider = sessionView
 		? providers.find((provider) => provider.id === sessionView.provider)
 		: null;
+	const sessionProviderLabel = sessionProvider?.label ?? "Agent";
 	const canAttach = sessionProvider?.capabilities.supportsAttachments === true;
 	const isSessionBusy =
 		sessionView?.status === "running" ||
@@ -2198,6 +2237,10 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const showReconnectIndicator = shouldShowReconnectIndicator(isSessionPending, streamState);
 	const statusMessage = sessionView ? getStatusMessage(sessionView) : null;
 	const firstRunReadiness = getFirstRunReadiness(providers);
+	const managedProviders = useMemo(
+		() => providers.filter((provider) => provider.capabilities.canCreate),
+		[providers],
+	);
 
 	function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
 		if (event.key === "Enter" && !event.shiftKey) {
@@ -2947,15 +2990,24 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 																	session={sessionView}
 																	models={sessionProvider?.models ?? []}
 																	onChangeModel={(model) =>
-																		void handleChangeModel(sessionView, model)
+																		void handleChangeModel(
+																			sessionView,
+																			model,
+																			sessionProvider?.models ?? [],
+																		)
 																	}
 																/>
 															)}
 															{sessionView && (
 																<InputEffortPicker
+																	models={sessionProvider?.models ?? []}
 																	session={sessionView}
 																	onChangeEffort={(effort) =>
-																		void handleChangeEffort(sessionView, effort)
+																		void handleChangeEffort(
+																			sessionView,
+																			effort,
+																			sessionProvider?.models ?? [],
+																		)
 																	}
 																/>
 															)}
@@ -2992,13 +3044,11 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 														}}
 														onKeyDown={handleKeyDown}
 														onPaste={handlePaste}
-														placeholder={
-															isSessionBusy
-																? "Claude is working... press Enter to queue"
-																: canAttach
-																	? "Message Claude... attach files or paste images"
-																	: "Message Claude... (Enter to send)"
-														}
+														placeholder={getComposerPlaceholder(
+															sessionProviderLabel,
+															isSessionBusy,
+															canAttach,
+														)}
 														className="min-h-[48px] md:min-h-[64px] w-full resize-none bg-transparent px-3.5 py-3 text-xs leading-[1.6] text-foreground outline-none placeholder:text-muted-foreground"
 													/>
 													<div className="flex items-center justify-between px-1.5 pb-0.5">
@@ -3012,15 +3062,24 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 																	session={sessionView}
 																	models={sessionProvider?.models ?? []}
 																	onChangeModel={(model) =>
-																		void handleChangeModel(sessionView, model)
+																		void handleChangeModel(
+																			sessionView,
+																			model,
+																			sessionProvider?.models ?? [],
+																		)
 																	}
 																/>
 															)}
 															{sessionView && (
 																<InputEffortPicker
+																	models={sessionProvider?.models ?? []}
 																	session={sessionView}
 																	onChangeEffort={(effort) =>
-																		void handleChangeEffort(sessionView, effort)
+																		void handleChangeEffort(
+																			sessionView,
+																			effort,
+																			sessionProvider?.models ?? [],
+																		)
 																	}
 																/>
 															)}
@@ -3111,20 +3170,22 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 												Before your first session
 											</h2>
 											<p className="mt-1 text-xs leading-[1.7] text-muted-foreground">
-												Check Claude readiness once, then pick a project directory below.
+												Check managed provider readiness once, then pick a project directory below.
 											</p>
 										</div>
 										<div className="flex flex-col gap-1 text-xs text-muted-foreground">
-											<div className="flex items-center gap-2">
-												{firstRunReadiness.claudeReady ? (
-													<Check className="size-3 text-foreground/80" />
-												) : (
-													<X className="size-3 text-destructive/80" />
-												)}
-												<span>
-													Claude CLI {firstRunReadiness.claudeReady ? "ready" : "needs attention"}
-												</span>
-											</div>
+											{managedProviders.map((provider) => (
+												<div key={provider.id} className="flex items-center gap-2">
+													{provider.status === "ready" ? (
+														<Check className="size-3 text-foreground/80" />
+													) : (
+														<X className="size-3 text-destructive/80" />
+													)}
+													<span>
+														{provider.label} {provider.status === "ready" ? "ready" : "needs attention"}
+													</span>
+												</div>
+											))}
 											<div className="flex items-center gap-2">
 												{firstRunReadiness.canCreateManagedSession ? (
 													<Check className="size-3 text-foreground/80" />
@@ -3138,15 +3199,17 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											</div>
 										</div>
 									</div>
-									{firstRunReadiness.claudeStatusDetail && (
-										<p className="mt-3 text-xs leading-[1.7] text-muted-foreground">
-											{firstRunReadiness.claudeStatusDetail}
-										</p>
-									)}
+									{managedProviders
+										.filter((provider) => provider.statusDetail)
+										.map((provider) => (
+											<p
+												key={provider.id}
+												className="mt-3 text-xs leading-[1.7] text-muted-foreground"
+											>
+												{provider.label}: {provider.statusDetail}
+											</p>
+										))}
 									<div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
-										<span className="rounded border border-foreground/10 bg-background px-2 py-1 text-foreground/86">
-											claude doctor
-										</span>
 										<span className="rounded border border-foreground/10 bg-background px-2 py-1 text-foreground/86">
 											shelleport doctor
 										</span>
@@ -3155,14 +3218,16 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 							</div>
 						)}
 						<SessionLauncher
-							key={`${boot.defaultCwd}:${createProvider?.id ?? "none"}`}
+							key={boot.defaultCwd}
 							createDisabledReason={createDisabledReason}
 							createLabel={createProvider?.label ?? "managed"}
 							createProviderId={createProvider?.id ?? null}
+							createProviders={creatableProviders}
 							defaultPath={boot.defaultCwd}
 							isCreating={isCreating}
 							models={createProvider?.models ?? []}
 							onCreate={handleCreateSession}
+							onCreateProviderChange={setCreateProviderId}
 							projects={projects}
 							onProjectCreated={(project) => setProjects((prev) => [...prev, project])}
 						/>

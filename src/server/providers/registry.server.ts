@@ -9,7 +9,7 @@ const providers: Record<ProviderId, ProviderAdapter> = {
 };
 
 export function listProviders() {
-	return Object.values(providers).map((provider) => provider.summary());
+	return Promise.all(Object.values(providers).map((provider) => provider.summary()));
 }
 
 export function getProvider(providerId: ProviderId) {

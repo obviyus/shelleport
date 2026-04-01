@@ -135,15 +135,15 @@ function validatePrompt(prompt: unknown, fieldName: string, required: boolean) {
 	}
 }
 
-function validateCreateSessionInput(payload: CreateSessionInput) {
+async function validateCreateSessionInput(payload: CreateSessionInput) {
 	assertProviderId(payload.provider, "provider");
 	validateTitle(payload.title);
 	validatePrompt(payload.prompt, "prompt", false);
 	assertPermissionMode(payload.permissionMode);
 	assertAllowedTools(payload.allowedTools);
-	validateEffortForModel(payload.model ?? null, payload.effort);
 	validateSystemPrompt(payload.systemPrompt);
-	return assertDirectory(payload.cwd, "cwd");
+	await validateEffortForModel(payload.provider, payload.model ?? null, payload.effort);
+	return await assertDirectory(payload.cwd, "cwd");
 }
 
 const MAX_SYSTEM_PROMPT_LENGTH = 10000;
@@ -165,7 +165,12 @@ function validateSystemPrompt(systemPrompt: unknown) {
 		);
 	}
 }
-function validateEffortForModel(model: string | null, effort: EffortLevel | null | undefined) {
+
+async function validateEffortForModel(
+	providerId: CreateSessionInput["provider"],
+	model: string | null,
+	effort: EffortLevel | null | undefined,
+) {
 	if (effort === undefined) {
 		return;
 	}
@@ -174,7 +179,11 @@ function validateEffortForModel(model: string | null, effort: EffortLevel | null
 		return;
 	}
 
-	if (!getSupportedEffortLevels(model).includes(effort)) {
+	const provider = getProvider(providerId);
+	const summary = await provider.summary().catch(() => null);
+	const models = summary?.models ?? [];
+
+	if (!getSupportedEffortLevels(model, models).includes(effort)) {
 		throw new ApiError(400, "invalid_effort", "effort does not match the selected model");
 	}
 }
@@ -257,7 +266,8 @@ function validateArchiveInput(payload: SessionArchivePayload) {
 	}
 }
 
-function validateMetaInput(
+async function validateMetaInput(
+	providerId: CreateSessionInput["provider"],
 	payload: SessionMetaPayload,
 	current: { model: string | null; effort: EffortLevel | null },
 ) {
@@ -294,7 +304,8 @@ function validateMetaInput(
 		hasField = true;
 		validateSystemPrompt(payload.systemPrompt);
 	}
-	validateEffortForModel(
+	await validateEffortForModel(
+		providerId,
 		payload.model === undefined ? current.model : payload.model,
 		payload.effort === undefined ? current.effort : payload.effort,
 	);
@@ -507,7 +518,7 @@ async function dispatchApiRequest(request: Request, timeoutController?: RequestT
 	}
 
 	if (request.method === "GET" && url.pathname === "/api/providers") {
-		return Response.json({ providers: listProviders() });
+		return Response.json({ providers: await listProviders() });
 	}
 
 	if (
@@ -591,7 +602,7 @@ async function dispatchApiRequest(request: Request, timeoutController?: RequestT
 	if (request.method === "POST" && url.pathname === "/api/sessions") {
 		const payload = await readJson<CreateSessionInput>(request);
 		await validateCreateSessionInput(payload);
-		const session = sessionBroker.createSession(payload);
+			const session = await sessionBroker.createSession(payload);
 		return Response.json({ session }, { status: 201 });
 	}
 
@@ -663,7 +674,7 @@ async function dispatchApiRequest(request: Request, timeoutController?: RequestT
 			if (!currentSession) {
 				throw new ApiError(404, "session_not_found", "Session not found");
 			}
-			validateMetaInput(payload, currentSession);
+			await validateMetaInput(currentSession.provider, payload, currentSession);
 			const session = sessionBroker.updateSessionMeta(sessionId, payload);
 			return Response.json({ session });
 		}

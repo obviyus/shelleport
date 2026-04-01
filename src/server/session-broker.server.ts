@@ -289,6 +289,26 @@ async function consumeProviderRun(
 				continue;
 			}
 
+			if (event.type === "pending-request-cleared") {
+				const detail = sessionStore.getSessionDetail(sessionId);
+				const pendingRequest =
+					detail?.pendingRequests.find(
+						(request) =>
+							request.status === "pending" && request.data.requestId === event.requestId,
+					) ?? null;
+
+				if (!pendingRequest) {
+					continue;
+				}
+
+				const resolvedRequest = sessionStore.resolvePendingRequest(pendingRequest.id, "resolved", {
+					...pendingRequest.data,
+					resolvedByProvider: true,
+				});
+				publishRequest(resolvedRequest);
+				continue;
+			}
+
 			if (event.type === "session-status") {
 				session = updateSessionStatus(sessionId, event.status, event.detail) ?? session;
 
@@ -479,9 +499,9 @@ export const sessionBroker = {
 			}
 		};
 	},
-	createSession(input: CreateSessionInput) {
+	async createSession(input: CreateSessionInput) {
 		const provider = getProvider(input.provider);
-		const providerSummary = provider.summary();
+		const providerSummary = await provider.summary();
 
 		if (!provider.capabilities().canCreate) {
 			throw new ApiError(
