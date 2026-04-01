@@ -682,25 +682,35 @@ rl.on("line", (line) => {
   }
 
   if (message.method === "thread/start") {
-    respond(message.id, {
-      thread: createThread(),
-      model: "gpt-5.4",
-      modelProvider: "openai",
-      serviceTier: null,
-      cwd: process.cwd(),
-      approvalPolicy: "on-request",
-      approvalsReviewer: "user",
-      sandbox: {
-        type: "workspaceWrite",
-        writableRoots: [],
-        readOnlyAccess: { type: "fullAccess" },
-        networkAccess: true,
-        excludeTmpdirEnvVar: false,
-        excludeSlashTmp: false,
-      },
-      reasoningEffort: "high",
-    });
-    notify("thread/started", { thread: createThread() });
+    const startThread = () => {
+      const thread = createThread();
+      respond(message.id, {
+        thread,
+        model: "gpt-5.4",
+        modelProvider: "openai",
+        serviceTier: null,
+        cwd: process.cwd(),
+        approvalPolicy: "on-request",
+        approvalsReviewer: "user",
+        sandbox: {
+          type: "workspaceWrite",
+          writableRoots: [],
+          readOnlyAccess: { type: "fullAccess" },
+          networkAccess: true,
+          excludeTmpdirEnvVar: false,
+          excludeSlashTmp: false,
+        },
+        reasoningEffort: "high",
+      });
+      notify("thread/started", { thread });
+    };
+
+    if (String(message.params?.cwd ?? "").includes("codex-slow-start")) {
+      setTimeout(startThread, 200);
+      return;
+    }
+
+    startThread();
     return;
   }
 
@@ -1279,6 +1289,83 @@ describe("handleApiRequest", () => {
 				message.payload.kind === "tool-call" &&
 				message.payload.data.toolName === "Bash",
 		);
+
+		const interruptResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}/control`, {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					action: "interrupt",
+				}),
+			}),
+		);
+		expect(interruptResponse.status).toBe(200);
+
+		await waitForMessage(
+			reader,
+			state,
+			(message) => message.type === "session" && message.payload.status === "interrupted",
+		);
+		reader.releaseLock();
+
+		const detail = sessionBroker.getSessionDetail(sessionId);
+		expect(detail).not.toBeNull();
+		if (!detail) {
+			throw new Error("Expected session detail");
+		}
+
+		expect(detail.session.status).toBe("interrupted");
+		expect(
+			detail.events.some(
+				(event) => event.kind === "system" && event.summary === "Session interrupted",
+			),
+		).toBe(true);
+	});
+
+	test("interrupts Codex runs before thread startup completes", async () => {
+		const slowStartRoot = join(testRoot, "codex-slow-start");
+		await Bun.$`mkdir -p ${slowStartRoot}`.quiet();
+
+		const createResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "codex",
+					cwd: slowStartRoot,
+				}),
+			}),
+		);
+		expect(createResponse.status).toBe(201);
+		const createBody = await readJson<{ session: { id: string } }>(createResponse);
+		const sessionId = createBody.session.id;
+
+		const streamResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}/events`, {
+				headers: authHeader,
+			}),
+		);
+		expect(streamResponse.status).toBe(200);
+		const reader = streamResponse.body!.getReader();
+		const state = { buffer: "" };
+		await nextSseMessage(reader, state);
+
+		const formData = new FormData();
+		formData.set("prompt", "interrupt before start");
+		const inputResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}/input`, {
+				method: "POST",
+				headers: authHeader,
+				body: formData,
+			}),
+		);
+		expect(inputResponse.status).toBe(202);
 
 		const interruptResponse = await handleApiRequest(
 			new Request(`http://localhost/api/sessions/${sessionId}/control`, {
