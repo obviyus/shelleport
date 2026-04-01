@@ -37,7 +37,10 @@ const DiffCodeFile = lazy(async () => {
 });
 
 export const LazyEditDiff = lazy(async () => {
-	const { useFileDiffInstance } = await import("@pierre/diffs/react");
+	const [{ parseDiffFromFile }, { useFileDiffInstance }] = await Promise.all([
+		import("@pierre/diffs"),
+		import("@pierre/diffs/react"),
+	]);
 
 	function EditDiffView({
 		oldPath,
@@ -50,15 +53,19 @@ export const LazyEditDiff = lazy(async () => {
 		newPath: string;
 		newContents: string;
 	}) {
+		const fileDiff = parseDiffFromFile(
+			{ name: oldPath, contents: oldContents },
+			{ name: newPath, contents: newContents },
+		);
 		const diff = useFileDiffInstance({
-			oldFile: { name: oldPath, contents: oldContents },
-			newFile: { name: newPath, contents: newContents },
-			fileDiff: undefined,
+			fileDiff,
 			options: { theme: "github-dark" },
-			lineAnnotations: undefined,
-			selectedLines: undefined,
+			lineAnnotations: [],
+			selectedLines: null,
 			prerenderedHTML: undefined,
 			hasGutterRenderUtility: false,
+			hasCustomHeader: false,
+			disableWorkerPool: false,
 		});
 		return createElement("diffs-container" as "div", {
 			ref: ((node) => diff.ref(node)) as RefCallback<HTMLDivElement>,
