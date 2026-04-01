@@ -1011,6 +1011,9 @@ async function loadCodexModels() {
 		buffer += decoder.decode();
 	})();
 
+	const models: ProviderModel[] = [];
+	let loadError: Error | null = null;
+
 	try {
 		await requestCodexAppServer(subprocess, pendingResponses, "initialize", {
 			capabilities: {
@@ -1026,7 +1029,6 @@ async function loadCodexModels() {
 		void subprocess.stdin.write(`${JSON.stringify({ method: "initialized" })}\n`);
 		void subprocess.stdin.flush();
 
-		const models: ProviderModel[] = [];
 		let cursor: string | null = null;
 
 		for (;;) {
@@ -1048,9 +1050,11 @@ async function loadCodexModels() {
 			cursor = readString(result.nextCursor);
 
 			if (!cursor) {
-				return models;
+				break;
 			}
 		}
+	} catch (error) {
+		loadError = error instanceof Error ? error : new Error("Failed to load Codex models");
 	} finally {
 		for (const [requestId, pendingResponse] of pendingResponses) {
 			pendingResponses.delete(requestId);
@@ -1065,14 +1069,20 @@ async function loadCodexModels() {
 		await stderrPromise;
 		stdoutReader.releaseLock();
 		stderrReader.releaseLock();
-
-		const exitCode = await subprocess.exited;
-
-		if (exitCode !== 0) {
-			const stderr = Buffer.concat(stderrChunks).toString("utf8").trim();
-			throw new Error(stderr || `Codex app-server exited with code ${exitCode}`);
-		}
 	}
+
+	const exitCode = await subprocess.exited;
+
+	if (loadError) {
+		throw loadError;
+	}
+
+	if (exitCode !== 0) {
+		const stderr = Buffer.concat(stderrChunks).toString("utf8").trim();
+		throw new Error(stderr || `Codex app-server exited with code ${exitCode}`);
+	}
+
+	return models;
 }
 
 async function getCodexModels() {

@@ -1,13 +1,4 @@
-import {
-	Check,
-	ChevronRight,
-	CircleCheck,
-	CircleX,
-	Copy,
-	FileIcon,
-	Loader2,
-	X,
-} from "lucide-react";
+import { ChevronRight, CircleCheck, CircleX, Copy, FileIcon, Loader2, X } from "lucide-react";
 import { createElement, Suspense, lazy, useCallback, useState } from "react";
 import type { RefCallback } from "react";
 import ReactMarkdown from "react-markdown";
