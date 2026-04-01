@@ -29,7 +29,8 @@ export function readLastSessionPreferences(
 	fallbackModel: string | null,
 ): { model: string | null; effort: EffortLevel } {
 	const storedModel = readStorage(LAST_MODEL_KEY);
-	const model = storedModel && models.some((entry) => entry.id === storedModel) ? storedModel : fallbackModel;
+	const model =
+		storedModel && models.some((entry) => entry.id === storedModel) ? storedModel : fallbackModel;
 	const effort =
 		normalizeEffortLevel(model, parseEffortLevel(readStorage(LAST_EFFORT_KEY)), models) ??
 		getDefaultEffortLevel(model, models) ??
@@ -48,7 +49,9 @@ export function writeLastSessionPreferences(
 		}
 		window.localStorage.setItem(
 			LAST_EFFORT_KEY,
-			normalizeEffortLevel(model, effort, models) ?? getDefaultEffortLevel(model, models) ?? "medium",
+			normalizeEffortLevel(model, effort, models) ??
+				getDefaultEffortLevel(model, models) ??
+				"medium",
 		);
 	} catch {}
 }

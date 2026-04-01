@@ -605,7 +605,7 @@ async function dispatchApiRequest(request: Request, timeoutController?: RequestT
 	if (request.method === "POST" && url.pathname === "/api/sessions") {
 		const payload = await readJson<CreateSessionInput>(request);
 		await validateCreateSessionInput(payload);
-			const session = await sessionBroker.createSession(payload);
+		const session = await sessionBroker.createSession(payload);
 		return Response.json({ session }, { status: 201 });
 	}
 

@@ -16,6 +16,7 @@ All notable changes to shelleport are documented here.
 - Session stats badges now use shorter token labels and compact million-scale formatting instead of repeating the metric name in both columns (#68) (thanks @kesava500)
 - Session header and composer divider lines are removed for a cleaner chat layout (#69) (thanks @kesava500)
 - Transcript bubbles now use the lighter borderless message treatment from the latest chat polish pass (#73) (thanks @kesava500)
+- Voice input now stays available outside HTTPS with a clear secure-context hint, and dev worker loading no longer breaks local transcription startup (#76) (thanks @kesava500)
 
 ## 0.0.30 - 2026-03-30
 
