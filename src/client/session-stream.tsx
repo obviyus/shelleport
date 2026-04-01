@@ -595,6 +595,10 @@ function getLanguageFromFileName(fileName: string) {
 		case "sh":
 		case "zsh":
 			return "bash";
+		case "log":
+		case "text":
+		case "txt":
+			return "text";
 		case "yml":
 			return "yaml";
 		default:
@@ -1407,62 +1411,62 @@ function ToolCard({
 					) : null}
 				</summary>
 				<div className="mb-1 mt-0.5 overflow-hidden rounded-md border border-foreground/10 bg-card/90">
-				{hasOutput ? (
-					isDiffStat ? (
-						<DiffStatBlock text={content} />
-					) : (
-						<>
-							<div className="flex items-center justify-between border-b border-foreground/10 px-3 py-1.5 text-xs text-muted-foreground">
-								<span>{fileName}</span>
-								<div className="flex items-center gap-2">
-									{strippedRead && strippedRead.matched > 0 && (
-										<span>starts at line {strippedRead.firstLineNumber}</span>
-									)}
-									<CopyButton text={output} className="size-5" />
-								</div>
-							</div>
-							<div className="group/tool-code tool-code-view relative">
-								{shouldRenderCode ? (
-									<>
-										<LazyCodeFile content={content} fileName={fileName} language={language} />
-										<div className="sticky bottom-2 float-right -mt-8 mr-1.5 opacity-0 transition group-hover/tool-code:opacity-100">
-											<CopyButton text={output} className="size-7 bg-card/95 shadow-sm" />
-										</div>
-									</>
-								) : (
-									<div className="px-3 py-1.5 text-xs text-muted-foreground">
-										Open to load preview
+					{hasOutput ? (
+						isDiffStat ? (
+							<DiffStatBlock text={content} />
+						) : (
+							<>
+								<div className="flex items-center justify-between border-b border-foreground/10 px-3 py-1.5 text-xs text-muted-foreground">
+									<span>{fileName}</span>
+									<div className="flex items-center gap-2">
+										{strippedRead && strippedRead.matched > 0 && (
+											<span>starts at line {strippedRead.firstLineNumber}</span>
+										)}
+										<CopyButton text={output} className="size-5" />
 									</div>
-								)}
-							</div>
-						</>
-					)
-				) : (
-					<p className="px-3 py-1.5 text-xs text-muted-foreground">No output</p>
-				)}
-			</div>
-		</details>
-		{/* Mobile: full-width approval buttons below the tool card, always visible */}
-		{pendingRequest && onRespond && (
-			<div className="flex gap-2 py-1.5 pl-5 md:hidden">
-				<button
-					type="button"
-					onClick={() => onRespond(pendingRequest.id, { decision: "allow" })}
-					className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/10 text-[11px] font-medium text-emerald-600 transition active:bg-emerald-500/25"
-				>
-					<CircleCheck className="size-3.5" />
-					Approve
-				</button>
-				<button
-					type="button"
-					onClick={() => onRespond(pendingRequest.id, { decision: "deny" })}
-					className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 text-[11px] font-medium text-red-600 transition active:bg-red-500/25"
-				>
-					<CircleX className="size-3.5" />
-					Deny
-				</button>
-			</div>
-		)}
+								</div>
+								<div className="group/tool-code tool-code-view relative">
+									{shouldRenderCode ? (
+										<>
+											<LazyCodeFile content={content} fileName={fileName} language={language} />
+											<div className="sticky bottom-2 float-right -mt-8 mr-1.5 opacity-0 transition group-hover/tool-code:opacity-100">
+												<CopyButton text={output} className="size-7 bg-card/95 shadow-sm" />
+											</div>
+										</>
+									) : (
+										<div className="px-3 py-1.5 text-xs text-muted-foreground">
+											Open to load preview
+										</div>
+									)}
+								</div>
+							</>
+						)
+					) : (
+						<p className="px-3 py-1.5 text-xs text-muted-foreground">No output</p>
+					)}
+				</div>
+			</details>
+			{/* Mobile: full-width approval buttons below the tool card, always visible */}
+			{pendingRequest && onRespond && (
+				<div className="flex gap-2 py-1.5 pl-5 md:hidden">
+					<button
+						type="button"
+						onClick={() => onRespond(pendingRequest.id, { decision: "allow" })}
+						className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/10 text-[11px] font-medium text-emerald-600 transition active:bg-emerald-500/25"
+					>
+						<CircleCheck className="size-3.5" />
+						Approve
+					</button>
+					<button
+						type="button"
+						onClick={() => onRespond(pendingRequest.id, { decision: "deny" })}
+						className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 text-[11px] font-medium text-red-600 transition active:bg-red-500/25"
+					>
+						<CircleX className="size-3.5" />
+						Deny
+					</button>
+				</div>
+			)}
 		</div>
 	);
 }
