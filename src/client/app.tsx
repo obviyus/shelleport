@@ -1,4 +1,4 @@
-import { Agentation } from "agentation";
+import { lazy, Suspense } from "react";
 import { AppShell } from "~/client/app-shell";
 import type { AppBootData } from "~/client/boot";
 import { ToastProvider } from "~/client/components/toast";
@@ -6,9 +6,20 @@ import { LoginPage } from "~/client/login-page";
 import { NotFoundPage } from "~/client/not-found-page";
 import { useCurrentRoute } from "~/client/router";
 
+const enableAgentation = process.env.NODE_ENV !== "production";
 const isLocalBrowser =
 	typeof window !== "undefined" &&
 	(window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost");
+const AgentationOverlay = enableAgentation
+	? lazy(async () => {
+			const { Agentation } = await import("agentation");
+			return {
+				default: function AgentationOverlayInner() {
+					return <Agentation endpoint="http://localhost:4747" />;
+				},
+			};
+		})
+	: null;
 
 export function App({ boot }: { boot: AppBootData }) {
 	const route = useCurrentRoute();
@@ -28,7 +39,11 @@ export function App({ boot }: { boot: AppBootData }) {
 	return (
 		<ToastProvider>
 			<AppShell boot={boot} />
-			{isLocalBrowser && <Agentation endpoint="http://localhost:4747" />}
+			{AgentationOverlay && isLocalBrowser ? (
+				<Suspense fallback={null}>
+					<AgentationOverlay />
+				</Suspense>
+			) : null}
 		</ToastProvider>
 	);
 }
