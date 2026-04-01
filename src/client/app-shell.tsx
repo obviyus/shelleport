@@ -3097,7 +3097,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 															isSessionBusy,
 															canAttach,
 														)}
-														className="min-h-[48px] md:min-h-[64px] w-full resize-none bg-transparent px-3.5 py-3 text-base leading-[1.6] text-foreground outline-none placeholder:text-muted-foreground md:text-xs"
+														className="min-h-[76px] md:min-h-[64px] w-full resize-none bg-transparent px-3.5 py-3 text-base leading-[1.6] text-foreground outline-none placeholder:text-muted-foreground md:text-xs"
 													/>
 													<div className="flex items-center justify-between px-1.5 pb-0.5">
 														<div className="flex items-center gap-1.5">
