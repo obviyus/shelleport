@@ -764,7 +764,9 @@ export function SessionLauncher({
 										className="flex h-7 items-center gap-1 rounded-md border border-foreground/10 bg-card/90 px-2 text-[10px] text-foreground/70 transition active:bg-accent"
 									>
 										<Settings2 className="size-3" />
-										<ChevronDown className={`size-3 transition-transform ${showMobileOptions ? "rotate-180" : ""}`} />
+										<ChevronDown
+											className={`size-3 transition-transform ${showMobileOptions ? "rotate-180" : ""}`}
+										/>
 									</button>
 								</div>
 							)}
@@ -774,7 +776,9 @@ export function SessionLauncher({
 								<div className="space-y-2 rounded-md border border-foreground/8 bg-card/40 p-2.5">
 									{createProviders.length > 1 && (
 										<div className="space-y-1">
-											<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">Provider</p>
+											<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+												Provider
+											</p>
 											<div className="flex flex-wrap gap-1.5">
 												{createProviders.map((provider) => (
 													<button
@@ -796,7 +800,9 @@ export function SessionLauncher({
 
 									{/* Project */}
 									<div className="space-y-1">
-										<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">Project</p>
+										<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+											Project
+										</p>
 										<div className="flex flex-wrap gap-1.5">
 											<button
 												type="button"
@@ -850,7 +856,9 @@ export function SessionLauncher({
 
 									{/* Title */}
 									<div className="space-y-1">
-										<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">Title</p>
+										<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+											Title
+										</p>
 										<input
 											type="text"
 											value={title}
@@ -864,7 +872,9 @@ export function SessionLauncher({
 									{/* Effort */}
 									{effortLevels.length > 0 && (
 										<div className="space-y-1">
-											<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">Effort</p>
+											<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+												Effort
+											</p>
 											<div className="flex flex-wrap gap-1.5">
 												{effortLevels.map((level) => (
 													<button
@@ -887,7 +897,9 @@ export function SessionLauncher({
 									{/* Permissions */}
 									{showsPermissionMode && (
 										<div className="space-y-1">
-											<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">Permissions</p>
+											<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+												Permissions
+											</p>
 											<div className="flex gap-1.5">
 												<button
 													type="button"
@@ -917,7 +929,9 @@ export function SessionLauncher({
 
 									{/* System prompt */}
 									<div className="space-y-1">
-										<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">System prompt</p>
+										<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+											System prompt
+										</p>
 										<textarea
 											value={systemPrompt}
 											onChange={(event) => setSystemPrompt(event.target.value)}
@@ -933,7 +947,9 @@ export function SessionLauncher({
 					)}
 
 					{/* Desktop config grid */}
-					<div className={`mt-3 grid-cols-1 md:grid-cols-[1fr_1fr] gap-x-4 gap-y-2.5 ${isMobile ? "hidden" : "grid"}`}>
+					<div
+						className={`mt-3 grid-cols-1 md:grid-cols-[1fr_1fr] gap-x-4 gap-y-2.5 ${isMobile ? "hidden" : "grid"}`}
+					>
 						{createProviders.length > 1 && (
 							<div className="space-y-1.5">
 								<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
@@ -1318,7 +1334,10 @@ export function SessionLauncher({
 
 			{/* Mobile sticky bottom create bar */}
 			{isMobile && (
-				<div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 px-3 backdrop-blur-sm" style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}>
+				<div
+					className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 px-3 backdrop-blur-sm"
+					style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+				>
 					<div className="flex items-center gap-3 pt-3">
 						<div className="min-w-0 flex-1">
 							<div className="flex items-center gap-1.5">
