@@ -301,6 +301,38 @@ function readCodexError(errorValue: unknown) {
 	return readString(nestedError?.message) ?? "Codex app-server request failed";
 }
 
+function createCodexThreadRequest(session: HostSession) {
+	const baseParams = {
+		approvalPolicy: getCodexApprovalPolicy(session.permissionMode),
+		cwd: session.cwd,
+		model: session.model ?? undefined,
+		persistExtendedHistory: false,
+		sandbox: getCodexSandboxMode(session.permissionMode),
+	};
+
+	if (session.providerSessionRef) {
+		return {
+			method: "thread/resume",
+			params: {
+				...baseParams,
+				threadId: session.providerSessionRef,
+			},
+		} as const;
+	}
+
+	return {
+		method: "thread/start",
+		params: {
+			...baseParams,
+			experimentalRawEvents: false,
+		},
+	} as const;
+}
+
+function createCodexRequestDecision(decision: RequestResponsePayload["decision"]) {
+	return decision === "allow" ? "accept" : "decline";
+}
+
 function mapCodexCommandCall(item: CodexJsonObject): ProviderAdapterEvent {
 	const command = readString(item.command) ?? "";
 	const cwd = readString(item.cwd) ?? "";
@@ -1390,27 +1422,8 @@ async function initializeCodexSession(liveSession: CodexLiveSession, session: Ho
 	});
 	sendCodexNotification(liveSession, "initialized");
 
-	const result = await sendCodexRequest(
-		liveSession,
-		session.providerSessionRef ? "thread/resume" : "thread/start",
-		session.providerSessionRef
-			? {
-					approvalPolicy: getCodexApprovalPolicy(session.permissionMode),
-					cwd: session.cwd,
-					model: session.model ?? undefined,
-					persistExtendedHistory: false,
-					sandbox: getCodexSandboxMode(session.permissionMode),
-					threadId: session.providerSessionRef,
-				}
-			: {
-					approvalPolicy: getCodexApprovalPolicy(session.permissionMode),
-					cwd: session.cwd,
-					experimentalRawEvents: false,
-					model: session.model ?? undefined,
-					persistExtendedHistory: false,
-					sandbox: getCodexSandboxMode(session.permissionMode),
-				},
-	);
+	const threadRequest = createCodexThreadRequest(session);
+	const result = await sendCodexRequest(liveSession, threadRequest.method, threadRequest.params);
 	const thread = readCodexResponseThread(result);
 	liveSession.threadId = thread.threadId;
 	liveSession.model = thread.model ?? liveSession.model;
@@ -1602,16 +1615,12 @@ export class CodexProviderAdapter implements ProviderAdapter {
 
 		liveSession.pendingRequests.delete(requestId);
 
-		if (pendingRequest.method === "item/commandExecution/requestApproval") {
+		if (
+			pendingRequest.method === "item/commandExecution/requestApproval" ||
+			pendingRequest.method === "item/fileChange/requestApproval"
+		) {
 			sendCodexResponse(liveSession, pendingRequest.id, {
-				decision: input.decision === "allow" ? "accept" : "decline",
-			});
-			return;
-		}
-
-		if (pendingRequest.method === "item/fileChange/requestApproval") {
-			sendCodexResponse(liveSession, pendingRequest.id, {
-				decision: input.decision === "allow" ? "accept" : "decline",
+				decision: createCodexRequestDecision(input.decision),
 			});
 			return;
 		}
