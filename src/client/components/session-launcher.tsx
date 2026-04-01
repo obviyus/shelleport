@@ -487,7 +487,8 @@ export function SessionLauncher({
 	}, [models, selectedEffort, selectedModel]);
 
 	useEffect(() => {
-		const fallbackModel = models.find((model) => model.id === "sonnet")?.id ?? models[0]?.id ?? null;
+		const fallbackModel =
+			models.find((model) => model.id === "sonnet")?.id ?? models[0]?.id ?? null;
 		const nextPreferences = readLastSessionPreferences(models, fallbackModel);
 		setSelectedModel(nextPreferences.model);
 		setSelectedEffort(nextPreferences.effort);
@@ -694,8 +695,7 @@ export function SessionLauncher({
 									title: title.trim(),
 									permissionMode,
 									model: selectedModel ?? undefined,
-									effort:
-										normalizeEffortLevel(selectedModel, selectedEffort, models) ?? undefined,
+									effort: normalizeEffortLevel(selectedModel, selectedEffort, models) ?? undefined,
 									systemPrompt: systemPrompt.trim() || undefined,
 									projectId: projectIdToUse ?? undefined,
 								});

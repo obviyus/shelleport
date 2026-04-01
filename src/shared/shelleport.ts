@@ -55,7 +55,7 @@ const BASIC_EFFORT_LEVELS: EffortLevel[] = ["low", "medium", "high"];
 const OPUS_EFFORT_LEVELS: EffortLevel[] = [...BASIC_EFFORT_LEVELS, "max"];
 
 function getProviderModel(models: ProviderModel[] | undefined, modelId: string | null) {
-	return modelId ? models?.find((model) => model.id === modelId) ?? null : null;
+	return modelId ? (models?.find((model) => model.id === modelId) ?? null) : null;
 }
 
 export function getSupportedEffortLevels(

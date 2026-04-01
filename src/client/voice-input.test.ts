@@ -67,7 +67,7 @@ describe("createVoiceSession", () => {
 			const err = cb.states.find((s) => s.status === "error");
 			expect(err).toBeDefined();
 			expect((err as Extract<VoiceInputState, { status: "error" }>).message).toBe(
-				"Voice input requires HTTPS or localhost",
+				"Voice input requires HTTPS. Try: tailscale serve --bg <port>",
 			);
 		});
 	});

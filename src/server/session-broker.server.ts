@@ -293,8 +293,7 @@ async function consumeProviderRun(
 				const detail = sessionStore.getSessionDetail(sessionId);
 				const pendingRequest =
 					detail?.pendingRequests.find(
-						(request) =>
-							request.status === "pending" && request.data.requestId === event.requestId,
+						(request) => request.status === "pending" && request.data.requestId === event.requestId,
 					) ?? null;
 
 				if (!pendingRequest) {

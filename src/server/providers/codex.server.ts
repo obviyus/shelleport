@@ -69,12 +69,10 @@ type CodexLiveSession = {
 };
 
 const activeCodexSessions = new Map<string, CodexLiveSession>();
-let codexModelCache:
-	| {
-			expiresAt: number;
-			models: ProviderModel[];
-	  }
-	| null = null;
+let codexModelCache: {
+	expiresAt: number;
+	models: ProviderModel[];
+} | null = null;
 let codexModelRequest: Promise<ProviderModel[]> | null = null;
 
 const codexCapabilities: ProviderCapabilities = {
@@ -235,7 +233,9 @@ function createCodexTurnStream(): CodexTurnStream {
 }
 
 function buildCodexTextInput(prompt: string, attachments: SessionAttachment[]) {
-	const workspaceFiles = attachments.filter((attachment) => !attachment.contentType.startsWith("image/"));
+	const workspaceFiles = attachments.filter(
+		(attachment) => !attachment.contentType.startsWith("image/"),
+	);
 
 	if (workspaceFiles.length === 0) {
 		return prompt.trim();
@@ -688,7 +688,9 @@ function buildCodexPendingRequest(
 			const cwd = readString(request.params.cwd);
 			const reason = readString(request.params.reason);
 			const target =
-				command && cwd ? `Allow Codex to run \`${command}\` in ${cwd}?` : "Allow Codex to run this command?";
+				command && cwd
+					? `Allow Codex to run \`${command}\` in ${cwd}?`
+					: "Allow Codex to run this command?";
 
 			return {
 				type: "pending-request",
@@ -705,7 +707,9 @@ function buildCodexPendingRequest(
 		}
 		case "item/fileChange/requestApproval": {
 			const reason = readString(request.params.reason);
-			const prompt = reason ? `Allow Codex to apply this patch? ${reason}` : "Allow Codex to apply this patch?";
+			const prompt = reason
+				? `Allow Codex to apply this patch? ${reason}`
+				: "Allow Codex to apply this patch?";
 
 			return {
 				type: "pending-request",
@@ -1254,13 +1258,7 @@ function handleCodexItemCompleted(liveSession: CodexLiveSession, params: CodexJs
 	const itemType = readString(item.type);
 
 	if (itemId && itemType === "agentMessage") {
-		flushCodexCompletedText(
-			liveSession,
-			itemId,
-			"assistant",
-			readString(item.text) ?? "",
-			item,
-		);
+		flushCodexCompletedText(liveSession, itemId, "assistant", readString(item.text) ?? "", item);
 	}
 
 	if (itemId && itemType === "reasoning") {
@@ -1272,13 +1270,7 @@ function handleCodexItemCompleted(liveSession: CodexLiveSession, params: CodexJs
 			.map((part) => readString(part))
 			.filter((part): part is string => part !== null)
 			.join("");
-		flushCodexCompletedText(
-			liveSession,
-			itemId,
-			"thinking",
-			summaryText || contentText,
-			item,
-		);
+		flushCodexCompletedText(liveSession, itemId, "thinking", summaryText || contentText, item);
 	}
 
 	const event = mapCodexItemCompleted(item);

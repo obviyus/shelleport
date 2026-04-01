@@ -51,9 +51,11 @@ function getOrCreateVoiceWorker() {
 		return voiceWorker;
 	}
 
-	const worker = new Worker(new URL("./voice-input.worker.ts", import.meta.url), {
-		type: "module",
-	});
+	const workerUrl = new URL("./voice-input.worker.ts", import.meta.url);
+	const worker = new Worker(
+		workerUrl.protocol === "file:" ? "/src/client/voice-input.worker.ts" : workerUrl,
+		{ type: "module" },
+	);
 
 	worker.addEventListener("message", (event: MessageEvent<VoiceWorkerResponse>) => {
 		const message = event.data;
@@ -148,7 +150,7 @@ export function createVoiceSession(callbacks: { onStateChange: (state: VoiceInpu
 	async function start() {
 		try {
 			if (!navigator.mediaDevices?.getUserMedia) {
-				throw new Error("Voice input requires HTTPS or localhost");
+				throw new Error("Voice input requires HTTPS. Try: tailscale serve --bg <port>");
 			}
 
 			const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -180,14 +182,16 @@ export function createVoiceSession(callbacks: { onStateChange: (state: VoiceInpu
 
 			callbacks.onStateChange({ status: "loading-model", progress: 0 });
 
+			let recording = false;
 			const pipelineReady = getOrCreatePipeline((progress) => {
-				if (!cancelled) {
+				if (!cancelled && !recording) {
 					callbacks.onStateChange({ status: "loading-model", progress });
 				}
 			});
 			void pipelineReady.catch(() => {});
 
 			mediaRecorder.start();
+			recording = true;
 			callbacks.onStateChange({ status: "recording", startTime: Date.now() });
 
 			return {

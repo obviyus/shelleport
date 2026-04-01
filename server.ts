@@ -840,7 +840,7 @@ const securityHeaders: Record<string, string> = {
 	"Referrer-Policy": "strict-origin-when-cross-origin",
 	"Permissions-Policy": "camera=(), microphone=(self), geolocation=()",
 	"Content-Security-Policy":
-		"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://*.huggingface.co; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+		"default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://*.huggingface.co https://cdn.jsdelivr.net; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; worker-src 'self' blob:",
 };
 
 function applySecurityHeaders(response: Response) {
@@ -864,6 +864,26 @@ export async function createServerFetchHandler() {
 			if (url.pathname.startsWith("/api/")) {
 				const { handleApiRequest } = await loadApiModule();
 				return applySecurityHeaders(await handleApiRequest(request, timeoutController));
+			}
+
+			if (isDevelopment && url.pathname === "/src/client/voice-input.worker.ts") {
+				const result = await Bun.build({
+					entrypoints: [join(projectRoot, "src/client/voice-input.worker.ts")],
+					target: "browser",
+					format: "esm",
+				});
+				const output = result.outputs[0];
+				if (!output) {
+					return applySecurityHeaders(new Response("Worker build failed", { status: 500 }));
+				}
+				return applySecurityHeaders(
+					new Response(output.stream(), {
+						headers: {
+							"Content-Type": "application/javascript",
+							"Cache-Control": "no-store",
+						},
+					}),
+				);
 			}
 
 			if (url.pathname === "/health") {

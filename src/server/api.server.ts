@@ -165,7 +165,6 @@ function validateSystemPrompt(systemPrompt: unknown) {
 		);
 	}
 }
-
 async function validateEffortForModel(
 	providerId: CreateSessionInput["provider"],
 	model: string | null,
@@ -311,7 +310,11 @@ async function validateMetaInput(
 	);
 
 	if (!hasField) {
-		throw new ApiError(400, "invalid_session_meta", "title, pinned, model, or effort is required");
+		throw new ApiError(
+			400,
+			"invalid_session_meta",
+			"title, pinned, model, effort, or systemPrompt is required",
+		);
 	}
 }
 
@@ -602,7 +605,7 @@ async function dispatchApiRequest(request: Request, timeoutController?: RequestT
 	if (request.method === "POST" && url.pathname === "/api/sessions") {
 		const payload = await readJson<CreateSessionInput>(request);
 		await validateCreateSessionInput(payload);
-			const session = await sessionBroker.createSession(payload);
+		const session = await sessionBroker.createSession(payload);
 		return Response.json({ session }, { status: 201 });
 	}
 

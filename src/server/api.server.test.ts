@@ -1131,9 +1131,7 @@ describe("handleApiRequest", () => {
 
 		expect(detail.session.providerSessionRef).toBe("fake-codex-thread");
 		expect(
-			detail.events.some(
-				(event) => event.kind === "text" && event.data.role === "thinking",
-			),
+			detail.events.some((event) => event.kind === "text" && event.data.role === "thinking"),
 		).toBe(true);
 		expect(detail.session.usage).toMatchObject({
 			inputTokens: 6,
@@ -1236,8 +1234,7 @@ describe("handleApiRequest", () => {
 		expect(detail.pendingRequests.every((request) => request.status !== "pending")).toBe(true);
 		expect(
 			detail.events.some(
-				(event) =>
-					event.kind === "tool-result" && event.data.output === "tests passed",
+				(event) => event.kind === "tool-result" && event.data.output === "tests passed",
 			),
 		).toBe(true);
 	});

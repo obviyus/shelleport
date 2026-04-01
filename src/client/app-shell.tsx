@@ -1285,11 +1285,7 @@ export function getFirstRunReadiness(providers: ProviderSummary[]) {
 	};
 }
 
-function getComposerPlaceholder(
-	providerLabel: string,
-	isBusy: boolean,
-	canAttach: boolean,
-) {
+function getComposerPlaceholder(providerLabel: string, isBusy: boolean, canAttach: boolean) {
 	if (isBusy) {
 		return `${providerLabel} is working... press Enter to queue`;
 	}
@@ -1484,7 +1480,9 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const createProvider =
 		(createProviderId
 			? creatableProviders.find((provider) => provider.id === createProviderId)
-			: null) ?? creatableProviders[0] ?? null;
+			: null) ??
+		creatableProviders[0] ??
+		null;
 	const createDisabledReason =
 		createProvider !== null
 			? null
@@ -1503,7 +1501,6 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const systemPromptDraft = isEditingSystemPrompt ? systemPromptEdit.systemPrompt : "";
 	const editingQueuedInputId = queuedInputEdit?.id ?? null;
 	const queuedInputDraft = queuedInputEdit?.prompt ?? "";
-	const canUseVoiceInput = typeof window !== "undefined" && window.isSecureContext;
 	const isVoiceBusy = voiceState.status === "loading-model" || voiceState.status === "transcribing";
 	const activeVoiceSession = voiceState.status === "recording" ? voiceSessionRef.current : null;
 	const isVoiceRecording = activeVoiceSession !== null;
@@ -2121,8 +2118,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const handleChangeModel = useCallback(
 		async (session: HostSession, model: string, models: ProviderModel[]) => {
 			const effort =
-				normalizeEffortLevel(model, session.effort, models) ??
-				getDefaultEffortLevel(model, models);
+				normalizeEffortLevel(model, session.effort, models) ?? getDefaultEffortLevel(model, models);
 
 			try {
 				await applySessionMetaUpdate(
@@ -3108,9 +3104,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 																		<Loader2 className="size-3.5 animate-spin" />
 																	</button>
 																</>
-															) : prompt.trim().length > 0 ||
-															  draftAttachments.length > 0 ||
-															  !canUseVoiceInput ? (
+															) : prompt.trim().length > 0 || draftAttachments.length > 0 ? (
 																<button
 																	type="button"
 																	onClick={() => void handleSend()}
@@ -3182,7 +3176,8 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 														<X className="size-3 text-destructive/80" />
 													)}
 													<span>
-														{provider.label} {provider.status === "ready" ? "ready" : "needs attention"}
+														{provider.label}{" "}
+														{provider.status === "ready" ? "ready" : "needs attention"}
 													</span>
 												</div>
 											))}
