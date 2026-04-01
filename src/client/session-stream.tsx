@@ -1293,7 +1293,7 @@ function ToolApprovalActions({
 					</p>
 				</div>
 			)}
-			<div className="flex shrink-0 items-center gap-1">
+			<div className={`shrink-0 items-center gap-1 ${compact ? "hidden md:flex" : "flex"}`}>
 				<button
 					type="button"
 					onClick={(event) => {
@@ -1363,49 +1363,50 @@ function ToolCard({
 	const strippedRead = call.data.toolName === "Read" ? stripReadLineNumbers(output) : null;
 
 	return (
-		<details
-			className="animate-event-enter group ml-[18px] md:ml-[22px]"
-			onToggle={(event) => {
-				if (event.currentTarget.open) {
-					setShouldRenderCode(true);
-				}
-			}}
-		>
-			<summary className="flex list-none items-center gap-2 py-1 transition hover:bg-accent/30">
-				<ChevronRight className="size-2.5 shrink-0 text-muted-foreground transition group-open:rotate-90" />
-				<button
-					type="button"
-					className="flex min-w-0 flex-1 items-center gap-2 text-left"
-					onClick={(event) => {
-						const details = event.currentTarget.closest("details");
-						if (!(details instanceof HTMLDetailsElement)) {
-							return;
-						}
-						details.open = !details.open;
-						if (details.open) {
-							setShouldRenderCode(true);
-						}
-					}}
-				>
-					<span className="text-xs font-medium text-sky-300 shrink-0">
-						{call.data.toolName as string}
-					</span>
-					{isRunning ? (
-						<Loader2 className="size-3 shrink-0 animate-spin text-muted-foreground" />
-					) : result?.data.isError ? (
-						<CircleX className="size-3 shrink-0 text-red-400/80" />
-					) : (
-						<CircleCheck className="size-3 shrink-0 text-emerald-400/80" />
-					)}
-					<span className="min-w-0 truncate text-xs text-muted-foreground">
-						{getToolPreview(call)}
-					</span>
-				</button>
-				{pendingRequest && onRespond ? (
-					<ToolApprovalActions request={pendingRequest} onRespond={onRespond} compact />
-				) : null}
-			</summary>
-			<div className="mb-1 mt-0.5 overflow-hidden rounded-md border border-foreground/10 bg-card/90">
+		<div className="animate-event-enter ml-[18px] md:ml-[22px]">
+			<details
+				className="group"
+				onToggle={(event) => {
+					if (event.currentTarget.open) {
+						setShouldRenderCode(true);
+					}
+				}}
+			>
+				<summary className="flex list-none items-center gap-2 py-1 transition hover:bg-accent/30">
+					<ChevronRight className="size-2.5 shrink-0 text-muted-foreground transition group-open:rotate-90" />
+					<button
+						type="button"
+						className="flex min-w-0 flex-1 items-center gap-2 text-left"
+						onClick={(event) => {
+							const details = event.currentTarget.closest("details");
+							if (!(details instanceof HTMLDetailsElement)) {
+								return;
+							}
+							details.open = !details.open;
+							if (details.open) {
+								setShouldRenderCode(true);
+							}
+						}}
+					>
+						<span className="text-xs font-medium text-sky-300 shrink-0">
+							{call.data.toolName as string}
+						</span>
+						{isRunning ? (
+							<Loader2 className="size-3 shrink-0 animate-spin text-muted-foreground" />
+						) : result?.data.isError ? (
+							<CircleX className="size-3 shrink-0 text-red-400/80" />
+						) : (
+							<CircleCheck className="size-3 shrink-0 text-emerald-400/80" />
+						)}
+						<span className="min-w-0 truncate text-xs text-muted-foreground">
+							{getToolPreview(call)}
+						</span>
+					</button>
+					{pendingRequest && onRespond ? (
+						<ToolApprovalActions request={pendingRequest} onRespond={onRespond} compact />
+					) : null}
+				</summary>
+				<div className="mb-1 mt-0.5 overflow-hidden rounded-md border border-foreground/10 bg-card/90">
 				{hasOutput ? (
 					isDiffStat ? (
 						<DiffStatBlock text={content} />
@@ -1441,6 +1442,28 @@ function ToolCard({
 				)}
 			</div>
 		</details>
+		{/* Mobile: full-width approval buttons below the tool card, always visible */}
+		{pendingRequest && onRespond && (
+			<div className="flex gap-2 py-1.5 pl-5 md:hidden">
+				<button
+					type="button"
+					onClick={() => onRespond(pendingRequest.id, { decision: "allow" })}
+					className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/10 text-[11px] font-medium text-emerald-600 transition active:bg-emerald-500/25"
+				>
+					<CircleCheck className="size-3.5" />
+					Approve
+				</button>
+				<button
+					type="button"
+					onClick={() => onRespond(pendingRequest.id, { decision: "deny" })}
+					className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 text-[11px] font-medium text-red-600 transition active:bg-red-500/25"
+				>
+					<CircleX className="size-3.5" />
+					Deny
+				</button>
+			</div>
+		)}
+		</div>
 	);
 }
 
