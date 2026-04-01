@@ -1,5 +1,6 @@
 {
 	"include": ["**/*", "**/.server/**/*", "**/.client/**/*"],
+	"exclude": ["claude-code-src", ".worktrees"],
 	"compilerOptions": {
 		"lib": ["DOM", "DOM.Iterable", "ES2022"],
 		"types": ["node", "@types/bun"],

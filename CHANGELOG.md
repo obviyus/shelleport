@@ -2,6 +2,17 @@
 
 All notable changes to shelleport are documented here.
 
+## 0.0.32 - 2026-04-01
+
+### Added
+
+- Shelleport now integrates the Codex app server, including provider registration, session lifecycle wiring, approvals, and historical import support for Codex-managed sessions (#77)
+- Claude sessions can now set a per-session system prompt from the launcher or session Actions menu, and changes restart the live Claude process with the appended prompt applied on later turns (#75) (thanks @kesava500)
+
+### Fixed
+
+- Voice input now stays visible outside secure contexts with a clear HTTPS hint, loads its worker correctly in Bun dev mode, allows the required ONNX runtime CSP sources, and no longer drops the recording state when model progress events arrive late (#76) (thanks @kesava500)
+
 ## 0.0.31 - 2026-03-30
 
 ### Added
