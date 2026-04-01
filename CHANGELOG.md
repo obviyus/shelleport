@@ -2,6 +2,19 @@
 
 All notable changes to shelleport are documented here.
 
+## 0.0.33 - 2026-04-01
+
+### Changed
+
+- Frontend dependencies are updated, including `@huggingface/transformers` 4.0.0 for browser-side voice transcription
+
+### Fixed
+
+- Mobile session chrome is tightened across the header, composer, launcher, and tool approval cards, including bottom-sheet actions/stats menus, iOS composer zoom prevention, and launcher scroll-jump fixes
+- Tool result expansion now treats plain-text outputs as `text` and restores diff viewer compatibility with the updated `@pierre/diffs` API
+- Agentation is now excluded from production client bundles instead of shipping behind a runtime localhost-only gate
+- Lint warnings in the transcript and Codex provider paths are resolved, and the session launcher formatting now matches the repo formatter
+
 ## 0.0.32 - 2026-04-01
 
 ### Added
