@@ -522,7 +522,36 @@ function SessionStatsPopover({ badges }: { badges: SessionHeaderBadge[] }) {
 				<Info className="size-3 md:size-2.5" />
 				<span className="hidden md:inline">Stats</span>
 			</button>
-			{open &&
+			{isMobile ? (
+				<Sheet open={open} onOpenChange={setOpen}>
+					<SheetContent
+						side="bottom"
+						showCloseButton={false}
+						className="rounded-t-3xl border-x-0 border-b-0 border-t border-foreground/12 bg-card px-0 pt-2 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] shadow-2xl"
+					>
+						<SheetTitle className="sr-only">Session stats</SheetTitle>
+						<div className="mx-auto mb-2 h-1.5 w-10 rounded-full bg-foreground/15" />
+						<div className="max-h-[70dvh] overflow-y-auto px-4 pb-2">
+							<p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-foreground/68">
+								Session Stats
+							</p>
+							<div className="space-y-2">
+								{badges.map((badge) => (
+									<div key={badge.key} className="flex items-baseline justify-between gap-3">
+										<span className="shrink-0 text-xs uppercase tracking-[0.08em] text-muted-foreground">
+											{badge.key.split(":")[0] ?? badge.label}
+										</span>
+										<span className="truncate text-right text-xs tabular-nums text-foreground/90">
+											{badge.label}
+										</span>
+									</div>
+								))}
+							</div>
+						</div>
+					</SheetContent>
+				</Sheet>
+			) : (
+				open &&
 				createPortal(
 					<div
 						ref={dropdownRef}
@@ -546,7 +575,8 @@ function SessionStatsPopover({ badges }: { badges: SessionHeaderBadge[] }) {
 						</div>
 					</div>,
 					document.body,
-				)}
+				)
+			)}
 		</>
 	);
 }
