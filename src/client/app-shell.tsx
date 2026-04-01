@@ -1285,6 +1285,22 @@ export function getFirstRunReadiness(providers: ProviderSummary[]) {
 	};
 }
 
+function getComposerPlaceholder(
+	providerLabel: string,
+	isBusy: boolean,
+	canAttach: boolean,
+) {
+	if (isBusy) {
+		return `${providerLabel} is working... press Enter to queue`;
+	}
+
+	if (canAttach) {
+		return `Message ${providerLabel}... attach files or paste images`;
+	}
+
+	return `Message ${providerLabel}... (Enter to send)`;
+}
+
 export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated: true }> }) {
 	const route = useCurrentRoute();
 	const renderRoute =
@@ -2209,6 +2225,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const sessionProvider = sessionView
 		? providers.find((provider) => provider.id === sessionView.provider)
 		: null;
+	const sessionProviderLabel = sessionProvider?.label ?? "Agent";
 	const canAttach = sessionProvider?.capabilities.supportsAttachments === true;
 	const isSessionBusy =
 		sessionView?.status === "running" ||
@@ -2220,6 +2237,10 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const showReconnectIndicator = shouldShowReconnectIndicator(isSessionPending, streamState);
 	const statusMessage = sessionView ? getStatusMessage(sessionView) : null;
 	const firstRunReadiness = getFirstRunReadiness(providers);
+	const managedProviders = useMemo(
+		() => providers.filter((provider) => provider.capabilities.canCreate),
+		[providers],
+	);
 
 	function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
 		if (event.key === "Enter" && !event.shiftKey) {
@@ -3023,13 +3044,11 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 														}}
 														onKeyDown={handleKeyDown}
 														onPaste={handlePaste}
-														placeholder={
-															isSessionBusy
-																? "Claude is working... press Enter to queue"
-																: canAttach
-																	? "Message Claude... attach files or paste images"
-																	: "Message Claude... (Enter to send)"
-														}
+														placeholder={getComposerPlaceholder(
+															sessionProviderLabel,
+															isSessionBusy,
+															canAttach,
+														)}
 														className="min-h-[48px] md:min-h-[64px] w-full resize-none bg-transparent px-3.5 py-3 text-xs leading-[1.6] text-foreground outline-none placeholder:text-muted-foreground"
 													/>
 													<div className="flex items-center justify-between px-1.5 pb-0.5">
@@ -3151,20 +3170,22 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 												Before your first session
 											</h2>
 											<p className="mt-1 text-xs leading-[1.7] text-muted-foreground">
-												Check Claude readiness once, then pick a project directory below.
+												Check managed provider readiness once, then pick a project directory below.
 											</p>
 										</div>
 										<div className="flex flex-col gap-1 text-xs text-muted-foreground">
-											<div className="flex items-center gap-2">
-												{firstRunReadiness.claudeReady ? (
-													<Check className="size-3 text-foreground/80" />
-												) : (
-													<X className="size-3 text-destructive/80" />
-												)}
-												<span>
-													Claude CLI {firstRunReadiness.claudeReady ? "ready" : "needs attention"}
-												</span>
-											</div>
+											{managedProviders.map((provider) => (
+												<div key={provider.id} className="flex items-center gap-2">
+													{provider.status === "ready" ? (
+														<Check className="size-3 text-foreground/80" />
+													) : (
+														<X className="size-3 text-destructive/80" />
+													)}
+													<span>
+														{provider.label} {provider.status === "ready" ? "ready" : "needs attention"}
+													</span>
+												</div>
+											))}
 											<div className="flex items-center gap-2">
 												{firstRunReadiness.canCreateManagedSession ? (
 													<Check className="size-3 text-foreground/80" />
@@ -3178,15 +3199,17 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 											</div>
 										</div>
 									</div>
-									{firstRunReadiness.claudeStatusDetail && (
-										<p className="mt-3 text-xs leading-[1.7] text-muted-foreground">
-											{firstRunReadiness.claudeStatusDetail}
-										</p>
-									)}
+									{managedProviders
+										.filter((provider) => provider.statusDetail)
+										.map((provider) => (
+											<p
+												key={provider.id}
+												className="mt-3 text-xs leading-[1.7] text-muted-foreground"
+											>
+												{provider.label}: {provider.statusDetail}
+											</p>
+										))}
 									<div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
-										<span className="rounded border border-foreground/10 bg-background px-2 py-1 text-foreground/86">
-											claude doctor
-										</span>
 										<span className="rounded border border-foreground/10 bg-background px-2 py-1 text-foreground/86">
 											shelleport doctor
 										</span>
