@@ -225,7 +225,7 @@ function CopyButton({ text, className }: { text: string; className?: string }) {
 			className={`flex items-center justify-center rounded border border-foreground/10 text-muted-foreground transition hover:border-foreground/18 hover:text-foreground ${className ?? "size-6"}`}
 			title="Copy to clipboard"
 		>
-			{copied ? <Check className="size-3" /> : <Copy className="size-3" />}
+			{copied ? <CircleCheck className="size-3" /> : <Copy className="size-3" />}
 		</button>
 	);
 }

@@ -19,6 +19,10 @@ export type ProviderAdapterEvent =
 			providerSessionRef: string;
 	  }
 	| {
+			type: "pending-request-cleared";
+			requestId: string;
+	  }
+	| {
 			type: "host-event";
 			kind: HostEventKind;
 			summary: string;

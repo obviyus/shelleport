@@ -84,6 +84,7 @@ type SessionUsageDetailResponse = {
 
 const testRoot = join(Bun.env.TMPDIR ?? "/tmp", `shelleport-api-${Bun.randomUUIDv7()}`);
 const fakeClaudePath = join(testRoot, "fake-claude.js");
+const fakeCodexPath = join(testRoot, "fake-codex.js");
 const dataDir = join(testRoot, "data");
 const authHeader = { authorization: "Bearer test-token" };
 
@@ -446,8 +447,400 @@ rl.on("line", (line) => {
 `,
 	);
 	await Bun.$`chmod +x ${fakeClaudePath}`.quiet();
+	await Bun.write(
+		fakeCodexPath,
+		`#!/usr/bin/env bun
+const readline = require("node:readline");
+
+const args = process.argv.slice(2);
+
+if (args[0] === "--version") {
+  console.log("codex 0.0.0-test");
+  process.exit(0);
+}
+
+const rl = readline.createInterface({ input: process.stdin });
+const emit = (payload) => console.log(JSON.stringify(payload));
+const notify = (method, params) => emit({ method, params });
+const respond = (id, result) => emit({ id, result });
+
+let threadId = "fake-codex-thread";
+let activeTurnId = null;
+let pendingApprovalId = null;
+let pendingItemId = null;
+let interruptTimer = null;
+
+function createThread() {
+  return {
+    id: threadId,
+    preview: "",
+    ephemeral: false,
+    modelProvider: "openai",
+    createdAt: 1774965391,
+    updatedAt: 1774965391,
+    status: { type: "idle" },
+    path: \`/tmp/\${threadId}.jsonl\`,
+    cwd: process.cwd(),
+    cliVersion: "0.0.0-test",
+    source: "appServer",
+    agentNickname: null,
+    agentRole: null,
+    gitInfo: null,
+    name: null,
+    turns: [],
+  };
+}
+
+function createTurn(status = "inProgress", error = null) {
+  return {
+    id: activeTurnId,
+    items: [],
+    status,
+    error,
+  };
+}
+
+function readPrompt(params) {
+  const input = Array.isArray(params?.input) ? params.input : [];
+  const textEntry = input.find(
+    (entry) =>
+      entry &&
+      typeof entry === "object" &&
+      !Array.isArray(entry) &&
+      entry.type === "text" &&
+      typeof entry.text === "string",
+  );
+  return typeof textEntry?.text === "string" ? textEntry.text : "";
+}
+
+function completeTurn(text) {
+  const reasoningId = \`rs-\${activeTurnId}\`;
+  const messageId = \`msg-\${activeTurnId}\`;
+  notify("item/started", {
+    threadId,
+    turnId: activeTurnId,
+    item: {
+      type: "reasoning",
+      id: reasoningId,
+      summary: [],
+      content: [],
+    },
+  });
+  notify("item/reasoning/summaryTextDelta", {
+    threadId,
+    turnId: activeTurnId,
+    itemId: reasoningId,
+    delta: "Thinking.\\n",
+    summaryIndex: 0,
+  });
+  notify("item/completed", {
+    threadId,
+    turnId: activeTurnId,
+    item: {
+      type: "reasoning",
+      id: reasoningId,
+      summary: ["Thinking.\\n"],
+      content: [],
+    },
+  });
+  notify("item/started", {
+    threadId,
+    turnId: activeTurnId,
+    item: {
+      type: "agentMessage",
+      id: messageId,
+      text: "",
+      phase: "final_answer",
+      memoryCitation: null,
+    },
+  });
+  notify("item/agentMessage/delta", {
+    threadId,
+    turnId: activeTurnId,
+    itemId: messageId,
+    delta: "Echo: ",
+  });
+  notify("item/agentMessage/delta", {
+    threadId,
+    turnId: activeTurnId,
+    itemId: messageId,
+    delta: text,
+  });
+  notify("item/completed", {
+    threadId,
+    turnId: activeTurnId,
+    item: {
+      type: "agentMessage",
+      id: messageId,
+      text: \`Echo: \${text}\`,
+      phase: "final_answer",
+      memoryCitation: null,
+    },
+  });
+  notify("thread/tokenUsage/updated", {
+    threadId,
+    turnId: activeTurnId,
+    tokenUsage: {
+      total: {
+        totalTokens: 10,
+        inputTokens: 6,
+        cachedInputTokens: 1,
+        outputTokens: 3,
+        reasoningOutputTokens: 1,
+      },
+      last: {
+        totalTokens: 10,
+        inputTokens: 6,
+        cachedInputTokens: 1,
+        outputTokens: 3,
+        reasoningOutputTokens: 1,
+      },
+      modelContextWindow: 1000,
+    },
+  });
+  notify("turn/completed", {
+    threadId,
+    turn: createTurn("completed"),
+  });
+  activeTurnId = null;
+}
+
+rl.on("close", () => process.exit(0));
+
+rl.on("line", (line) => {
+  const message = JSON.parse(line);
+
+  if (pendingApprovalId && message.id === pendingApprovalId) {
+    notify("serverRequest/resolved", {
+      threadId,
+      requestId: pendingApprovalId,
+    });
+
+    if (message.result?.decision === "accept") {
+      notify("item/completed", {
+        threadId,
+        turnId: activeTurnId,
+        item: {
+          type: "commandExecution",
+          id: pendingItemId,
+          command: "bun test",
+          cwd: process.cwd(),
+          processId: null,
+          source: "model",
+          status: "completed",
+          commandActions: [],
+          aggregatedOutput: "tests passed",
+          exitCode: 0,
+          durationMs: 12,
+        },
+      });
+      pendingApprovalId = null;
+      pendingItemId = null;
+      completeTurn("Approved.");
+      return;
+    }
+
+    notify("item/completed", {
+      threadId,
+      turnId: activeTurnId,
+      item: {
+        type: "commandExecution",
+        id: pendingItemId,
+        command: "bun test",
+        cwd: process.cwd(),
+        processId: null,
+        source: "model",
+        status: "declined",
+        commandActions: [],
+        aggregatedOutput: "",
+        exitCode: null,
+        durationMs: null,
+      },
+    });
+    notify("turn/completed", {
+      threadId,
+      turn: createTurn("completed"),
+    });
+    pendingApprovalId = null;
+    pendingItemId = null;
+    activeTurnId = null;
+    return;
+  }
+
+  if (message.method === "initialize") {
+    respond(message.id, {
+      userAgent: "fake-codex",
+      codexHome: "/tmp/.codex",
+      platformFamily: "unix",
+      platformOs: "macos",
+    });
+    return;
+  }
+
+  if (message.method === "initialized") {
+    return;
+  }
+
+  if (message.method === "thread/start") {
+    respond(message.id, {
+      thread: createThread(),
+      model: "gpt-5.4",
+      modelProvider: "openai",
+      serviceTier: null,
+      cwd: process.cwd(),
+      approvalPolicy: "on-request",
+      approvalsReviewer: "user",
+      sandbox: {
+        type: "workspaceWrite",
+        writableRoots: [],
+        readOnlyAccess: { type: "fullAccess" },
+        networkAccess: true,
+        excludeTmpdirEnvVar: false,
+        excludeSlashTmp: false,
+      },
+      reasoningEffort: "high",
+    });
+    notify("thread/started", { thread: createThread() });
+    return;
+  }
+
+  if (message.method === "thread/resume") {
+    threadId = message.params?.threadId ?? threadId;
+    respond(message.id, {
+      thread: createThread(),
+      model: "gpt-5.4",
+      modelProvider: "openai",
+      serviceTier: null,
+      cwd: process.cwd(),
+      approvalPolicy: "on-request",
+      approvalsReviewer: "user",
+      sandbox: {
+        type: "workspaceWrite",
+        writableRoots: [],
+        readOnlyAccess: { type: "fullAccess" },
+        networkAccess: true,
+        excludeTmpdirEnvVar: false,
+        excludeSlashTmp: false,
+      },
+      reasoningEffort: "high",
+    });
+    return;
+  }
+
+  if (message.method === "turn/start") {
+    activeTurnId = \`turn-\${Date.now()}\`;
+    respond(message.id, { turn: createTurn("inProgress") });
+    notify("turn/started", { threadId, turn: createTurn("inProgress") });
+    const prompt = readPrompt(message.params);
+
+    if (prompt.includes("need approval")) {
+      pendingApprovalId = \`req-\${activeTurnId}\`;
+      pendingItemId = \`cmd-\${activeTurnId}\`;
+      notify("item/started", {
+        threadId,
+        turnId: activeTurnId,
+        item: {
+          type: "commandExecution",
+          id: pendingItemId,
+          command: "bun test",
+          cwd: process.cwd(),
+          processId: null,
+          source: "model",
+          status: "inProgress",
+          commandActions: [],
+          aggregatedOutput: null,
+          exitCode: null,
+          durationMs: null,
+        },
+      });
+      emit({
+        id: pendingApprovalId,
+        method: "item/commandExecution/requestApproval",
+        params: {
+          threadId,
+          turnId: activeTurnId,
+          itemId: pendingItemId,
+          reason: "Run tests",
+          command: "bun test",
+          cwd: process.cwd(),
+        },
+      });
+      return;
+    }
+
+    if (prompt.includes("interrupt me")) {
+      pendingItemId = \`cmd-\${activeTurnId}\`;
+      notify("item/started", {
+        threadId,
+        turnId: activeTurnId,
+        item: {
+          type: "commandExecution",
+          id: pendingItemId,
+          command: "sleep 30",
+          cwd: process.cwd(),
+          processId: null,
+          source: "model",
+          status: "inProgress",
+          commandActions: [],
+          aggregatedOutput: null,
+          exitCode: null,
+          durationMs: null,
+        },
+      });
+      interruptTimer = setTimeout(() => {
+        interruptTimer = null;
+        notify("item/completed", {
+          threadId,
+          turnId: activeTurnId,
+          item: {
+            type: "commandExecution",
+            id: pendingItemId,
+            command: "sleep 30",
+            cwd: process.cwd(),
+            processId: null,
+            source: "model",
+            status: "completed",
+            commandActions: [],
+            aggregatedOutput: "too late",
+            exitCode: 0,
+            durationMs: 1000,
+          },
+        });
+        notify("turn/completed", {
+          threadId,
+          turn: createTurn("completed"),
+        });
+        pendingItemId = null;
+        activeTurnId = null;
+      }, 1000);
+      return;
+    }
+
+    completeTurn(prompt);
+    return;
+  }
+
+  if (message.method === "turn/interrupt") {
+    if (interruptTimer) {
+      clearTimeout(interruptTimer);
+      interruptTimer = null;
+    }
+
+    respond(message.id, {});
+    notify("turn/completed", {
+      threadId,
+      turn: createTurn("interrupted"),
+    });
+    pendingItemId = null;
+    activeTurnId = null;
+  }
+});
+`,
+	);
+	await Bun.$`chmod +x ${fakeCodexPath}`.quiet();
 
 	Bun.env.SHELLEPORT_CLAUDE_BIN = fakeClaudePath;
+	Bun.env.SHELLEPORT_CODEX_BIN = fakeCodexPath;
 	Bun.env.SHELLEPORT_DATA_DIR = dataDir;
 
 	const auth = await import("~/server/auth.server");
@@ -459,6 +852,7 @@ rl.on("line", (line) => {
 
 afterAll(async () => {
 	delete Bun.env.SHELLEPORT_CLAUDE_BIN;
+	delete Bun.env.SHELLEPORT_CODEX_BIN;
 	delete Bun.env.SHELLEPORT_DATA_DIR;
 });
 
@@ -524,6 +918,33 @@ describe("handleApiRequest", () => {
 		).toBe(true);
 	});
 
+	test("reports Codex managed session support in provider capabilities", async () => {
+		const response = await handleApiRequest(
+			new Request("http://localhost/api/providers", {
+				headers: authHeader,
+			}),
+		);
+		expect(response.status).toBe(200);
+		const body = await readJson<{
+			providers: Array<{
+				capabilities: {
+					canCreate: boolean;
+					supportsApprovals: boolean;
+				};
+				id: string;
+				status: string;
+			}>;
+		}>(response);
+		expect(body.providers.find((provider) => provider.id === "codex")).toMatchObject({
+			id: "codex",
+			status: "ready",
+			capabilities: {
+				canCreate: true,
+				supportsApprovals: true,
+			},
+		});
+	});
+
 	test("rejects managed Claude sessions when the CLI is unavailable", async () => {
 		Bun.env.SHELLEPORT_CLAUDE_BIN = join(testRoot, "missing-claude");
 		try {
@@ -567,6 +988,281 @@ describe("handleApiRequest", () => {
 		} finally {
 			Bun.env.SHELLEPORT_CLAUDE_BIN = fakeClaudePath;
 		}
+	});
+
+	test("streams Codex assistant deltas and records usage", async () => {
+		const createResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "codex",
+					cwd: testRoot,
+				}),
+			}),
+		);
+		expect(createResponse.status).toBe(201);
+		const createBody = await readJson<{ session: { id: string } }>(createResponse);
+		const sessionId = createBody.session.id;
+
+		const streamResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}/events`, {
+				headers: authHeader,
+			}),
+		);
+		expect(streamResponse.status).toBe(200);
+		const reader = streamResponse.body!.getReader();
+		const state = { buffer: "" };
+		const snapshot = await nextSseMessage(reader, state);
+		expect(snapshot.type).toBe("snapshot");
+
+		const formData = new FormData();
+		formData.set("prompt", "hello codex");
+		const inputResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}/input`, {
+				method: "POST",
+				headers: authHeader,
+				body: formData,
+			}),
+		);
+		expect(inputResponse.status).toBe(202);
+
+		const firstDelta = await waitForMessage(
+			reader,
+			state,
+			(message) =>
+				message.type === "event" &&
+				message.payload.kind === "text" &&
+				message.payload.data.role === "assistant" &&
+				message.payload.data.text === "Echo: ",
+		);
+		if (firstDelta.type !== "event") {
+			throw new Error("Expected assistant delta event");
+		}
+
+		const secondDelta = await waitForMessage(
+			reader,
+			state,
+			(message) =>
+				message.type === "event" &&
+				message.payload.kind === "text" &&
+				message.payload.data.role === "assistant" &&
+				message.payload.data.text === "hello codex",
+		);
+		if (secondDelta.type !== "event") {
+			throw new Error("Expected assistant delta event");
+		}
+
+		await waitForMessage(
+			reader,
+			state,
+			(message) => message.type === "session" && message.payload.status === "idle",
+		);
+		reader.releaseLock();
+
+		const detail = sessionBroker.getSessionDetail(sessionId);
+		expect(detail).not.toBeNull();
+		if (!detail) {
+			throw new Error("Expected session detail");
+		}
+
+		expect(detail.session.providerSessionRef).toBe("fake-codex-thread");
+		expect(
+			detail.events.some(
+				(event) => event.kind === "text" && event.data.role === "thinking",
+			),
+		).toBe(true);
+		expect(detail.session.usage).toMatchObject({
+			inputTokens: 6,
+			outputTokens: 4,
+			cacheReadInputTokens: 1,
+			cacheCreationInputTokens: 0,
+			costUsd: null,
+			model: "gpt-5.4",
+		});
+	});
+
+	test("handles Codex approval requests inline", async () => {
+		const createResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "codex",
+					cwd: testRoot,
+				}),
+			}),
+		);
+		expect(createResponse.status).toBe(201);
+		const createBody = await readJson<{ session: { id: string } }>(createResponse);
+		const sessionId = createBody.session.id;
+
+		const streamResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}/events`, {
+				headers: authHeader,
+			}),
+		);
+		expect(streamResponse.status).toBe(200);
+		const reader = streamResponse.body!.getReader();
+		const state = { buffer: "" };
+		await nextSseMessage(reader, state);
+
+		const formData = new FormData();
+		formData.set("prompt", "need approval");
+		const inputResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}/input`, {
+				method: "POST",
+				headers: authHeader,
+				body: formData,
+			}),
+		);
+		expect(inputResponse.status).toBe(202);
+
+		const approvalMessage = await waitForMessage(
+			reader,
+			state,
+			(message) => message.type === "request" && message.payload.kind === "approval",
+		);
+		if (approvalMessage.type !== "request") {
+			throw new Error("Expected approval request");
+		}
+		expect(approvalMessage.payload.data.toolUseId).toContain("cmd-");
+
+		const approvalResponse = await handleApiRequest(
+			new Request(`http://localhost/api/requests/${approvalMessage.payload.id}/respond`, {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					decision: "allow",
+				}),
+			}),
+		);
+		expect(approvalResponse.status).toBe(200);
+
+		const toolResultMessage = await waitForMessage(
+			reader,
+			state,
+			(message) =>
+				message.type === "event" &&
+				message.payload.kind === "tool-result" &&
+				message.payload.data.output === "tests passed",
+		);
+		if (toolResultMessage.type !== "event") {
+			throw new Error("Expected tool result");
+		}
+
+		await waitForMessage(
+			reader,
+			state,
+			(message) => message.type === "session" && message.payload.status === "idle",
+		);
+		reader.releaseLock();
+
+		const detail = sessionBroker.getSessionDetail(sessionId);
+		expect(detail).not.toBeNull();
+		if (!detail) {
+			throw new Error("Expected session detail");
+		}
+
+		expect(detail.pendingRequests.every((request) => request.status !== "pending")).toBe(true);
+		expect(
+			detail.events.some(
+				(event) =>
+					event.kind === "tool-result" && event.data.output === "tests passed",
+			),
+		).toBe(true);
+	});
+
+	test("interrupts Codex turns through app-server control", async () => {
+		const createResponse = await handleApiRequest(
+			new Request("http://localhost/api/sessions", {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "codex",
+					cwd: testRoot,
+				}),
+			}),
+		);
+		expect(createResponse.status).toBe(201);
+		const createBody = await readJson<{ session: { id: string } }>(createResponse);
+		const sessionId = createBody.session.id;
+
+		const streamResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}/events`, {
+				headers: authHeader,
+			}),
+		);
+		expect(streamResponse.status).toBe(200);
+		const reader = streamResponse.body!.getReader();
+		const state = { buffer: "" };
+		await nextSseMessage(reader, state);
+
+		const formData = new FormData();
+		formData.set("prompt", "interrupt me");
+		const inputResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}/input`, {
+				method: "POST",
+				headers: authHeader,
+				body: formData,
+			}),
+		);
+		expect(inputResponse.status).toBe(202);
+
+		await waitForMessage(
+			reader,
+			state,
+			(message) =>
+				message.type === "event" &&
+				message.payload.kind === "tool-call" &&
+				message.payload.data.toolName === "Bash",
+		);
+
+		const interruptResponse = await handleApiRequest(
+			new Request(`http://localhost/api/sessions/${sessionId}/control`, {
+				method: "POST",
+				headers: {
+					...authHeader,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					action: "interrupt",
+				}),
+			}),
+		);
+		expect(interruptResponse.status).toBe(200);
+
+		await waitForMessage(
+			reader,
+			state,
+			(message) => message.type === "session" && message.payload.status === "interrupted",
+		);
+		reader.releaseLock();
+
+		const detail = sessionBroker.getSessionDetail(sessionId);
+		expect(detail).not.toBeNull();
+		if (!detail) {
+			throw new Error("Expected session detail");
+		}
+
+		expect(detail.session.status).toBe("interrupted");
+		expect(
+			detail.events.some(
+				(event) => event.kind === "system" && event.summary === "Session interrupted",
+			),
+		).toBe(true);
 	});
 
 	test("persists create-session prompts in session history", async () => {

@@ -83,6 +83,7 @@ import {
 	type PendingRequest,
 	type PermissionMode,
 	type Project,
+	type ProviderId,
 	type ProviderLimitState,
 	type ProviderModel,
 	type ProviderSummary,
@@ -1448,7 +1449,20 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 			),
 		[providers],
 	);
-	const createProvider = creatableProviders[0] ?? null;
+	const [createProviderId, setCreateProviderId] = useState<ProviderId | null>(null);
+	useEffect(() => {
+		setCreateProviderId((current) => {
+			if (current && creatableProviders.some((provider) => provider.id === current)) {
+				return current;
+			}
+
+			return creatableProviders[0]?.id ?? null;
+		});
+	}, [creatableProviders]);
+	const createProvider =
+		(createProviderId
+			? creatableProviders.find((provider) => provider.id === createProviderId)
+			: null) ?? creatableProviders[0] ?? null;
 	const createDisabledReason =
 		createProvider !== null
 			? null
@@ -3155,14 +3169,16 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 							</div>
 						)}
 						<SessionLauncher
-							key={`${boot.defaultCwd}:${createProvider?.id ?? "none"}`}
+							key={boot.defaultCwd}
 							createDisabledReason={createDisabledReason}
 							createLabel={createProvider?.label ?? "managed"}
 							createProviderId={createProvider?.id ?? null}
+							createProviders={creatableProviders}
 							defaultPath={boot.defaultCwd}
 							isCreating={isCreating}
 							models={createProvider?.models ?? []}
 							onCreate={handleCreateSession}
+							onCreateProviderChange={setCreateProviderId}
 							projects={projects}
 							onProjectCreated={(project) => setProjects((prev) => [...prev, project])}
 						/>
