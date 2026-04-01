@@ -826,6 +826,171 @@ function SessionActionsPopover({
 
 		setOpen(!open);
 	}
+
+	const actionItems = (
+		<>
+			<button
+				type="button"
+				onClick={() => {
+					onPin(session.id, !session.pinned);
+					setOpen(false);
+				}}
+				className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+			>
+				<Pin className="size-3.5" />
+				{session.pinned ? "Unpin" : "Pin"}
+			</button>
+			<button
+				type="button"
+				onClick={() => {
+					onArchive(session.id, !session.archived);
+					setOpen(false);
+				}}
+				className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+			>
+				{session.archived ? (
+					<ArchiveRestore className="size-3.5" />
+				) : (
+					<Archive className="size-3.5" />
+				)}
+				{session.archived ? "Unarchive" : "Archive"}
+			</button>
+			<button
+				type="button"
+				onClick={() => {
+					onRename();
+					setOpen(false);
+				}}
+				className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+			>
+				<Pencil className="size-3.5" />
+				Rename
+			</button>
+			{canEditSystemPrompt && (
+				<button
+					type="button"
+					onClick={() => {
+						onEditSystemPrompt();
+						setOpen(false);
+					}}
+					className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+				>
+					<FileText className="size-3.5" />
+					{session.systemPrompt ? "Edit system prompt" : "Add system prompt"}
+				</button>
+			)}
+			<button
+				type="button"
+				onClick={() => {
+					onToggleThinking();
+					setOpen(false);
+				}}
+				className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+			>
+				{hideThinking ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
+				{hideThinking ? "Show thinking" : "Hide thinking"}
+			</button>
+			{!isMobile && (
+				<button
+					type="button"
+					onClick={() => {
+						onToggleFileBrowser();
+						setOpen(false);
+					}}
+					className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+				>
+					<FolderTree className="size-3.5" />
+					{fileBrowserOpen ? "Close file browser" : "Browse files"}
+				</button>
+			)}
+			{stream.length > 0 && (
+				<>
+					<div className="my-1 border-t border-foreground/8" />
+					<p className="px-2.5 py-1 text-xs uppercase tracking-[0.12em] text-muted-foreground">
+						Export
+					</p>
+					<button
+						type="button"
+						onClick={() => {
+							onCopy();
+							setOpen(false);
+						}}
+						className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+					>
+						{copiedConversation ? (
+							<Check className="size-3.5" />
+						) : (
+							<ClipboardCopy className="size-3.5" />
+						)}
+						{copiedConversation ? "Copied" : "Copy to clipboard"}
+					</button>
+					<button
+						type="button"
+						onClick={() => {
+							onExportMarkdown();
+							setOpen(false);
+						}}
+						className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+					>
+						<FileDown className="size-3.5" />
+						Export as Markdown
+					</button>
+					<button
+						type="button"
+						onClick={() => {
+							onExportJson();
+							setOpen(false);
+						}}
+						className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+					>
+						<FileDown className="size-3.5" />
+						Export as JSON
+					</button>
+				</>
+			)}
+			{projects.length > 0 && (
+				<>
+					<div className="my-1 border-t border-foreground/8" />
+					<p className="px-2.5 py-1 text-xs uppercase tracking-[0.12em] text-muted-foreground">
+						Move to project
+					</p>
+					<button
+						type="button"
+						onClick={() => {
+							onMoveProject(null);
+							setOpen(false);
+						}}
+						className={`flex w-full items-center gap-2.5 rounded px-2.5 py-1.5 text-xs text-left transition ${
+							session.projectId === null
+								? "bg-accent text-foreground"
+								: "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+						}`}
+					>
+						None
+					</button>
+					{projects.map((project) => (
+						<button
+							key={project.id}
+							type="button"
+							onClick={() => {
+								onMoveProject(project.id);
+								setOpen(false);
+							}}
+							className={`flex w-full items-center gap-2.5 rounded px-2.5 py-1.5 text-xs text-left transition ${
+								session.projectId === project.id
+									? "bg-accent text-foreground"
+									: "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+							}`}
+						>
+							<Folder className="size-3" />
+							{project.name}
+						</button>
+					))}
+				</>
+			)}
+		</>
+	);
+
 	return (
 		<>
 			<button
@@ -837,174 +1002,31 @@ function SessionActionsPopover({
 			>
 				<EllipsisVertical className="size-4 md:size-3.5" />
 			</button>
-			{open &&
+			{isMobile ? (
+				<Sheet open={open} onOpenChange={setOpen}>
+					<SheetContent
+						side="bottom"
+						showCloseButton={false}
+						className="rounded-t-3xl border-x-0 border-b-0 border-t border-foreground/12 bg-card px-0 pt-2 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] shadow-2xl"
+					>
+						<SheetTitle className="sr-only">Session actions</SheetTitle>
+						<div className="mx-auto mb-2 h-1.5 w-10 rounded-full bg-foreground/15" />
+						<div className="max-h-[70dvh] overflow-y-auto px-3 pb-2">{actionItems}</div>
+					</SheetContent>
+				</Sheet>
+			) : (
+				open &&
 				createPortal(
 					<div
 						ref={dropdownRef}
 						style={{ top: pos.top, right: pos.right, left: isMobile ? 8 : "auto" }}
 						className="fixed z-[9999] min-w-[180px] max-w-[260px] rounded-md border border-foreground/12 bg-card p-1 shadow-lg"
 					>
-						<button
-							type="button"
-							onClick={() => {
-								onPin(session.id, !session.pinned);
-								setOpen(false);
-							}}
-							className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-						>
-							<Pin className="size-3.5" />
-							{session.pinned ? "Unpin" : "Pin"}
-						</button>
-						<button
-							type="button"
-							onClick={() => {
-								onArchive(session.id, !session.archived);
-								setOpen(false);
-							}}
-							className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-						>
-							{session.archived ? (
-								<ArchiveRestore className="size-3.5" />
-							) : (
-								<Archive className="size-3.5" />
-							)}
-							{session.archived ? "Unarchive" : "Archive"}
-						</button>
-						<button
-							type="button"
-							onClick={() => {
-								onRename();
-								setOpen(false);
-							}}
-							className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-						>
-							<Pencil className="size-3.5" />
-							Rename
-						</button>
-						{canEditSystemPrompt && (
-							<button
-								type="button"
-								onClick={() => {
-									onEditSystemPrompt();
-									setOpen(false);
-								}}
-								className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-							>
-								<FileText className="size-3.5" />
-								{session.systemPrompt ? "Edit system prompt" : "Add system prompt"}
-							</button>
-						)}
-						<button
-							type="button"
-							onClick={() => {
-								onToggleThinking();
-							}}
-							className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-						>
-							{hideThinking ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
-							{hideThinking ? "Show thinking" : "Hide thinking"}
-						</button>
-						{!isMobile && (
-							<button
-								type="button"
-								onClick={() => {
-									onToggleFileBrowser();
-									setOpen(false);
-								}}
-								className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-							>
-								<FolderTree className="size-3.5" />
-								{fileBrowserOpen ? "Close file browser" : "Browse files"}
-							</button>
-						)}
-						{stream.length > 0 && (
-							<>
-								<div className="my-1 border-t border-foreground/8" />
-								<p className="px-2.5 py-1 text-xs uppercase tracking-[0.12em] text-muted-foreground">
-									Export
-								</p>
-								<button
-									type="button"
-									onClick={() => {
-										onCopy();
-										setOpen(false);
-									}}
-									className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-								>
-									{copiedConversation ? (
-										<Check className="size-3.5" />
-									) : (
-										<ClipboardCopy className="size-3.5" />
-									)}
-									{copiedConversation ? "Copied" : "Copy to clipboard"}
-								</button>
-								<button
-									type="button"
-									onClick={() => {
-										onExportMarkdown();
-										setOpen(false);
-									}}
-									className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-								>
-									<FileDown className="size-3.5" />
-									Export as Markdown
-								</button>
-								<button
-									type="button"
-									onClick={() => {
-										onExportJson();
-										setOpen(false);
-									}}
-									className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-								>
-									<FileDown className="size-3.5" />
-									Export as JSON
-								</button>
-							</>
-						)}
-						{projects.length > 0 && (
-							<>
-								<div className="my-1 border-t border-foreground/8" />
-								<p className="px-2.5 py-1 text-xs uppercase tracking-[0.12em] text-muted-foreground">
-									Move to project
-								</p>
-								<button
-									type="button"
-									onClick={() => {
-										onMoveProject(null);
-										setOpen(false);
-									}}
-									className={`flex w-full items-center gap-2.5 rounded px-2.5 py-1.5 text-xs text-left transition ${
-										session.projectId === null
-											? "bg-accent text-foreground"
-											: "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-									}`}
-								>
-									None
-								</button>
-								{projects.map((project) => (
-									<button
-										key={project.id}
-										type="button"
-										onClick={() => {
-											onMoveProject(project.id);
-											setOpen(false);
-										}}
-										className={`flex w-full items-center gap-2.5 rounded px-2.5 py-1.5 text-xs text-left transition ${
-											session.projectId === project.id
-												? "bg-accent text-foreground"
-												: "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-										}`}
-									>
-										<Folder className="size-3" />
-										{project.name}
-									</button>
-								))}
-							</>
-						)}
+						{actionItems}
 					</div>,
 					document.body,
-				)}
+				)
+			)}
 		</>
 	);
 }
@@ -1134,9 +1156,9 @@ function SessionStatusBadge({
 
 	if (reconnecting) {
 		return (
-			<div className="flex items-center gap-1.5 rounded border border-amber-500/25 bg-amber-500/8 px-2 py-1">
+			<div className="flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded border border-amber-500/25 bg-amber-500/8 px-0 py-1 md:min-h-0 md:min-w-0 md:px-2">
 				<Loader2 className="size-2.5 animate-spin text-amber-400/80" />
-				<span className="hidden sm:inline text-xs text-amber-300/80">Reconnecting…</span>
+				<span className="hidden md:inline text-xs text-amber-300/80">Reconnecting…</span>
 			</div>
 		);
 	}
@@ -1145,13 +1167,13 @@ function SessionStatusBadge({
 
 	return (
 		<div
-			className={`flex items-center gap-1.5 rounded border px-2 py-1 ${
+			className={`flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded border px-0 py-1 md:min-h-0 md:min-w-0 md:px-2 ${
 				isActive ? "border-emerald-500/25 bg-emerald-500/8" : "border-foreground/12"
 			}`}
 		>
 			<StatusDot status={session.status} />
 			<span
-				className={`hidden sm:inline text-xs ${
+				className={`hidden md:inline text-xs ${
 					isActive ? "text-emerald-300" : "text-muted-foreground"
 				}`}
 			>
@@ -1159,14 +1181,14 @@ function SessionStatusBadge({
 			</span>
 			{modelLabel && (
 				<>
-					<span className="hidden sm:inline text-foreground/20">·</span>
-					<span className="hidden sm:inline text-xs text-muted-foreground">{modelLabel}</span>
+					<span className="hidden md:inline text-foreground/20">·</span>
+					<span className="hidden md:inline text-xs text-muted-foreground">{modelLabel}</span>
 				</>
 			)}
 			{effortLabel && (
 				<>
-					<span className="hidden sm:inline text-foreground/20">·</span>
-					<span className="hidden sm:inline text-xs text-muted-foreground">{effortLabel}</span>
+					<span className="hidden md:inline text-foreground/20">·</span>
+					<span className="hidden md:inline text-xs text-muted-foreground">{effortLabel}</span>
 				</>
 			)}
 		</div>
@@ -3045,7 +3067,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 															isSessionBusy,
 															canAttach,
 														)}
-														className="min-h-[48px] md:min-h-[64px] w-full resize-none bg-transparent px-3.5 py-3 text-xs leading-[1.6] text-foreground outline-none placeholder:text-muted-foreground"
+														className="min-h-[48px] md:min-h-[64px] w-full resize-none bg-transparent px-3.5 py-3 text-base leading-[1.6] text-foreground outline-none placeholder:text-muted-foreground md:text-xs"
 													/>
 													<div className="flex items-center justify-between px-1.5 pb-0.5">
 														<div className="flex items-center gap-1.5">
