@@ -48,7 +48,7 @@ export const LazyEditDiff = lazy(async () => {
 			{ name: oldPath, contents: oldContents },
 			{ name: newPath, contents: newContents },
 		);
-		const diff = useFileDiffInstance({
+		const fileDiffInstanceProps = {
 			fileDiff,
 			options: { theme: "github-dark" },
 			lineAnnotations: [],
@@ -57,7 +57,8 @@ export const LazyEditDiff = lazy(async () => {
 			hasGutterRenderUtility: false,
 			hasCustomHeader: false,
 			disableWorkerPool: false,
-		});
+		};
+		const diff = useFileDiffInstance(fileDiffInstanceProps);
 		return createElement("diffs-container" as "div", {
 			ref: ((node) => diff.ref(node)) as RefCallback<HTMLDivElement>,
 		});
@@ -206,7 +207,15 @@ export async function copyToClipboard(text: string) {
 	document.body.removeChild(ta);
 }
 
-function CopyButton({ text, className }: { text: string; className?: string }) {
+function CopyButton({
+	text,
+	className,
+	title = "Copy to clipboard",
+}: {
+	text: string;
+	className?: string;
+	title?: string;
+}) {
 	const [copied, setCopied] = useState(false);
 
 	const handleCopy = useCallback(() => {
@@ -221,11 +230,66 @@ function CopyButton({ text, className }: { text: string; className?: string }) {
 			type="button"
 			onClick={handleCopy}
 			className={`flex items-center justify-center rounded border border-foreground/10 text-muted-foreground transition hover:border-foreground/18 hover:text-foreground ${className ?? "size-6"}`}
-			title="Copy to clipboard"
+			title={title}
+			aria-label={title}
 		>
 			{copied ? <CircleCheck className="size-3" /> : <Copy className="size-3" />}
 		</button>
 	);
+}
+
+function HoverCopyButton({
+	text,
+	title,
+	className,
+	mobileVisible = false,
+	align = "end",
+}: {
+	text: string;
+	title: string;
+	className?: string;
+	mobileVisible?: boolean;
+	align?: "start" | "end";
+}) {
+	if (text.length === 0) {
+		return null;
+	}
+
+	const visibilityClassName = mobileVisible
+		? "flex md:flex md:pointer-events-auto md:opacity-100"
+		: "hidden md:flex md:pointer-events-none md:opacity-0 md:group-hover:pointer-events-auto md:group-hover:opacity-100 md:focus-within:pointer-events-auto md:focus-within:opacity-100";
+
+	return (
+		<div
+			className={`mt-1.5 ${align === "start" ? "justify-start" : "justify-end"} transition ${visibilityClassName}`}
+		>
+			<CopyButton
+				text={text}
+				title={title}
+				className={className ?? "size-7 bg-background/92 shadow-sm backdrop-blur-sm"}
+			/>
+		</div>
+	);
+}
+
+function supportsTapToRevealCopyButton() {
+	if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+		return false;
+	}
+
+	return window.matchMedia("(hover: none), (pointer: coarse)").matches;
+}
+
+function shouldToggleMobileCopyButton(target: EventTarget | null) {
+	if (!supportsTapToRevealCopyButton()) {
+		return false;
+	}
+
+	if (!(target instanceof Element)) {
+		return true;
+	}
+
+	return target.closest("a, button, input, textarea, select, summary") === null;
 }
 
 function getToolPreview(event: HostEvent): string {
@@ -1201,6 +1265,8 @@ export function GroupedEntryRenderer({
 }
 
 function UserMessageRenderer({ event }: { event: HostEvent }) {
+	const text = readString(event.data.text);
+	const [showMobileCopyButton, setShowMobileCopyButton] = useState(false);
 	const attachments = Array.isArray(event.data.attachments)
 		? event.data.attachments.filter(
 				(attachment): attachment is { contentType: string; name: string; path?: string } =>
@@ -1212,11 +1278,20 @@ function UserMessageRenderer({ event }: { event: HostEvent }) {
 		: [];
 
 	return (
-		<div className="animate-event-enter group mb-4 flex justify-end">
-			<div className="max-w-[90%]">
-				<div className="overflow-hidden rounded-lg bg-foreground/[0.07]">
+		<div className="animate-event-enter mb-4 flex justify-end">
+			<div className="group max-w-[90%]">
+				<div
+					className="overflow-hidden rounded-lg bg-foreground/[0.07] md:cursor-auto"
+					onClick={(event) => {
+						if (!shouldToggleMobileCopyButton(event.target) || text.length === 0) {
+							return;
+						}
+
+						setShowMobileCopyButton((current) => !current);
+					}}
+				>
 					<div className="px-4 py-3 text-sm leading-[1.8] text-foreground/92">
-						<MarkdownMessage text={readString(event.data.text)} />
+						<MarkdownMessage text={text} />
 					</div>
 					{attachments.length > 0 && (
 						<div className="border-t border-foreground/8 bg-background/30 px-4 py-2">
@@ -1233,6 +1308,7 @@ function UserMessageRenderer({ event }: { event: HostEvent }) {
 						</div>
 					)}
 				</div>
+				<HoverCopyButton text={text} title="Copy message" mobileVisible={showMobileCopyButton} />
 			</div>
 		</div>
 	);
@@ -1470,16 +1546,33 @@ function ToolCard({
 }
 
 function AssistantTextBlock({ label, text }: { label: string | null; text: string }) {
+	const [showMobileCopyButton, setShowMobileCopyButton] = useState(false);
+
 	return (
-		<div className="animate-event-enter mb-4">
+		<div className="animate-event-enter group mb-4">
 			{label && (
 				<div className="mb-1 px-1 text-xs uppercase tracking-[0.14em] text-muted-foreground">
 					{label}
 				</div>
 			)}
-			<div className="px-1 py-1 text-sm leading-[1.8] text-foreground/92">
+			<div
+				className="px-1 py-1 text-sm leading-[1.8] text-foreground/92 md:cursor-auto"
+				onClick={(event) => {
+					if (!shouldToggleMobileCopyButton(event.target) || text.length === 0) {
+						return;
+					}
+
+					setShowMobileCopyButton((current) => !current);
+				}}
+			>
 				<MarkdownMessage text={text} />
 			</div>
+			<HoverCopyButton
+				text={text}
+				title="Copy response"
+				mobileVisible={showMobileCopyButton}
+				align="start"
+			/>
 		</div>
 	);
 }
