@@ -54,6 +54,56 @@ function getEffortLevels(modelId: string | null, models: ProviderModel[]) {
 	return EFFORT_LEVELS.filter((level) => supportedLevels.includes(level.id));
 }
 
+const MODEL_SELECT_CLASS =
+	"h-7 w-full cursor-pointer appearance-none rounded-md border border-foreground/10 bg-card/90 py-0 pl-2.5 pr-8 text-[10px] text-foreground outline-none transition focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14";
+
+function ModelPickerSelect({
+	id,
+	models,
+	selectedModel,
+	onPick,
+}: {
+	id?: string;
+	models: ProviderModel[];
+	selectedModel: string | null;
+	onPick: (modelId: string) => void;
+}) {
+	const value =
+		models.length === 0
+			? ""
+			: (models.find((model) => model.id === selectedModel)?.id ?? models[0]!.id);
+
+	if (models.length === 0) {
+		return (
+			<div className="flex h-7 items-center rounded-md border border-dashed border-foreground/12 bg-card/40 px-2.5 text-[10px] text-muted-foreground">
+				CLI default model
+			</div>
+		);
+	}
+
+	return (
+		<div className="relative">
+			<select
+				id={id}
+				value={value}
+				aria-label={id ? undefined : "Model"}
+				onChange={(event) => onPick(event.target.value)}
+				className={MODEL_SELECT_CLASS}
+			>
+				{models.map((model) => (
+					<option key={model.id} value={model.id}>
+						{model.label}
+					</option>
+				))}
+			</select>
+			<ChevronDown
+				aria-hidden="true"
+				className="pointer-events-none absolute top-1/2 right-2.5 size-3 -translate-y-1/2 text-muted-foreground"
+			/>
+		</div>
+	);
+}
+
 type SessionLauncherProps = {
 	createDisabledReason: string | null;
 	createLabel: string;
@@ -453,6 +503,7 @@ export function SessionLauncher({
 }: SessionLauncherProps) {
 	const { showToast } = useToast();
 	const titleInputId = useId();
+	const modelSelectId = useId();
 	const [title, setTitle] = useState("");
 	const [currentPath, setCurrentPath] = useState(defaultPath);
 	const [activeColumnPath, setActiveColumnPath] = useState(defaultPath);
@@ -483,7 +534,18 @@ export function SessionLauncher({
 	const [saveAsProjectName, setSaveAsProjectName] = useState("");
 	const [systemPrompt, setSystemPrompt] = useState("");
 	const [showMobileOptions, setShowMobileOptions] = useState(false);
+	const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
 	const effortLevels = getEffortLevels(selectedModel, models);
+
+	function pickModel(modelId: string) {
+		setSelectedModel(modelId);
+		setSelectedEffort(
+			(current) =>
+				normalizeEffortLevel(modelId, current, models) ??
+				getDefaultEffortLevel(modelId, models) ??
+				"medium",
+		);
+	}
 
 	useEffect(() => {
 		writeLastSessionPreferences(selectedModel, selectedEffort, models);
@@ -688,12 +750,20 @@ export function SessionLauncher({
 			}
 		}
 
+		const resolvedModelId =
+			models.length === 0
+				? null
+				: (models.find((model) => model.id === selectedModel)?.id ?? models[0]?.id ?? null);
+
 		await onCreate({
 			cwd: currentPath,
 			title: title.trim(),
 			permissionMode,
-			model: selectedModel ?? undefined,
-			effort: normalizeEffortLevel(selectedModel, selectedEffort, models) ?? undefined,
+			model: resolvedModelId ?? undefined,
+			effort:
+				resolvedModelId === null
+					? undefined
+					: (normalizeEffortLevel(resolvedModelId, selectedEffort, models) ?? undefined),
 			systemPrompt: systemPrompt.trim() || undefined,
 			projectId: projectIdToUse ?? undefined,
 		});
@@ -701,14 +771,14 @@ export function SessionLauncher({
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:overflow-hidden">
-			<div className="border-b border-border px-3 md:px-6 py-3">
-				<div className="mx-auto w-full max-w-[110rem]">
-					<div className="flex items-center justify-between gap-4">
+			<div className="border-b border-border flex flex-wrap px-3 py-2 md:px-6">
+				<div className="mx-auto flex min-w-0 w-full max-w-[110rem] flex-col gap-2">
+					<div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-x-4 gap-y-2">
 						<div className="min-w-0">
 							<p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-foreground/68">
 								New Session
 							</p>
-							<h1 className="mt-1 text-sm font-medium tracking-[-0.02em] text-foreground">
+							<h1 className="mt-0.5 text-sm font-medium tracking-[-0.02em] text-foreground">
 								Pick a workspace. Launch from the path itself.
 							</h1>
 						</div>
@@ -717,7 +787,7 @@ export function SessionLauncher({
 							type="button"
 							onClick={handleCreate}
 							disabled={isCreating || createDisabledReason !== null}
-							className="hidden md:flex h-8 shrink-0 items-center gap-1.5 rounded-md bg-foreground px-3 text-[11px] font-medium text-background transition hover:bg-foreground/90 focus-visible:ring-2 focus-visible:ring-foreground/20 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-30"
+							className="hidden h-8 min-w-[14rem] shrink-0 items-center justify-center gap-1.5 rounded-md bg-foreground px-3 text-[11px] font-medium text-background transition hover:bg-foreground/90 focus-visible:ring-2 focus-visible:ring-foreground/20 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-30 md:flex"
 						>
 							{isCreating ? (
 								<Loader2 aria-hidden="true" className="size-3 animate-spin" />
@@ -730,46 +800,26 @@ export function SessionLauncher({
 
 					{/* Mobile: inline model selector + options toggle */}
 					{isMobile && (
-						<div className="mt-2.5 space-y-2">
-							{/* Model chips always visible on mobile */}
-							{models.length > 0 && (
-								<div className="flex items-center gap-2">
-									<div className="flex flex-1 flex-wrap gap-1.5">
-										{models.map((model) => (
-											<button
-												key={model.id}
-												type="button"
-												onClick={() => {
-													setSelectedModel(model.id);
-													setSelectedEffort(
-														(current) =>
-															normalizeEffortLevel(model.id, current, models) ??
-															getDefaultEffortLevel(model.id, models) ??
-															"medium",
-													);
-												}}
-												className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
-													selectedModel === model.id
-														? "border-foreground/20 bg-foreground text-background"
-														: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
-												}`}
-											>
-												{model.label}
-											</button>
-										))}
-									</div>
-									<button
-										type="button"
-										onClick={() => setShowMobileOptions((v) => !v)}
-										className="flex h-7 items-center gap-1 rounded-md border border-foreground/10 bg-card/90 px-2 text-[10px] text-foreground/70 transition active:bg-accent"
-									>
-										<Settings2 className="size-3" />
-										<ChevronDown
-											className={`size-3 transition-transform ${showMobileOptions ? "rotate-180" : ""}`}
-										/>
-									</button>
+						<div className="mt-1.5 space-y-1.5">
+							<div className="flex items-center gap-2">
+								<div className="min-w-0 flex-1">
+									<ModelPickerSelect
+										models={models}
+										selectedModel={selectedModel}
+										onPick={pickModel}
+									/>
 								</div>
-							)}
+								<button
+									type="button"
+									onClick={() => setShowMobileOptions((v) => !v)}
+									className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-foreground/10 bg-card/90 px-2 text-[10px] text-foreground/70 transition active:bg-accent"
+								>
+									<Settings2 className="size-3" />
+									<ChevronDown
+										className={`size-3 transition-transform ${showMobileOptions ? "rotate-180" : ""}`}
+									/>
+								</button>
+							</div>
 
 							{/* Collapsible options on mobile */}
 							{showMobileOptions && (
@@ -870,12 +920,12 @@ export function SessionLauncher({
 									</div>
 
 									{/* Effort */}
-									{effortLevels.length > 0 && (
-										<div className="space-y-1">
-											<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
-												Effort
-											</p>
-											<div className="flex flex-wrap gap-1.5">
+									<div className="space-y-1">
+										<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+											Effort
+										</p>
+										{effortLevels.length > 0 ? (
+											<div className="flex min-h-7 flex-wrap content-start gap-1.5">
 												{effortLevels.map((level) => (
 													<button
 														key={level.id}
@@ -891,8 +941,12 @@ export function SessionLauncher({
 													</button>
 												))}
 											</div>
-										</div>
-									)}
+										) : (
+											<p className="min-h-7 text-[10px] leading-7 text-muted-foreground">
+												Not configurable for this provider
+											</p>
+										)}
+									</div>
 
 									{/* Permissions */}
 									{showsPermissionMode && (
@@ -946,12 +1000,12 @@ export function SessionLauncher({
 						</div>
 					)}
 
-					{/* Desktop config grid */}
+					{/* Desktop: essentials first; effort / permissions / prompt behind toggle */}
 					<div
-						className={`mt-3 grid-cols-1 md:grid-cols-[1fr_1fr] gap-x-4 gap-y-2.5 ${isMobile ? "hidden" : "grid"}`}
+						className={`mt-1.5 grid-cols-1 md:grid-cols-[1fr_1fr] gap-x-3 gap-y-2 md:items-start ${isMobile ? "hidden" : "grid"}`}
 					>
 						{createProviders.length > 1 && (
-							<div className="space-y-1.5">
+							<div className="space-y-1">
 								<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
 									Provider
 								</p>
@@ -975,7 +1029,7 @@ export function SessionLauncher({
 						)}
 
 						{/* Row 1: Project */}
-						<div className="space-y-1.5">
+						<div className="space-y-1">
 							<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
 								Project
 							</p>
@@ -1080,7 +1134,7 @@ export function SessionLauncher({
 						</div>
 
 						{/* Row 1 right: Title */}
-						<div className="space-y-1.5">
+						<div className="space-y-1">
 							<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
 								Title
 							</p>
@@ -1096,117 +1150,126 @@ export function SessionLauncher({
 							/>
 						</div>
 
-						{/* Row 2: Model */}
-						{models.length > 0 && (
-							<div className="space-y-1.5">
-								<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
-									Model
-								</p>
-								<div className="flex flex-wrap gap-1.5">
-									{models.map((model) => (
-										<button
-											key={model.id}
-											type="button"
-											onClick={() => {
-												setSelectedModel(model.id);
-												setSelectedEffort(
-													(current) =>
-														normalizeEffortLevel(model.id, current, models) ??
-														getDefaultEffortLevel(model.id, models) ??
-														"medium",
-												);
-											}}
-											className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
-												selectedModel === model.id
-													? "border-foreground/20 bg-foreground text-background"
-													: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
-											}`}
-										>
-											{model.label}
-										</button>
-									))}
-								</div>
-							</div>
-						)}
-
-						{/* Row 2.5: Effort (only shown for non-haiku models) */}
-						{effortLevels.length > 0 && (
-							<div className="space-y-1.5">
-								<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
-									Effort
-								</p>
-								<div className="flex flex-wrap gap-1.5">
-									{effortLevels.map((level) => (
-										<button
-											key={level.id}
-											type="button"
-											onClick={() => setSelectedEffort(level.id)}
-											className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
-												selectedEffort === level.id
-													? "border-foreground/20 bg-foreground text-background"
-													: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
-											}`}
-										>
-											{level.label}
-										</button>
-									))}
-								</div>
-							</div>
-						)}
-
-						{/* Row 2 right: Permissions */}
-						{showsPermissionMode && (
-							<div className="space-y-1.5">
-								<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
-									Permissions
-								</p>
-								<div className="flex gap-1.5">
-									<button
-										type="button"
-										onClick={() => setPermissionMode("bypassPermissions")}
-										className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
-											permissionMode === "bypassPermissions"
-												? "border-foreground/20 bg-foreground text-background"
-												: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
-										}`}
-										title="Recommended. Runs best in shelleport."
-									>
-										Bypass
-									</button>
-									<button
-										type="button"
-										onClick={() => setPermissionMode("default")}
-										className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
-											permissionMode === "default"
-												? "border-foreground/20 bg-foreground text-background"
-												: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
-										}`}
-										title="Available, but prompts do not work especially well yet."
-									>
-										Ask for approvals
-									</button>
-								</div>
-							</div>
-						)}
-
-						{/* System prompt (right column) */}
-						<div className="space-y-1.5">
-							<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
-								System prompt
-							</p>
-							<textarea
-								value={systemPrompt}
-								onChange={(event) => setSystemPrompt(event.target.value)}
-								placeholder="Custom instructions for this session…"
-								rows={2}
-								maxLength={10000}
-								className="w-full resize-y rounded-md border border-foreground/10 bg-card/90 px-2.5 py-2 text-[10px] leading-[1.6] text-foreground outline-none transition placeholder:text-muted-foreground focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
+						{/* Row 2: Model — single-line select aligns with Title (no chip grid dead zone) */}
+						<div className="space-y-1">
+							<label
+								htmlFor={modelSelectId}
+								className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68"
+							>
+								Model
+							</label>
+							<ModelPickerSelect
+								id={modelSelectId}
+								models={models}
+								selectedModel={selectedModel}
+								onPick={pickModel}
 							/>
 						</div>
 					</div>
 
+					{!isMobile && (
+						<div className="hidden md:flex md:flex-wrap md:items-center md:gap-2">
+							<button
+								type="button"
+								onClick={() => setShowAdvancedOptions((v) => !v)}
+								aria-expanded={showAdvancedOptions}
+								className="flex h-7 items-center gap-1 rounded-md border border-foreground/10 bg-card/70 px-2 text-[10px] text-foreground/80 transition hover:bg-card hover:text-foreground"
+							>
+								<Settings2 className="size-3 shrink-0" aria-hidden="true" />
+								{showAdvancedOptions ? "Fewer options" : "Effort, permissions, prompt"}
+								<ChevronDown
+									className={`size-3 shrink-0 transition-transform ${showAdvancedOptions ? "rotate-180" : ""}`}
+									aria-hidden="true"
+								/>
+							</button>
+						</div>
+					)}
+
+					{!isMobile && showAdvancedOptions && (
+						<div className="hidden md:grid md:grid-cols-2 md:gap-x-3 md:gap-y-2 md:rounded-lg md:border md:border-foreground/8 md:bg-card/30 md:p-2.5">
+							{/* Effort */}
+							<div className="space-y-1">
+								<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+									Effort
+								</p>
+								{effortLevels.length > 0 ? (
+									<div className="flex min-h-7 flex-wrap content-start gap-1.5">
+										{effortLevels.map((level) => (
+											<button
+												key={level.id}
+												type="button"
+												onClick={() => setSelectedEffort(level.id)}
+												className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+													selectedEffort === level.id
+														? "border-foreground/20 bg-foreground text-background"
+														: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
+												}`}
+											>
+												{level.label}
+											</button>
+										))}
+									</div>
+								) : (
+									<p className="min-h-7 text-[10px] leading-7 text-muted-foreground">
+										Not configurable for this provider
+									</p>
+								)}
+							</div>
+
+							{/* Permissions */}
+							{showsPermissionMode && (
+								<div className="space-y-1">
+									<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+										Permissions
+									</p>
+									<div className="flex flex-wrap gap-1.5">
+										<button
+											type="button"
+											onClick={() => setPermissionMode("bypassPermissions")}
+											className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+												permissionMode === "bypassPermissions"
+													? "border-foreground/20 bg-foreground text-background"
+													: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
+											}`}
+											title="Recommended. Runs best in shelleport."
+										>
+											Bypass
+										</button>
+										<button
+											type="button"
+											onClick={() => setPermissionMode("default")}
+											className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+												permissionMode === "default"
+													? "border-foreground/20 bg-foreground text-background"
+													: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
+											}`}
+											title="Available, but prompts do not work especially well yet."
+										>
+											Ask for approvals
+										</button>
+									</div>
+								</div>
+							)}
+
+							{/* System prompt — full width below effort / permissions */}
+							<div className="space-y-1 md:col-span-2">
+								<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+									System prompt
+								</p>
+								<textarea
+									value={systemPrompt}
+									onChange={(event) => setSystemPrompt(event.target.value)}
+									placeholder="Custom instructions for this session…"
+									rows={2}
+									maxLength={10000}
+									className="w-full resize-y rounded-md border border-foreground/10 bg-card/90 px-2.5 py-1.5 text-[10px] leading-[1.5] text-foreground outline-none transition placeholder:text-muted-foreground focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
+								/>
+							</div>
+						</div>
+					)}
+
 					{/* Selected directory bar */}
-					<div className="mt-3 flex items-center gap-3 rounded-md border border-foreground/8 bg-card/60 px-2.5 py-1.5">
+					<div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-foreground/8 bg-card/60 px-2.5 py-1.5">
 						<FolderOpen aria-hidden="true" className="size-3 shrink-0 text-foreground/55" />
 						<p className="min-w-0 flex-1 truncate text-[10px] text-foreground/80">{currentPath}</p>
 						{selectedProjectId === null && !showNewProject && (
