@@ -517,7 +517,7 @@ function SessionStatsPopover({ badges }: { badges: SessionHeaderBadge[] }) {
 				type="button"
 				onClick={handleToggle}
 				title="Session stats"
-				className="flex items-center justify-center gap-1 rounded border border-foreground/12 px-2 py-1 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-xs text-muted-foreground transition hover:border-foreground/18 hover:text-foreground"
+				className="inline-flex h-11 w-11 shrink-0 items-center justify-center gap-1 rounded border border-foreground/12 px-0 text-xs text-muted-foreground transition hover:border-foreground/18 hover:text-foreground md:h-8 md:w-auto md:px-2"
 			>
 				<Info className="size-3 md:size-2.5" />
 				<span className="hidden md:inline">Stats</span>
@@ -1028,7 +1028,7 @@ function SessionActionsPopover({
 				type="button"
 				onClick={handleToggle}
 				title="Actions"
-				className="flex items-center justify-center gap-1 rounded border border-foreground/12 px-2 py-1 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-xs text-foreground/60 transition hover:border-foreground/18 hover:text-foreground"
+				className="inline-flex h-11 w-11 shrink-0 items-center justify-center gap-1 rounded border border-foreground/12 px-0 text-xs text-foreground/60 transition hover:border-foreground/18 hover:text-foreground md:h-8 md:w-auto md:px-2"
 			>
 				<EllipsisVertical className="size-4 md:size-3.5" />
 			</button>
@@ -1186,9 +1186,9 @@ function SessionStatusBadge({
 
 	if (reconnecting) {
 		return (
-			<div className="flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded border border-amber-500/25 bg-amber-500/8 px-0 py-1 md:min-h-0 md:min-w-0 md:px-2">
+			<div className="inline-flex h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded border border-amber-500/25 bg-amber-500/8 px-0 md:h-8 md:w-auto md:min-w-0 md:px-2">
 				<Loader2 className="size-2.5 animate-spin text-amber-400/80" />
-				<span className="hidden md:inline text-xs text-amber-300/80">Reconnecting…</span>
+				<span className="hidden md:inline text-xs leading-none text-amber-300/80">Reconnecting…</span>
 			</div>
 		);
 	}
@@ -1197,13 +1197,13 @@ function SessionStatusBadge({
 
 	return (
 		<div
-			className={`flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded border px-0 py-1 md:min-h-0 md:min-w-0 md:px-2 ${
+			className={`inline-flex h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded border px-0 md:h-8 md:w-auto md:min-w-0 md:px-2 ${
 				isActive ? "border-emerald-500/25 bg-emerald-500/8" : "border-foreground/12"
 			}`}
 		>
 			<StatusDot status={session.status} />
 			<span
-				className={`hidden md:inline text-xs ${
+				className={`hidden md:inline text-xs leading-none ${
 					isActive ? "text-emerald-300" : "text-muted-foreground"
 				}`}
 			>
@@ -1211,14 +1211,14 @@ function SessionStatusBadge({
 			</span>
 			{modelLabel && (
 				<>
-					<span className="hidden md:inline text-foreground/20">·</span>
-					<span className="hidden md:inline text-xs text-muted-foreground">{modelLabel}</span>
+					<span className="hidden md:inline text-foreground/20 leading-none">·</span>
+					<span className="hidden md:inline text-xs leading-none text-muted-foreground">{modelLabel}</span>
 				</>
 			)}
 			{effortLabel && (
 				<>
-					<span className="hidden md:inline text-foreground/20">·</span>
-					<span className="hidden md:inline text-xs text-muted-foreground">{effortLabel}</span>
+					<span className="hidden md:inline text-foreground/20 leading-none">·</span>
+					<span className="hidden md:inline text-xs leading-none text-muted-foreground">{effortLabel}</span>
 				</>
 			)}
 		</div>
@@ -2719,58 +2719,68 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 								</button>
 								<div className="flex min-w-0 flex-1 items-center gap-2 md:gap-3">
 									{sessionView?.pinned && <Pin className="size-3 shrink-0 text-foreground/82" />}
-									{sessionView && isRenaming ? (
-										<div className="flex min-w-0 items-center gap-1.5">
-											<input
-												value={renameDraft}
-												onChange={(event) =>
-													setRenameState({
-														sessionId: sessionView.id,
-														title: event.target.value,
-													})
-												}
-												onKeyDown={(event) => {
-													if (event.key === "Enter") {
-														event.preventDefault();
-														void handleRename();
+									<div className="flex min-w-0 flex-1 flex-col gap-0.5">
+										{sessionView && isRenaming ? (
+											<div className="flex min-w-0 items-center gap-1.5">
+												<input
+													value={renameDraft}
+													onChange={(event) =>
+														setRenameState({
+															sessionId: sessionView.id,
+															title: event.target.value,
+														})
 													}
+													onKeyDown={(event) => {
+														if (event.key === "Enter") {
+															event.preventDefault();
+															void handleRename();
+														}
 
-													if (event.key === "Escape") {
-														event.preventDefault();
+														if (event.key === "Escape") {
+															event.preventDefault();
+															setRenameState(null);
+														}
+													}}
+													autoFocus
+													className="h-6 min-w-0 rounded border border-foreground/12 bg-card px-2 text-xs font-medium text-foreground outline-none"
+												/>
+												<button
+													type="button"
+													onClick={() => void handleRename()}
+													className="flex size-6 items-center justify-center rounded border border-foreground/10 text-muted-foreground transition hover:border-foreground/18 hover:text-foreground"
+													title="Save title"
+												>
+													<Check className="size-3" />
+												</button>
+												<button
+													type="button"
+													onClick={() => {
 														setRenameState(null);
-													}
-												}}
-												autoFocus
-												className="h-6 min-w-0 rounded border border-foreground/12 bg-card px-2 text-xs font-medium text-foreground outline-none"
-											/>
-											<button
-												type="button"
-												onClick={() => void handleRename()}
-												className="flex size-6 items-center justify-center rounded border border-foreground/10 text-muted-foreground transition hover:border-foreground/18 hover:text-foreground"
-												title="Save title"
+													}}
+													className="flex size-6 items-center justify-center rounded border border-foreground/10 text-muted-foreground transition hover:border-foreground/18 hover:text-foreground"
+													title="Cancel rename"
+												>
+													<X className="size-3" />
+												</button>
+											</div>
+										) : sessionView ? (
+											<h1 className="truncate text-xs font-medium text-foreground">
+												{sessionView.title}
+											</h1>
+										) : (
+											<h1 className="truncate text-xs font-medium text-foreground">
+												Loading session
+											</h1>
+										)}
+										{sessionView?.cwd ? (
+											<p
+												className="truncate font-mono text-[10px] text-muted-foreground/70"
+												title={sessionView.cwd}
 											>
-												<Check className="size-3" />
-											</button>
-											<button
-												type="button"
-												onClick={() => {
-													setRenameState(null);
-												}}
-												className="flex size-6 items-center justify-center rounded border border-foreground/10 text-muted-foreground transition hover:border-foreground/18 hover:text-foreground"
-												title="Cancel rename"
-											>
-												<X className="size-3" />
-											</button>
-										</div>
-									) : sessionView ? (
-										<h1 className="truncate text-xs font-medium text-foreground">
-											{sessionView.title}
-										</h1>
-									) : (
-										<h1 className="truncate text-xs font-medium text-foreground">
-											Loading session
-										</h1>
-									)}
+												{sessionView.cwd}
+											</p>
+										) : null}
+									</div>
 								</div>
 								<div className="flex shrink-0 items-center gap-1.5">
 									{sessionView && (
@@ -2782,7 +2792,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 
 									{permissionModeLabel && (
 										<span
-											className={`hidden rounded border px-2 py-1 text-xs uppercase tracking-[0.08em] md:inline-flex ${
+											className={`hidden h-8 shrink-0 items-center rounded border px-2 text-xs leading-none uppercase tracking-[0.08em] md:inline-flex ${
 												sessionView?.permissionMode === "bypassPermissions"
 													? "border-orange-400/25 bg-orange-400/8 text-orange-300"
 													: "border-foreground/12 text-muted-foreground"

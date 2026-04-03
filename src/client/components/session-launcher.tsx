@@ -797,7 +797,7 @@ export function SessionLauncher({
 								New Session
 							</p>
 							<h1 className="mt-0.5 text-base font-medium tracking-[-0.02em] text-foreground">
-								Pick a workspace. Launch from the path itself.
+								Pick a workspace for your session.
 							</h1>
 						</div>
 						{/* Desktop create button */}
@@ -887,9 +887,14 @@ export function SessionLauncher({
 
 										{/* Project */}
 										<div className="space-y-1">
-											<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
-												Project
-											</p>
+											<div>
+												<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+													Project
+												</p>
+												<p className="text-[0.6875rem] text-muted-foreground/60">
+													Saved workspace and permission presets
+												</p>
+											</div>
 											<div className="flex flex-wrap gap-1.5">
 												<button
 													type="button"
@@ -958,9 +963,14 @@ export function SessionLauncher({
 
 										{/* Effort */}
 										<div className="space-y-1">
-											<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
-												Effort
-											</p>
+											<div>
+												<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+													Effort
+												</p>
+												<p className="text-[0.6875rem] text-muted-foreground/60">
+													How thoroughly the model reasons
+												</p>
+											</div>
 											{effortLevels.length > 0 ? (
 												<div className="flex min-h-7 flex-wrap content-start gap-1.5">
 													{effortLevels.map((level) => (
@@ -988,9 +998,14 @@ export function SessionLauncher({
 										{/* Permissions */}
 										{showsPermissionMode && (
 											<div className="space-y-1">
-												<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
-													Permissions
-												</p>
+												<div>
+													<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+														Permissions
+													</p>
+													<p className="text-[0.6875rem] text-muted-foreground/60">
+														Whether the agent asks before acting
+													</p>
+												</div>
 												<div className="flex gap-1.5">
 													<button
 														type="button"
@@ -1001,7 +1016,7 @@ export function SessionLauncher({
 																: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
 														}`}
 													>
-														Bypass
+														Auto-approve
 													</button>
 													<button
 														type="button"
@@ -1068,9 +1083,14 @@ export function SessionLauncher({
 
 						{/* Row 1: Project */}
 						<div className="space-y-1">
-							<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
-								Project
-							</p>
+							<div>
+								<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+									Project
+								</p>
+								<p className="text-[0.6875rem] text-muted-foreground/60">
+									Saved workspace and permission presets
+								</p>
+							</div>
 							<div className="flex flex-wrap gap-1.5">
 								<button
 									type="button"
@@ -1259,9 +1279,14 @@ export function SessionLauncher({
 								>
 									{/* Effort */}
 									<div className="space-y-1">
-										<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
-											Effort
-										</p>
+										<div>
+											<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+												Effort
+											</p>
+											<p className="text-[0.6875rem] text-muted-foreground/60">
+												How thoroughly the model reasons
+											</p>
+										</div>
 										{effortLevels.length > 0 ? (
 											<div className="flex min-h-7 flex-wrap content-start gap-1.5">
 												{effortLevels.map((level) => (
@@ -1289,9 +1314,14 @@ export function SessionLauncher({
 									{/* Permissions */}
 									{showsPermissionMode && (
 										<div className="space-y-1">
-											<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
-												Permissions
-											</p>
+											<div>
+												<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+													Permissions
+												</p>
+												<p className="text-[0.6875rem] text-muted-foreground/60">
+													Whether the agent asks before acting
+												</p>
+											</div>
 											<div className="flex flex-wrap gap-1.5">
 												<button
 													type="button"
@@ -1301,9 +1331,9 @@ export function SessionLauncher({
 															? "border-foreground/20 bg-foreground text-background"
 															: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
 													}`}
-													title="Recommended. Runs best in shelleport."
+													title="Agent acts without asking for approval"
 												>
-													Bypass
+													Auto-approve
 												</button>
 												<button
 													type="button"
@@ -1313,7 +1343,7 @@ export function SessionLauncher({
 															? "border-foreground/20 bg-foreground text-background"
 															: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
 													}`}
-													title="Available, but prompts do not work especially well yet."
+													title="Agent pauses for your approval before each action"
 												>
 													Ask for approvals
 												</button>
