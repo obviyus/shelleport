@@ -55,7 +55,7 @@ function getEffortLevels(modelId: string | null, models: ProviderModel[]) {
 }
 
 const MODEL_SELECT_CLASS =
-	"h-7 w-full cursor-pointer appearance-none rounded-md border border-foreground/10 bg-card/90 py-0 pl-2.5 pr-8 text-[10px] text-foreground outline-none transition focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14";
+	"h-7 w-full cursor-pointer appearance-none rounded-md border border-foreground/10 bg-card/90 py-0 pl-2.5 pr-8 text-xs text-foreground outline-none transition focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14";
 
 function ModelPickerSelect({
 	id,
@@ -75,7 +75,7 @@ function ModelPickerSelect({
 
 	if (models.length === 0) {
 		return (
-			<div className="flex h-7 items-center rounded-md border border-dashed border-foreground/12 bg-card/40 px-2.5 text-[10px] text-muted-foreground">
+			<div className="flex h-7 items-center rounded-md border border-dashed border-foreground/12 bg-card/40 px-2.5 text-xs text-muted-foreground">
 				CLI default model
 			</div>
 		);
@@ -348,10 +348,10 @@ function DirectoryColumn({
 			<header className="border-b border-foreground/8 px-3 py-2.5">
 				<div className="flex items-center justify-between gap-2">
 					<div className="min-w-0">
-						<p className="truncate text-[11px] font-medium text-foreground/92">
+						<p className="truncate text-[0.8125rem] font-medium text-foreground/92">
 							{getPathName(path)}
 						</p>
-						<p className="mt-0.5 truncate text-[10px] text-muted-foreground">{path}</p>
+						<p className="mt-0.5 truncate text-[0.6875rem] text-muted-foreground">{path}</p>
 					</div>
 					{isLoading && <Loader2 className="size-3 animate-spin text-muted-foreground" />}
 				</div>
@@ -378,7 +378,7 @@ function DirectoryColumn({
 						placeholder="Search…"
 						aria-controls={listId}
 						autoComplete="off"
-						className="h-10 md:h-8 w-full rounded-md border border-foreground/10 bg-background/55 pr-2 pl-7 text-[11px] text-foreground outline-none transition placeholder:text-muted-foreground focus-visible:border-foreground/20 focus-visible:ring-1 focus-visible:ring-foreground/12"
+						className="h-10 md:h-8 w-full rounded-md border border-foreground/10 bg-background/55 pr-2 pl-7 text-xs text-foreground outline-none transition placeholder:text-muted-foreground focus-visible:border-foreground/20 focus-visible:ring-1 focus-visible:ring-foreground/12"
 					/>
 				</div>
 			</header>
@@ -420,7 +420,7 @@ function DirectoryColumn({
 										role="option"
 										aria-selected={isInOpenPath}
 										style={{ contentVisibility: "auto", containIntrinsicSize: "36px" }}
-										className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-3 md:py-2 text-left text-[11px] transition ${
+										className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-3 md:py-2 text-left text-xs transition ${
 											isCurrentSelection
 												? "bg-foreground/88 text-background ring-1 ring-background/20 shadow-[0_10px_30px_oklch(1_0_0_/_0.08)]"
 												: isPathAncestor
@@ -456,7 +456,7 @@ function DirectoryColumn({
 											setHoveredEntryPath((current) => (current === entry.path ? null : current))
 										}
 										style={{ contentVisibility: "auto", containIntrinsicSize: "36px" }}
-										className={`flex items-center gap-2 rounded-lg px-2.5 py-3 md:py-2 text-[11px] ${
+										className={`flex items-center gap-2 rounded-lg px-2.5 py-3 md:py-2 text-xs ${
 											isFocusedColumn && isActive
 												? "bg-foreground/88 text-background ring-1 ring-background/20"
 												: isHovered
@@ -473,7 +473,7 @@ function DirectoryColumn({
 							})}
 						</div>
 					) : (
-						<div className="flex h-full items-center justify-center px-4 text-center text-[11px] text-muted-foreground">
+						<div className="flex h-full items-center justify-center px-4 text-center text-xs text-muted-foreground">
 							{normalizedQuery.length > 0 ? "No matches" : "Empty directory"}
 						</div>
 					)
@@ -793,10 +793,10 @@ export function SessionLauncher({
 				<div className="mx-auto flex min-w-0 w-full max-w-[110rem] flex-col gap-2">
 					<div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-x-4 gap-y-2">
 						<div className="min-w-0">
-							<p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-foreground/68">
+							<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.16em] text-foreground/68">
 								New Session
 							</p>
-							<h1 className="mt-0.5 text-sm font-medium tracking-[-0.02em] text-foreground">
+							<h1 className="mt-0.5 text-base font-medium tracking-[-0.02em] text-foreground">
 								Pick a workspace. Launch from the path itself.
 							</h1>
 						</div>
@@ -805,7 +805,7 @@ export function SessionLauncher({
 							type="button"
 							onClick={handleCreate}
 							disabled={isCreating || createDisabledReason !== null}
-							className="hidden h-8 min-w-[14rem] shrink-0 items-center justify-center gap-1.5 rounded-md bg-foreground px-3 text-[11px] font-medium text-background transition hover:bg-foreground/90 focus-visible:ring-2 focus-visible:ring-foreground/20 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-30 md:flex"
+							className="hidden h-8 min-w-[14rem] shrink-0 items-center justify-center gap-1.5 rounded-md bg-foreground px-3 text-[0.8125rem] font-medium text-background transition hover:bg-foreground/90 focus-visible:ring-2 focus-visible:ring-foreground/20 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-30 md:flex"
 						>
 							{isCreating ? (
 								<Loader2 aria-hidden="true" className="size-3 animate-spin" />
@@ -830,7 +830,7 @@ export function SessionLauncher({
 								<motion.button
 									type="button"
 									onClick={() => setShowMobileOptions((v) => !v)}
-									className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-foreground/10 bg-card/90 px-2 text-[10px] text-foreground/70 transition-colors active:bg-accent"
+									className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-foreground/10 bg-card/90 px-2 text-[0.6875rem] text-foreground/70 transition-colors active:bg-accent"
 									whileHover={prefersReducedMotion === true ? undefined : { scale: 1.03 }}
 									whileTap={prefersReducedMotion === true ? undefined : { scale: 0.97 }}
 								>
@@ -863,7 +863,7 @@ export function SessionLauncher({
 									>
 										{createProviders.length > 1 && (
 											<div className="space-y-1">
-												<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+												<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
 													Provider
 												</p>
 												<div className="flex flex-wrap gap-1.5">
@@ -872,7 +872,7 @@ export function SessionLauncher({
 															key={provider.id}
 															type="button"
 															onClick={() => onCreateProviderChange(provider.id)}
-															className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+															className={`rounded-md border px-2.5 py-1 text-xs font-medium transition ${
 																createProviderId === provider.id
 																	? "border-foreground/20 bg-foreground text-background"
 																	: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
@@ -887,7 +887,7 @@ export function SessionLauncher({
 
 										{/* Project */}
 										<div className="space-y-1">
-											<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+											<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
 												Project
 											</p>
 											<div className="flex flex-wrap gap-1.5">
@@ -897,7 +897,7 @@ export function SessionLauncher({
 														setSelectedProjectId(null);
 														setShowNewProject(false);
 													}}
-													className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+													className={`rounded-md border px-2.5 py-1 text-xs font-medium transition ${
 														selectedProjectId === null && !showNewProject
 															? "border-foreground/20 bg-foreground text-background"
 															: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
@@ -915,7 +915,7 @@ export function SessionLauncher({
 															if (project.cwd) setCurrentPath(project.cwd);
 															if (project.permissionMode) setPermissionMode(project.permissionMode);
 														}}
-														className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+														className={`rounded-md border px-2.5 py-1 text-xs font-medium transition ${
 															selectedProjectId === project.id
 																? "border-foreground/20 bg-foreground text-background"
 																: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
@@ -930,7 +930,7 @@ export function SessionLauncher({
 														setShowNewProject(true);
 														setSelectedProjectId(null);
 													}}
-													className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+													className={`rounded-md border px-2.5 py-1 text-xs font-medium transition ${
 														showNewProject
 															? "border-foreground/20 bg-foreground text-background"
 															: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
@@ -943,7 +943,7 @@ export function SessionLauncher({
 
 										{/* Title */}
 										<div className="space-y-1">
-											<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+											<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
 												Title
 											</p>
 											<input
@@ -952,13 +952,13 @@ export function SessionLauncher({
 												onChange={(event) => setTitle(event.target.value)}
 												autoComplete="off"
 												placeholder="Optional session title…"
-												className="h-7 w-full rounded-md border border-foreground/10 bg-card/90 px-2.5 text-[10px] text-foreground outline-none transition placeholder:text-muted-foreground focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
+												className="h-7 w-full rounded-md border border-foreground/10 bg-card/90 px-2.5 text-xs text-foreground outline-none transition placeholder:text-muted-foreground focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
 											/>
 										</div>
 
 										{/* Effort */}
 										<div className="space-y-1">
-											<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+											<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
 												Effort
 											</p>
 											{effortLevels.length > 0 ? (
@@ -968,7 +968,7 @@ export function SessionLauncher({
 															key={level.id}
 															type="button"
 															onClick={() => setSelectedEffort(level.id)}
-															className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+															className={`rounded-md border px-2.5 py-1 text-xs font-medium transition ${
 																selectedEffort === level.id
 																	? "border-foreground/20 bg-foreground text-background"
 																	: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
@@ -979,7 +979,7 @@ export function SessionLauncher({
 													))}
 												</div>
 											) : (
-												<p className="min-h-7 text-[10px] leading-7 text-muted-foreground">
+												<p className="min-h-7 text-[0.6875rem] leading-7 text-muted-foreground">
 													Not configurable for this provider
 												</p>
 											)}
@@ -988,14 +988,14 @@ export function SessionLauncher({
 										{/* Permissions */}
 										{showsPermissionMode && (
 											<div className="space-y-1">
-												<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+												<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
 													Permissions
 												</p>
 												<div className="flex gap-1.5">
 													<button
 														type="button"
 														onClick={() => setPermissionMode("bypassPermissions")}
-														className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+														className={`rounded-md border px-2.5 py-1 text-xs font-medium transition ${
 															permissionMode === "bypassPermissions"
 																? "border-foreground/20 bg-foreground text-background"
 																: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
@@ -1006,7 +1006,7 @@ export function SessionLauncher({
 													<button
 														type="button"
 														onClick={() => setPermissionMode("default")}
-														className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+														className={`rounded-md border px-2.5 py-1 text-xs font-medium transition ${
 															permissionMode === "default"
 																? "border-foreground/20 bg-foreground text-background"
 																: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
@@ -1020,7 +1020,7 @@ export function SessionLauncher({
 
 										{/* System prompt */}
 										<div className="space-y-1">
-											<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+											<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
 												System prompt
 											</p>
 											<textarea
@@ -1029,7 +1029,7 @@ export function SessionLauncher({
 												placeholder="Custom instructions for this session…"
 												rows={2}
 												maxLength={10000}
-												className="w-full resize-y rounded-md border border-foreground/10 bg-card/90 px-2.5 py-2 text-[10px] leading-[1.6] text-foreground outline-none transition placeholder:text-muted-foreground focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
+												className="w-full resize-y rounded-md border border-foreground/10 bg-card/90 px-2.5 py-2 text-xs leading-[1.6] text-foreground outline-none transition placeholder:text-muted-foreground focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
 											/>
 										</div>
 									</motion.div>
@@ -1044,7 +1044,7 @@ export function SessionLauncher({
 					>
 						{createProviders.length > 1 && (
 							<div className="space-y-1">
-								<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+								<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
 									Provider
 								</p>
 								<div className="flex flex-wrap gap-1.5">
@@ -1053,7 +1053,7 @@ export function SessionLauncher({
 											key={provider.id}
 											type="button"
 											onClick={() => onCreateProviderChange(provider.id)}
-											className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+											className={`rounded-md border px-2.5 py-1 text-xs font-medium transition ${
 												createProviderId === provider.id
 													? "border-foreground/20 bg-foreground text-background"
 													: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
@@ -1068,7 +1068,7 @@ export function SessionLauncher({
 
 						{/* Row 1: Project */}
 						<div className="space-y-1">
-							<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+							<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
 								Project
 							</p>
 							<div className="flex flex-wrap gap-1.5">
@@ -1082,7 +1082,7 @@ export function SessionLauncher({
 											createProviderId ? getDefaultPermissionMode(createProviderId) : "default",
 										);
 									}}
-									className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+									className={`rounded-md border px-2.5 py-1 text-xs font-medium transition ${
 										selectedProjectId === null && !showNewProject
 											? "border-foreground/20 bg-foreground text-background"
 											: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
@@ -1100,7 +1100,7 @@ export function SessionLauncher({
 											setCurrentPath(project.cwd);
 											setPermissionMode(project.permissionMode);
 										}}
-										className={`max-w-32 truncate rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+										className={`max-w-32 truncate rounded-md border px-2.5 py-1 text-xs font-medium transition ${
 											selectedProjectId === project.id
 												? "border-foreground/20 bg-foreground text-background"
 												: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
@@ -1115,7 +1115,7 @@ export function SessionLauncher({
 										setShowNewProject(!showNewProject);
 										setSelectedProjectId(null);
 									}}
-									className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+									className={`rounded-md border px-2.5 py-1 text-xs font-medium transition ${
 										showNewProject
 											? "border-foreground/20 bg-foreground text-background"
 											: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
@@ -1131,7 +1131,7 @@ export function SessionLauncher({
 										value={newProjectName}
 										onChange={(event) => setNewProjectName(event.target.value)}
 										placeholder="Project name…"
-										className="h-7 flex-1 rounded-md border border-foreground/10 bg-card/90 px-2.5 text-[10px] text-foreground outline-none transition placeholder:text-muted-foreground focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
+										className="h-7 flex-1 rounded-md border border-foreground/10 bg-card/90 px-2.5 text-xs text-foreground outline-none transition placeholder:text-muted-foreground focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
 									/>
 									<button
 										type="button"
@@ -1158,7 +1158,7 @@ export function SessionLauncher({
 											}
 										}}
 										disabled={!newProjectName.trim() || isCreatingProject}
-										className="flex h-7 items-center gap-1 rounded-md bg-foreground px-2.5 text-[10px] font-medium text-background transition hover:bg-foreground/90 disabled:opacity-30"
+										className="flex h-7 items-center gap-1 rounded-md bg-foreground px-2.5 text-xs font-medium text-background transition hover:bg-foreground/90 disabled:opacity-30"
 									>
 										{isCreatingProject ? (
 											<Loader2 className="size-3 animate-spin" />
@@ -1173,7 +1173,7 @@ export function SessionLauncher({
 
 						{/* Row 1 right: Title */}
 						<div className="space-y-1">
-							<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+							<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
 								Title
 							</p>
 							<input
@@ -1184,7 +1184,7 @@ export function SessionLauncher({
 								onChange={(event) => setTitle(event.target.value)}
 								autoComplete="off"
 								placeholder="Optional session title…"
-								className="h-7 w-full rounded-md border border-foreground/10 bg-card/90 px-2.5 text-[10px] text-foreground outline-none transition placeholder:text-muted-foreground focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
+								className="h-7 w-full rounded-md border border-foreground/10 bg-card/90 px-2.5 text-xs text-foreground outline-none transition placeholder:text-muted-foreground focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
 							/>
 						</div>
 
@@ -1192,7 +1192,7 @@ export function SessionLauncher({
 						<div className="space-y-1">
 							<label
 								htmlFor={modelSelectId}
-								className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68"
+								className="block text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68"
 							>
 								Model
 							</label>
@@ -1211,7 +1211,7 @@ export function SessionLauncher({
 								type="button"
 								onClick={() => setShowAdvancedOptions((v) => !v)}
 								aria-expanded={showAdvancedOptions}
-								className="flex h-7 min-w-0 items-center gap-1 rounded-md border border-foreground/10 bg-card/70 px-2 text-[10px] text-foreground/80 transition-colors hover:bg-card hover:text-foreground"
+								className="flex h-7 min-w-0 items-center gap-1 rounded-md border border-foreground/10 bg-card/70 px-2 text-[0.6875rem] text-foreground/80 transition-colors hover:bg-card hover:text-foreground"
 								whileHover={prefersReducedMotion === true ? undefined : { scale: 1.02 }}
 								whileTap={prefersReducedMotion === true ? undefined : { scale: 0.98 }}
 							>
@@ -1259,7 +1259,7 @@ export function SessionLauncher({
 								>
 									{/* Effort */}
 									<div className="space-y-1">
-										<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+										<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
 											Effort
 										</p>
 										{effortLevels.length > 0 ? (
@@ -1269,7 +1269,7 @@ export function SessionLauncher({
 														key={level.id}
 														type="button"
 														onClick={() => setSelectedEffort(level.id)}
-														className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+														className={`rounded-md border px-2.5 py-1 text-xs font-medium transition ${
 															selectedEffort === level.id
 																? "border-foreground/20 bg-foreground text-background"
 																: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
@@ -1280,7 +1280,7 @@ export function SessionLauncher({
 												))}
 											</div>
 										) : (
-											<p className="min-h-7 text-[10px] leading-7 text-muted-foreground">
+											<p className="min-h-7 text-[0.6875rem] leading-7 text-muted-foreground">
 												Not configurable for this provider
 											</p>
 										)}
@@ -1289,14 +1289,14 @@ export function SessionLauncher({
 									{/* Permissions */}
 									{showsPermissionMode && (
 										<div className="space-y-1">
-											<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+											<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
 												Permissions
 											</p>
 											<div className="flex flex-wrap gap-1.5">
 												<button
 													type="button"
 													onClick={() => setPermissionMode("bypassPermissions")}
-													className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+													className={`rounded-md border px-2.5 py-1 text-xs font-medium transition ${
 														permissionMode === "bypassPermissions"
 															? "border-foreground/20 bg-foreground text-background"
 															: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
@@ -1308,7 +1308,7 @@ export function SessionLauncher({
 												<button
 													type="button"
 													onClick={() => setPermissionMode("default")}
-													className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+													className={`rounded-md border px-2.5 py-1 text-xs font-medium transition ${
 														permissionMode === "default"
 															? "border-foreground/20 bg-foreground text-background"
 															: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
@@ -1323,7 +1323,7 @@ export function SessionLauncher({
 
 									{/* System prompt — full width below effort / permissions */}
 									<div className="space-y-1 md:col-span-2">
-										<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+										<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
 											System prompt
 										</p>
 										<textarea
@@ -1332,7 +1332,7 @@ export function SessionLauncher({
 											placeholder="Custom instructions for this session…"
 											rows={2}
 											maxLength={10000}
-											className="w-full resize-y rounded-md border border-foreground/10 bg-card/90 px-2.5 py-1.5 text-[10px] leading-[1.5] text-foreground outline-none transition placeholder:text-muted-foreground focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
+											className="w-full resize-y rounded-md border border-foreground/10 bg-card/90 px-2.5 py-1.5 text-xs leading-[1.5] text-foreground outline-none transition placeholder:text-muted-foreground focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
 										/>
 									</div>
 								</motion.div>
@@ -1343,7 +1343,7 @@ export function SessionLauncher({
 					{/* Selected directory bar */}
 					<div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-foreground/8 bg-card/60 px-2.5 py-1.5">
 						<FolderOpen aria-hidden="true" className="size-3 shrink-0 text-foreground/55" />
-						<p className="min-w-0 flex-1 truncate text-[10px] text-foreground/80">{currentPath}</p>
+						<p className="min-w-0 flex-1 truncate text-[0.6875rem] text-foreground/80">{currentPath}</p>
 						{selectedProjectId === null && !showNewProject && (
 							<div className="flex shrink-0 items-center gap-1.5">
 								<input
@@ -1353,7 +1353,7 @@ export function SessionLauncher({
 									onChange={(event) => setSaveAsProject(event.target.checked)}
 									className="rounded border border-foreground/20 accent-foreground"
 								/>
-								<label htmlFor="saveAsProject" className="text-[10px] text-muted-foreground">
+								<label htmlFor="saveAsProject" className="text-[0.6875rem] text-muted-foreground">
 									Save as project
 								</label>
 								{saveAsProject && (
@@ -1362,19 +1362,19 @@ export function SessionLauncher({
 										value={saveAsProjectName}
 										onChange={(event) => setSaveAsProjectName(event.target.value)}
 										placeholder="Name…"
-										className="h-6 w-28 rounded border border-foreground/10 bg-card/90 px-2 text-[10px] text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-foreground/22"
+										className="h-7 w-28 rounded border border-foreground/10 bg-card/90 px-2 text-xs text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-foreground/22"
 									/>
 								)}
 							</div>
 						)}
 					</div>
 					{createDisabledReason && (
-						<div className="mt-2 rounded-md border border-border bg-card/86 px-2.5 py-1.5 text-[10px] text-muted-foreground">
+						<div className="mt-2 rounded-md border border-border bg-card/86 px-2.5 py-1.5 text-[0.6875rem] text-muted-foreground">
 							{createDisabledReason}
 						</div>
 					)}
 					{error && (
-						<div className="mt-2 rounded-md border border-destructive/25 bg-destructive/8 px-2.5 py-1.5 text-[10px] text-destructive">
+						<div className="mt-2 rounded-md border border-destructive/25 bg-destructive/8 px-2.5 py-1.5 text-[0.6875rem] text-destructive">
 							{error}
 						</div>
 					)}
@@ -1393,12 +1393,12 @@ export function SessionLauncher({
 									setActiveColumnPath(parentPath);
 								}
 							}}
-							className="flex h-10 items-center gap-1.5 rounded-lg border border-foreground/10 bg-card/90 px-3 text-[11px] text-foreground/84 active:bg-accent"
+							className="flex h-10 items-center gap-1.5 rounded-lg border border-foreground/10 bg-card/90 px-3 text-xs text-foreground/84 active:bg-accent"
 						>
 							<ChevronLeft className="size-3.5" />
 							Back
 						</button>
-						<div className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
+						<div className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
 							{currentPath}
 						</div>
 					</div>
@@ -1477,14 +1477,14 @@ export function SessionLauncher({
 						<div className="min-w-0 flex-1">
 							<div className="flex items-center gap-1.5">
 								<FolderOpen aria-hidden="true" className="size-3 shrink-0 text-foreground/55" />
-								<p className="min-w-0 truncate text-[10px] text-foreground/70">{currentPath}</p>
+								<p className="min-w-0 truncate text-[0.6875rem] text-foreground/70">{currentPath}</p>
 							</div>
 						</div>
 						<button
 							type="button"
 							onClick={handleCreate}
 							disabled={isCreating || createDisabledReason !== null}
-							className="flex h-10 shrink-0 items-center gap-1.5 rounded-lg bg-foreground px-4 text-[12px] font-medium text-background transition active:bg-foreground/90 disabled:opacity-30"
+							className="flex h-10 shrink-0 items-center gap-1.5 rounded-lg bg-foreground px-4 text-[0.8125rem] font-medium text-background transition active:bg-foreground/90 disabled:opacity-30"
 						>
 							{isCreating ? (
 								<Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
