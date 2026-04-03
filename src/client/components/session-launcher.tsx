@@ -201,10 +201,11 @@ function DirectoryColumn({
 		);
 	}, [listing, normalizedQuery]);
 	const preferredEntryPath = entries.find((entry) => entry.path === nextPath)?.path ?? null;
+	/** When there is no path hint (new column / leaf), default to first row so Arrow keys + Enter work immediately. */
 	const effectiveActiveEntryPath =
 		activeEntryPath !== null && entries.some((entry) => entry.path === activeEntryPath)
 			? activeEntryPath
-			: preferredEntryPath;
+			: (preferredEntryPath ?? entries[0]?.path ?? null);
 	const activeEntryIndex =
 		effectiveActiveEntryPath === null
 			? -1
