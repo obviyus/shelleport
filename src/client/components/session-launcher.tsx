@@ -789,8 +789,8 @@ export function SessionLauncher({
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:overflow-hidden">
-			<div className="border-b border-border flex flex-wrap px-3 py-2 md:px-6">
-				<div className="mx-auto flex min-w-0 w-full max-w-[110rem] flex-col gap-2">
+			<div className="border-b border-border flex flex-wrap px-3 py-3 md:px-6 md:py-4">
+				<div className="mx-auto flex min-w-0 w-full max-w-[110rem] flex-col gap-3">
 					<div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-x-4 gap-y-2">
 						<div className="min-w-0">
 							<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.16em] text-foreground/68">
@@ -805,7 +805,7 @@ export function SessionLauncher({
 							type="button"
 							onClick={handleCreate}
 							disabled={isCreating || createDisabledReason !== null}
-							className="hidden h-8 min-w-[14rem] shrink-0 items-center justify-center gap-1.5 rounded-md bg-foreground px-3 text-[0.8125rem] font-medium text-background transition hover:bg-foreground/90 focus-visible:ring-2 focus-visible:ring-foreground/20 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-30 md:flex"
+							className="hidden h-9 min-w-[14rem] shrink-0 items-center justify-center gap-1.5 rounded-md bg-foreground px-3 text-[0.8125rem] font-medium text-background transition hover:bg-foreground/90 focus-visible:ring-2 focus-visible:ring-foreground/20 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-30 md:flex"
 						>
 							{isCreating ? (
 								<Loader2 aria-hidden="true" className="size-3 animate-spin" />
@@ -850,7 +850,7 @@ export function SessionLauncher({
 								{showMobileOptions && (
 									<motion.div
 										key="session-launcher-mobile-more"
-										className="w-full min-w-0 max-w-full space-y-2 overflow-hidden rounded-md border border-foreground/8 bg-card/40 p-2.5"
+										className="w-full min-w-0 max-w-full space-y-3 overflow-hidden rounded-md border border-foreground/8 bg-card/40 p-3"
 										style={{ isolation: "isolate" }}
 										initial={prefersReducedMotion === true ? false : { opacity: 0, y: -6 }}
 										animate={{ opacity: 1, y: 0 }}
@@ -1055,7 +1055,7 @@ export function SessionLauncher({
 
 					{/* Desktop: essentials first; effort / permissions / prompt behind toggle */}
 					<div
-						className={`mt-1.5 grid-cols-1 md:grid-cols-[1fr_1fr] gap-x-3 gap-y-2 md:items-start ${isMobile ? "hidden" : "grid"}`}
+						className={`grid-cols-1 md:grid-cols-[1fr_1fr] gap-x-4 gap-y-3 md:items-start ${isMobile ? "hidden" : "grid"}`}
 					>
 						{createProviders.length > 1 && (
 							<div className="space-y-1">
@@ -1266,7 +1266,7 @@ export function SessionLauncher({
 							{showAdvancedOptions && (
 								<motion.div
 									key="session-launcher-advanced"
-									className="grid min-w-0 w-full max-w-full grid-cols-2 gap-x-3 gap-y-2 overflow-hidden rounded-lg border border-foreground/8 bg-card/30 p-2.5"
+									className="grid min-w-0 w-full max-w-full grid-cols-2 gap-x-4 gap-y-3 overflow-hidden rounded-lg border border-foreground/8 bg-card/30 p-3"
 									style={{ isolation: "isolate" }}
 									initial={prefersReducedMotion === true ? false : { opacity: 0, y: -6 }}
 									animate={{ opacity: 1, y: 0 }}
@@ -1371,7 +1371,7 @@ export function SessionLauncher({
 					)}
 
 					{/* Selected directory bar */}
-					<div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-foreground/8 bg-card/60 px-2.5 py-1.5">
+					<div className="flex flex-wrap items-center gap-2 rounded-md border border-foreground/8 bg-card/60 px-2.5 py-1.5">
 						<FolderOpen aria-hidden="true" className="size-3 shrink-0 text-foreground/55" />
 						<p className="min-w-0 flex-1 truncate text-[0.6875rem] text-foreground/80">{currentPath}</p>
 						{selectedProjectId === null && !showNewProject && (
@@ -1399,12 +1399,12 @@ export function SessionLauncher({
 						)}
 					</div>
 					{createDisabledReason && (
-						<div className="mt-2 rounded-md border border-border bg-card/86 px-2.5 py-1.5 text-[0.6875rem] text-muted-foreground">
+						<div className="rounded-md border border-border bg-card/86 px-2.5 py-1.5 text-[0.6875rem] text-muted-foreground">
 							{createDisabledReason}
 						</div>
 					)}
 					{error && (
-						<div className="mt-2 rounded-md border border-destructive/25 bg-destructive/8 px-2.5 py-1.5 text-[0.6875rem] text-destructive">
+						<div className="rounded-md border border-destructive/25 bg-destructive/8 px-2.5 py-1.5 text-[0.6875rem] text-destructive">
 							{error}
 						</div>
 					)}
