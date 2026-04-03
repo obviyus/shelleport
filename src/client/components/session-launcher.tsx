@@ -1,4 +1,4 @@
-import { motion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
 	ChevronDown,
 	ChevronLeft,
@@ -536,7 +536,24 @@ export function SessionLauncher({
 	const [systemPrompt, setSystemPrompt] = useState("");
 	const [showMobileOptions, setShowMobileOptions] = useState(false);
 	const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+	const prefersReducedMotion = useReducedMotion();
 	const effortLevels = getEffortLevels(selectedModel, models);
+	const panelEase = [0.25, 1, 0.5, 1] as const;
+	/** Tween rotate explicitly so chevron isn't treated as a spring; keep in sync with panels. */
+	const chevronTransition =
+		prefersReducedMotion === true
+			? { duration: 0 }
+			: { type: "tween" as const, duration: 0.16, ease: panelEase };
+	const toggleLabelTransition =
+		prefersReducedMotion === true
+			? { duration: 0 }
+			: { type: "tween" as const, duration: 0.16, ease: panelEase };
+
+	/** Opacity + translateY only (GPU); avoid maxHeight/padding animation (layout thrash). */
+	const collapsiblePanelTransition =
+		prefersReducedMotion === true
+			? { duration: 0 }
+			: { type: "tween" as const, duration: 0.16, ease: panelEase };
 
 	function pickModel(modelId: string) {
 		setSelectedModel(modelId);
@@ -810,194 +827,214 @@ export function SessionLauncher({
 										onPick={pickModel}
 									/>
 								</div>
-								<button
+								<motion.button
 									type="button"
 									onClick={() => setShowMobileOptions((v) => !v)}
-									className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-foreground/10 bg-card/90 px-2 text-[10px] text-foreground/70 transition active:bg-accent"
+									className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-foreground/10 bg-card/90 px-2 text-[10px] text-foreground/70 transition-colors active:bg-accent"
+									whileHover={prefersReducedMotion === true ? undefined : { scale: 1.03 }}
+									whileTap={prefersReducedMotion === true ? undefined : { scale: 0.97 }}
 								>
 									<Settings2 className="size-3" />
-									<ChevronDown
-										className={`size-3 transition-transform ${showMobileOptions ? "rotate-180" : ""}`}
-									/>
-								</button>
+									<motion.span
+										animate={{ rotate: showMobileOptions ? 180 : 0 }}
+										transition={chevronTransition}
+										className="inline-flex"
+									>
+										<ChevronDown className="size-3" />
+									</motion.span>
+								</motion.button>
 							</div>
 
 							{/* Collapsible options on mobile */}
-							{showMobileOptions && (
-								<div className="space-y-2 rounded-md border border-foreground/8 bg-card/40 p-2.5">
-									{createProviders.length > 1 && (
+							<AnimatePresence initial={false}>
+								{showMobileOptions && (
+									<motion.div
+										key="session-launcher-mobile-more"
+										className="w-full min-w-0 max-w-full space-y-2 overflow-hidden rounded-md border border-foreground/8 bg-card/40 p-2.5"
+										style={{ isolation: "isolate" }}
+										initial={prefersReducedMotion === true ? false : { opacity: 0, y: -6 }}
+										animate={{ opacity: 1, y: 0 }}
+										exit={
+											prefersReducedMotion === true
+												? { opacity: 0, transition: { duration: 0 } }
+												: { opacity: 0, y: -4 }
+										}
+										transition={collapsiblePanelTransition}
+									>
+										{createProviders.length > 1 && (
+											<div className="space-y-1">
+												<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+													Provider
+												</p>
+												<div className="flex flex-wrap gap-1.5">
+													{createProviders.map((provider) => (
+														<button
+															key={provider.id}
+															type="button"
+															onClick={() => onCreateProviderChange(provider.id)}
+															className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+																createProviderId === provider.id
+																	? "border-foreground/20 bg-foreground text-background"
+																	: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
+															}`}
+														>
+															{provider.label}
+														</button>
+													))}
+												</div>
+											</div>
+										)}
+
+										{/* Project */}
 										<div className="space-y-1">
 											<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
-												Provider
+												Project
 											</p>
 											<div className="flex flex-wrap gap-1.5">
-												{createProviders.map((provider) => (
-													<button
-														key={provider.id}
-														type="button"
-														onClick={() => onCreateProviderChange(provider.id)}
-														className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
-															createProviderId === provider.id
-																? "border-foreground/20 bg-foreground text-background"
-																: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
-														}`}
-													>
-														{provider.label}
-													</button>
-												))}
-											</div>
-										</div>
-									)}
-
-									{/* Project */}
-									<div className="space-y-1">
-										<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
-											Project
-										</p>
-										<div className="flex flex-wrap gap-1.5">
-											<button
-												type="button"
-												onClick={() => {
-													setSelectedProjectId(null);
-													setShowNewProject(false);
-												}}
-												className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
-													selectedProjectId === null && !showNewProject
-														? "border-foreground/20 bg-foreground text-background"
-														: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
-												}`}
-											>
-												None
-											</button>
-											{projects.map((project) => (
 												<button
-													key={project.id}
 													type="button"
 													onClick={() => {
-														setSelectedProjectId(project.id);
+														setSelectedProjectId(null);
 														setShowNewProject(false);
-														if (project.cwd) setCurrentPath(project.cwd);
-														if (project.permissionMode) setPermissionMode(project.permissionMode);
 													}}
 													className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
-														selectedProjectId === project.id
+														selectedProjectId === null && !showNewProject
 															? "border-foreground/20 bg-foreground text-background"
 															: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
 													}`}
 												>
-													{project.name}
+													None
 												</button>
-											))}
-											<button
-												type="button"
-												onClick={() => {
-													setShowNewProject(true);
-													setSelectedProjectId(null);
-												}}
-												className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
-													showNewProject
-														? "border-foreground/20 bg-foreground text-background"
-														: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
-												}`}
-											>
-												+ New
-											</button>
-										</div>
-									</div>
-
-									{/* Title */}
-									<div className="space-y-1">
-										<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
-											Title
-										</p>
-										<input
-											type="text"
-											value={title}
-											onChange={(event) => setTitle(event.target.value)}
-											autoComplete="off"
-											placeholder="Optional session title…"
-											className="h-7 w-full rounded-md border border-foreground/10 bg-card/90 px-2.5 text-[10px] text-foreground outline-none transition placeholder:text-muted-foreground focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
-										/>
-									</div>
-
-									{/* Effort */}
-									<div className="space-y-1">
-										<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
-											Effort
-										</p>
-										{effortLevels.length > 0 ? (
-											<div className="flex min-h-7 flex-wrap content-start gap-1.5">
-												{effortLevels.map((level) => (
+												{projects.map((project) => (
 													<button
-														key={level.id}
+														key={project.id}
 														type="button"
-														onClick={() => setSelectedEffort(level.id)}
+														onClick={() => {
+															setSelectedProjectId(project.id);
+															setShowNewProject(false);
+															if (project.cwd) setCurrentPath(project.cwd);
+															if (project.permissionMode) setPermissionMode(project.permissionMode);
+														}}
 														className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
-															selectedEffort === level.id
+															selectedProjectId === project.id
 																? "border-foreground/20 bg-foreground text-background"
 																: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
 														}`}
 													>
-														{level.label}
+														{project.name}
 													</button>
 												))}
-											</div>
-										) : (
-											<p className="min-h-7 text-[10px] leading-7 text-muted-foreground">
-												Not configurable for this provider
-											</p>
-										)}
-									</div>
-
-									{/* Permissions */}
-									{showsPermissionMode && (
-										<div className="space-y-1">
-											<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
-												Permissions
-											</p>
-											<div className="flex gap-1.5">
 												<button
 													type="button"
-													onClick={() => setPermissionMode("bypassPermissions")}
+													onClick={() => {
+														setShowNewProject(true);
+														setSelectedProjectId(null);
+													}}
 													className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
-														permissionMode === "bypassPermissions"
+														showNewProject
 															? "border-foreground/20 bg-foreground text-background"
 															: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
 													}`}
 												>
-													Bypass
-												</button>
-												<button
-													type="button"
-													onClick={() => setPermissionMode("default")}
-													className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
-														permissionMode === "default"
-															? "border-foreground/20 bg-foreground text-background"
-															: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
-													}`}
-												>
-													Ask for approvals
+													+ New
 												</button>
 											</div>
 										</div>
-									)}
 
-									{/* System prompt */}
-									<div className="space-y-1">
-										<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
-											System prompt
-										</p>
-										<textarea
-											value={systemPrompt}
-											onChange={(event) => setSystemPrompt(event.target.value)}
-											placeholder="Custom instructions for this session…"
-											rows={2}
-											maxLength={10000}
-											className="w-full resize-y rounded-md border border-foreground/10 bg-card/90 px-2.5 py-2 text-[10px] leading-[1.6] text-foreground outline-none transition placeholder:text-muted-foreground focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
-										/>
-									</div>
-								</div>
-							)}
+										{/* Title */}
+										<div className="space-y-1">
+											<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+												Title
+											</p>
+											<input
+												type="text"
+												value={title}
+												onChange={(event) => setTitle(event.target.value)}
+												autoComplete="off"
+												placeholder="Optional session title…"
+												className="h-7 w-full rounded-md border border-foreground/10 bg-card/90 px-2.5 text-[10px] text-foreground outline-none transition placeholder:text-muted-foreground focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
+											/>
+										</div>
+
+										{/* Effort */}
+										<div className="space-y-1">
+											<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+												Effort
+											</p>
+											{effortLevels.length > 0 ? (
+												<div className="flex min-h-7 flex-wrap content-start gap-1.5">
+													{effortLevels.map((level) => (
+														<button
+															key={level.id}
+															type="button"
+															onClick={() => setSelectedEffort(level.id)}
+															className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+																selectedEffort === level.id
+																	? "border-foreground/20 bg-foreground text-background"
+																	: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
+															}`}
+														>
+															{level.label}
+														</button>
+													))}
+												</div>
+											) : (
+												<p className="min-h-7 text-[10px] leading-7 text-muted-foreground">
+													Not configurable for this provider
+												</p>
+											)}
+										</div>
+
+										{/* Permissions */}
+										{showsPermissionMode && (
+											<div className="space-y-1">
+												<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+													Permissions
+												</p>
+												<div className="flex gap-1.5">
+													<button
+														type="button"
+														onClick={() => setPermissionMode("bypassPermissions")}
+														className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+															permissionMode === "bypassPermissions"
+																? "border-foreground/20 bg-foreground text-background"
+																: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
+														}`}
+													>
+														Bypass
+													</button>
+													<button
+														type="button"
+														onClick={() => setPermissionMode("default")}
+														className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+															permissionMode === "default"
+																? "border-foreground/20 bg-foreground text-background"
+																: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
+														}`}
+													>
+														Ask for approvals
+													</button>
+												</div>
+											</div>
+										)}
+
+										{/* System prompt */}
+										<div className="space-y-1">
+											<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+												System prompt
+											</p>
+											<textarea
+												value={systemPrompt}
+												onChange={(event) => setSystemPrompt(event.target.value)}
+												placeholder="Custom instructions for this session…"
+												rows={2}
+												maxLength={10000}
+												className="w-full resize-y rounded-md border border-foreground/10 bg-card/90 px-2.5 py-2 text-[10px] leading-[1.6] text-foreground outline-none transition placeholder:text-muted-foreground focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
+											/>
+										</div>
+									</motion.div>
+								)}
+							</AnimatePresence>
 						</div>
 					)}
 
@@ -1169,104 +1206,138 @@ export function SessionLauncher({
 					</div>
 
 					{!isMobile && (
-						<div className="hidden md:flex md:flex-wrap md:items-center md:gap-2">
-							<button
+						<div className="hidden w-full min-w-0 md:flex md:flex-wrap md:items-center md:gap-2">
+							<motion.button
 								type="button"
 								onClick={() => setShowAdvancedOptions((v) => !v)}
 								aria-expanded={showAdvancedOptions}
-								className="flex h-7 items-center gap-1 rounded-md border border-foreground/10 bg-card/70 px-2 text-[10px] text-foreground/80 transition hover:bg-card hover:text-foreground"
+								className="flex h-7 min-w-0 items-center gap-1 rounded-md border border-foreground/10 bg-card/70 px-2 text-[10px] text-foreground/80 transition-colors hover:bg-card hover:text-foreground"
+								whileHover={prefersReducedMotion === true ? undefined : { scale: 1.02 }}
+								whileTap={prefersReducedMotion === true ? undefined : { scale: 0.98 }}
 							>
 								<Settings2 className="size-3 shrink-0" aria-hidden="true" />
-								{showAdvancedOptions ? "Fewer options" : "Effort, permissions, prompt"}
-								<ChevronDown
-									className={`size-3 shrink-0 transition-transform ${showAdvancedOptions ? "rotate-180" : ""}`}
+								{/* wait: avoids exit+enter labels in-flow at once (very wide bar) */}
+								<AnimatePresence initial={false} mode="wait">
+									<motion.span
+										key={showAdvancedOptions ? "fewer" : "more"}
+										initial={prefersReducedMotion === true ? false : { opacity: 0, y: 4 }}
+										animate={{ opacity: 1, y: 0 }}
+										exit={prefersReducedMotion === true ? { opacity: 0 } : { opacity: 0, y: -4 }}
+										transition={toggleLabelTransition}
+										className="inline-block max-w-full whitespace-nowrap"
+									>
+										{showAdvancedOptions ? "Fewer options" : "Effort, permissions, prompt"}
+									</motion.span>
+								</AnimatePresence>
+								<motion.span
+									animate={{ rotate: showAdvancedOptions ? 180 : 0 }}
+									transition={chevronTransition}
+									className="inline-flex shrink-0"
 									aria-hidden="true"
-								/>
-							</button>
+								>
+									<ChevronDown className="size-3" />
+								</motion.span>
+							</motion.button>
 						</div>
 					)}
 
-					{!isMobile && showAdvancedOptions && (
-						<div className="hidden md:grid md:grid-cols-2 md:gap-x-3 md:gap-y-2 md:rounded-lg md:border md:border-foreground/8 md:bg-card/30 md:p-2.5">
-							{/* Effort */}
-							<div className="space-y-1">
-								<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
-									Effort
-								</p>
-								{effortLevels.length > 0 ? (
-									<div className="flex min-h-7 flex-wrap content-start gap-1.5">
-										{effortLevels.map((level) => (
-											<button
-												key={level.id}
-												type="button"
-												onClick={() => setSelectedEffort(level.id)}
-												className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
-													selectedEffort === level.id
-														? "border-foreground/20 bg-foreground text-background"
-														: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
-												}`}
-											>
-												{level.label}
-											</button>
-										))}
+					{!isMobile && (
+						<AnimatePresence initial={false}>
+							{showAdvancedOptions && (
+								<motion.div
+									key="session-launcher-advanced"
+									className="grid min-w-0 w-full max-w-full grid-cols-2 gap-x-3 gap-y-2 overflow-hidden rounded-lg border border-foreground/8 bg-card/30 p-2.5"
+									style={{ isolation: "isolate" }}
+									initial={prefersReducedMotion === true ? false : { opacity: 0, y: -6 }}
+									animate={{ opacity: 1, y: 0 }}
+									exit={
+										prefersReducedMotion === true
+											? { opacity: 0, transition: { duration: 0 } }
+											: { opacity: 0, y: -4 }
+									}
+									transition={collapsiblePanelTransition}
+								>
+									{/* Effort */}
+									<div className="space-y-1">
+										<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+											Effort
+										</p>
+										{effortLevels.length > 0 ? (
+											<div className="flex min-h-7 flex-wrap content-start gap-1.5">
+												{effortLevels.map((level) => (
+													<button
+														key={level.id}
+														type="button"
+														onClick={() => setSelectedEffort(level.id)}
+														className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+															selectedEffort === level.id
+																? "border-foreground/20 bg-foreground text-background"
+																: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
+														}`}
+													>
+														{level.label}
+													</button>
+												))}
+											</div>
+										) : (
+											<p className="min-h-7 text-[10px] leading-7 text-muted-foreground">
+												Not configurable for this provider
+											</p>
+										)}
 									</div>
-								) : (
-									<p className="min-h-7 text-[10px] leading-7 text-muted-foreground">
-										Not configurable for this provider
-									</p>
-								)}
-							</div>
 
-							{/* Permissions */}
-							{showsPermissionMode && (
-								<div className="space-y-1">
-									<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
-										Permissions
-									</p>
-									<div className="flex flex-wrap gap-1.5">
-										<button
-											type="button"
-											onClick={() => setPermissionMode("bypassPermissions")}
-											className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
-												permissionMode === "bypassPermissions"
-													? "border-foreground/20 bg-foreground text-background"
-													: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
-											}`}
-											title="Recommended. Runs best in shelleport."
-										>
-											Bypass
-										</button>
-										<button
-											type="button"
-											onClick={() => setPermissionMode("default")}
-											className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
-												permissionMode === "default"
-													? "border-foreground/20 bg-foreground text-background"
-													: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
-											}`}
-											title="Available, but prompts do not work especially well yet."
-										>
-											Ask for approvals
-										</button>
+									{/* Permissions */}
+									{showsPermissionMode && (
+										<div className="space-y-1">
+											<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+												Permissions
+											</p>
+											<div className="flex flex-wrap gap-1.5">
+												<button
+													type="button"
+													onClick={() => setPermissionMode("bypassPermissions")}
+													className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+														permissionMode === "bypassPermissions"
+															? "border-foreground/20 bg-foreground text-background"
+															: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
+													}`}
+													title="Recommended. Runs best in shelleport."
+												>
+													Bypass
+												</button>
+												<button
+													type="button"
+													onClick={() => setPermissionMode("default")}
+													className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition ${
+														permissionMode === "default"
+															? "border-foreground/20 bg-foreground text-background"
+															: "border-foreground/10 bg-card/90 text-foreground/90 hover:border-foreground/18"
+													}`}
+													title="Available, but prompts do not work especially well yet."
+												>
+													Ask for approvals
+												</button>
+											</div>
+										</div>
+									)}
+
+									{/* System prompt — full width below effort / permissions */}
+									<div className="space-y-1 md:col-span-2">
+										<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+											System prompt
+										</p>
+										<textarea
+											value={systemPrompt}
+											onChange={(event) => setSystemPrompt(event.target.value)}
+											placeholder="Custom instructions for this session…"
+											rows={2}
+											maxLength={10000}
+											className="w-full resize-y rounded-md border border-foreground/10 bg-card/90 px-2.5 py-1.5 text-[10px] leading-[1.5] text-foreground outline-none transition placeholder:text-muted-foreground focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
+										/>
 									</div>
-								</div>
+								</motion.div>
 							)}
-
-							{/* System prompt — full width below effort / permissions */}
-							<div className="space-y-1 md:col-span-2">
-								<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/68">
-									System prompt
-								</p>
-								<textarea
-									value={systemPrompt}
-									onChange={(event) => setSystemPrompt(event.target.value)}
-									placeholder="Custom instructions for this session…"
-									rows={2}
-									maxLength={10000}
-									className="w-full resize-y rounded-md border border-foreground/10 bg-card/90 px-2.5 py-1.5 text-[10px] leading-[1.5] text-foreground outline-none transition placeholder:text-muted-foreground focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
-								/>
-							</div>
-						</div>
+						</AnimatePresence>
 					)}
 
 					{/* Selected directory bar */}
