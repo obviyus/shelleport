@@ -339,10 +339,10 @@ function DirectoryColumn({
 			tabIndex={0}
 			onFocus={onColumnFocus}
 			onKeyDown={handleKeyDown}
-			className={`flex min-h-[18rem] w-full shrink-0 flex-col overflow-hidden rounded-xl border md:h-full md:min-h-0 md:w-64 ${
+			className={`flex min-h-72 w-full shrink-0 flex-col overflow-hidden rounded-xl border md:h-full md:min-h-0 md:w-64 ${
 				isActiveColumn
-					? "border-foreground/18 bg-card shadow-[0_18px_50px_oklch(0_0_0_/_0.28)]"
-					: "border-foreground/10 bg-card/82 shadow-[inset_0_1px_0_oklch(1_0_0_/_0.02)]"
+					? "border-foreground/18 bg-card shadow-[0_18px_50px_oklch(0_0_0/0.28)]"
+					: "border-foreground/10 bg-card/82 shadow-[inset_0_1px_0_oklch(1_0_0/0.02)]"
 			} outline-none focus-visible:ring-1 focus-visible:ring-foreground/18 ${isFocusedColumn ? "ring-1 ring-foreground/18" : ""}`}
 		>
 			<header className="border-b border-foreground/8 px-3 py-2.5">
@@ -353,7 +353,7 @@ function DirectoryColumn({
 						</p>
 						<p className="mt-0.5 truncate text-[0.6875rem] text-muted-foreground">{path}</p>
 					</div>
-					{isLoading && <Loader2 className="size-3 animate-spin text-muted-foreground" />}
+					{isLoading && <Loader2 aria-hidden="true" className="size-3 animate-spin text-muted-foreground" />}
 				</div>
 				<div className="relative mt-2">
 					<label htmlFor={searchInputId} className="sr-only">
@@ -422,7 +422,7 @@ function DirectoryColumn({
 										style={{ contentVisibility: "auto", containIntrinsicSize: "36px" }}
 										className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-3 md:py-2 text-left text-xs transition ${
 											isCurrentSelection
-												? "bg-foreground/88 text-background ring-1 ring-background/20 shadow-[0_10px_30px_oklch(1_0_0_/_0.08)]"
+												? "bg-foreground/88 text-background ring-1 ring-background/20 shadow-[0_10px_30px_oklch(1_0_0/0.08)]"
 												: isPathAncestor
 													? "bg-foreground/10 text-foreground ring-1 ring-foreground/16"
 													: isFocusedColumn && isActive
@@ -790,7 +790,7 @@ export function SessionLauncher({
 	return (
 		<div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:overflow-hidden">
 			<div className="border-b border-border flex flex-wrap px-3 py-3 md:px-6 md:py-4">
-				<div className="mx-auto flex min-w-0 w-full max-w-[110rem] flex-col gap-3">
+				<div className="mx-auto flex min-w-0 w-full max-w-440 flex-col gap-3">
 					<div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-x-4 gap-y-2">
 						<div className="min-w-0">
 							<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.16em] text-foreground/68">
@@ -805,7 +805,7 @@ export function SessionLauncher({
 							type="button"
 							onClick={handleCreate}
 							disabled={isCreating || createDisabledReason !== null}
-							className="hidden h-9 min-w-[14rem] shrink-0 items-center justify-center gap-1.5 rounded-md bg-foreground px-3 text-[0.8125rem] font-medium text-background transition hover:bg-foreground/90 focus-visible:ring-2 focus-visible:ring-foreground/20 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-30 md:flex"
+							className="hidden h-9 min-w-56 shrink-0 items-center justify-center gap-1.5 rounded-md bg-foreground px-3 text-[0.8125rem] font-medium text-background transition hover:bg-foreground/90 focus-visible:ring-2 focus-visible:ring-foreground/20 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-40 md:flex"
 						>
 							{isCreating ? (
 								<Loader2 aria-hidden="true" className="size-3 animate-spin" />
@@ -830,11 +830,12 @@ export function SessionLauncher({
 								<motion.button
 									type="button"
 									onClick={() => setShowMobileOptions((v) => !v)}
-									className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-foreground/10 bg-card/90 px-2 text-[0.6875rem] text-foreground/70 transition-colors active:bg-accent"
+								aria-expanded={showMobileOptions}
+								className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-foreground/10 bg-card/90 px-2 text-[0.6875rem] text-foreground/70 transition-colors active:bg-accent"
 									whileHover={prefersReducedMotion === true ? undefined : { scale: 1.03 }}
 									whileTap={prefersReducedMotion === true ? undefined : { scale: 0.97 }}
 								>
-									<Settings2 className="size-3" />
+									<Settings2 aria-hidden="true" className="size-3" />
 									<motion.span
 										animate={{ rotate: showMobileOptions ? 180 : 0 }}
 										transition={chevronTransition}
@@ -946,14 +947,15 @@ export function SessionLauncher({
 											</div>
 										</div>
 
-										{/* Title */}
-										<div className="space-y-1">
-											<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
-												Title
-											</p>
-											<input
-												type="text"
-												value={title}
+{/* Title */}
+									<div className="space-y-1">
+										<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+											Title
+										</p>
+										<input
+											type="text"
+											aria-label="Session title"
+											value={title}
 												onChange={(event) => setTitle(event.target.value)}
 												autoComplete="off"
 												placeholder="Optional session title…"
@@ -1033,13 +1035,14 @@ export function SessionLauncher({
 											</div>
 										)}
 
-										{/* System prompt */}
-										<div className="space-y-1">
-											<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
-												System prompt
-											</p>
-											<textarea
-												value={systemPrompt}
+{/* System prompt */}
+									<div className="space-y-1">
+										<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+											System prompt
+										</p>
+										<textarea
+											aria-label="System prompt"
+											value={systemPrompt}
 												onChange={(event) => setSystemPrompt(event.target.value)}
 												placeholder="Custom instructions for this session…"
 												rows={2}
@@ -1178,12 +1181,12 @@ export function SessionLauncher({
 											}
 										}}
 										disabled={!newProjectName.trim() || isCreatingProject}
-										className="flex h-7 items-center gap-1 rounded-md bg-foreground px-2.5 text-xs font-medium text-background transition hover:bg-foreground/90 disabled:opacity-30"
+										className="flex h-7 items-center gap-1 rounded-md bg-foreground px-2.5 text-xs font-medium text-background transition hover:bg-foreground/90 disabled:opacity-40"
 									>
 										{isCreatingProject ? (
-											<Loader2 className="size-3 animate-spin" />
+											<Loader2 aria-hidden="true" className="size-3 animate-spin" />
 										) : (
-											<Plus className="size-3" />
+											<Plus aria-hidden="true" className="size-3" />
 										)}
 										Create
 									</button>
@@ -1193,9 +1196,9 @@ export function SessionLauncher({
 
 						{/* Row 1 right: Title */}
 						<div className="space-y-1">
-							<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+							<label htmlFor={titleInputId} className="block text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
 								Title
-							</p>
+							</label>
 							<input
 								id={titleInputId}
 								name="title"
@@ -1351,18 +1354,19 @@ export function SessionLauncher({
 										</div>
 									)}
 
-									{/* System prompt — full width below effort / permissions */}
-									<div className="space-y-1 md:col-span-2">
-										<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
-											System prompt
-										</p>
-										<textarea
-											value={systemPrompt}
+{/* System prompt — full width below effort / permissions */}
+								<div className="space-y-1 md:col-span-2">
+									<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+										System prompt
+									</p>
+									<textarea
+										aria-label="System prompt"
+										value={systemPrompt}
 											onChange={(event) => setSystemPrompt(event.target.value)}
 											placeholder="Custom instructions for this session…"
 											rows={2}
 											maxLength={10000}
-											className="w-full resize-y rounded-md border border-foreground/10 bg-card/90 px-2.5 py-1.5 text-xs leading-[1.5] text-foreground outline-none transition placeholder:text-muted-foreground focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
+											className="w-full resize-y rounded-md border border-foreground/10 bg-card/90 px-2.5 py-1.5 text-xs leading-normal text-foreground outline-none transition placeholder:text-muted-foreground focus-visible:border-foreground/22 focus-visible:ring-1 focus-visible:ring-foreground/14"
 										/>
 									</div>
 								</motion.div>
@@ -1413,7 +1417,7 @@ export function SessionLauncher({
 
 			<div className={`px-3 py-3 md:min-h-0 md:flex-1 md:px-6 md:py-4 ${isMobile ? "pb-20" : ""}`}>
 				{isMobile && pathChain.length > 1 && (
-					<div className="mx-auto flex max-w-[110rem] items-center gap-2 mb-3">
+					<div className="mx-auto flex max-w-440 items-center gap-2 mb-3">
 						<button
 							type="button"
 							onClick={() => {
@@ -1425,7 +1429,7 @@ export function SessionLauncher({
 							}}
 							className="flex h-10 items-center gap-1.5 rounded-lg border border-foreground/10 bg-card/90 px-3 text-xs text-foreground/84 active:bg-accent"
 						>
-							<ChevronLeft className="size-3.5" />
+							<ChevronLeft aria-hidden="true" className="size-3.5" />
 							Back
 						</button>
 						<div className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
@@ -1435,7 +1439,7 @@ export function SessionLauncher({
 				)}
 				<div
 					ref={browserRef}
-					className="mx-auto flex w-full max-w-[110rem] gap-3 overflow-hidden pb-2 md:h-full"
+					className="mx-auto flex w-full max-w-440 gap-3 overflow-hidden pb-2 md:h-full"
 				>
 					{(isMobile ? pathChain.slice(-1) : visiblePathChain).map((path, index) => {
 						const absoluteIndex = windowStartIndex + index;
@@ -1514,7 +1518,7 @@ export function SessionLauncher({
 							type="button"
 							onClick={handleCreate}
 							disabled={isCreating || createDisabledReason !== null}
-							className="flex h-10 shrink-0 items-center gap-1.5 rounded-lg bg-foreground px-4 text-[0.8125rem] font-medium text-background transition active:bg-foreground/90 disabled:opacity-30"
+							className="flex h-10 shrink-0 items-center gap-1.5 rounded-lg bg-foreground px-4 text-[0.8125rem] font-medium text-background transition active:bg-foreground/90 disabled:opacity-40"
 						>
 							{isCreating ? (
 								<Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
