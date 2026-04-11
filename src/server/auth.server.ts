@@ -1,9 +1,11 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { isIP } from "node:net";
 import { ApiError } from "~/server/api-error.server";
 import { sessionStore } from "~/server/store.server";
 
 const ADMIN_COOKIE_NAME = "shelleport_session";
 const SESSION_MAX_AGE = 60 * 60 * 24 * 30;
+const CLIENT_IP_HEADER_NAME = "x-shelleport-client-ip";
 
 const LOGIN_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_RATE_LIMIT_MAX_ATTEMPTS = 10;
@@ -15,10 +17,39 @@ type LoginAttemptBucket = {
 
 const loginAttempts = new Map<string, LoginAttemptBucket>();
 
+function isProxyTrusted() {
+	const value = Bun.env.SHELLEPORT_TRUST_PROXY?.trim().toLowerCase();
+	return value === "1" || value === "true" || value === "yes" || value === "on";
+}
+
+function readValidIp(value: string | null) {
+	if (!value) {
+		return null;
+	}
+
+	const normalized = value.trim();
+	return normalized.length > 0 && isIP(normalized) ? normalized : null;
+}
+
+function getTrustedProxyIp(request: Request) {
+	const forwardedFor = request.headers.get("x-forwarded-for");
+
+	if (forwardedFor) {
+		for (const part of forwardedFor.split(",")) {
+			const ip = readValidIp(part);
+			if (ip) {
+				return ip;
+			}
+		}
+	}
+
+	return readValidIp(request.headers.get("x-real-ip"));
+}
+
 function getClientIp(request: Request): string {
 	return (
-		request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-		request.headers.get("x-real-ip") ||
+		readValidIp(request.headers.get(CLIENT_IP_HEADER_NAME)) ||
+		(isProxyTrusted() ? getTrustedProxyIp(request) : null) ||
 		"unknown"
 	);
 }

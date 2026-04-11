@@ -1188,7 +1188,9 @@ function SessionStatusBadge({
 		return (
 			<div className="inline-flex h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded border border-amber-500/25 bg-amber-500/8 px-0 md:h-8 md:w-auto md:min-w-0 md:px-2">
 				<Loader2 className="size-2.5 animate-spin text-amber-400/80" />
-				<span className="hidden md:inline text-xs leading-none text-amber-300/80">Reconnecting…</span>
+				<span className="hidden md:inline text-xs leading-none text-amber-300/80">
+					Reconnecting…
+				</span>
 			</div>
 		);
 	}
@@ -1212,13 +1214,17 @@ function SessionStatusBadge({
 			{modelLabel && (
 				<>
 					<span className="hidden md:inline text-foreground/20 leading-none">·</span>
-					<span className="hidden md:inline text-xs leading-none text-muted-foreground">{modelLabel}</span>
+					<span className="hidden md:inline text-xs leading-none text-muted-foreground">
+						{modelLabel}
+					</span>
 				</>
 			)}
 			{effortLabel && (
 				<>
 					<span className="hidden md:inline text-foreground/20 leading-none">·</span>
-					<span className="hidden md:inline text-xs leading-none text-muted-foreground">{effortLabel}</span>
+					<span className="hidden md:inline text-xs leading-none text-muted-foreground">
+						{effortLabel}
+					</span>
 				</>
 			)}
 		</div>

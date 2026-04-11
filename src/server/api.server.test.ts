@@ -3333,42 +3333,99 @@ describe("handleApiRequest", () => {
 		await reader.cancel();
 	});
 
-	test("rate-limits login attempts after threshold", async () => {
-		const { checkLoginRateLimit, recordFailedLoginAttempt, resetLoginRateLimit, setAdminToken } =
+	test("rate-limits login attempts after threshold using the resolved client IP", async () => {
+		const { checkLoginRateLimit, recordFailedLoginAttempt, resetLoginRateLimit } =
 			await import("~/server/auth.server");
 
-		// Exhaust the rate limit bucket from a unique IP
 		const ip = `10.99.99.${Math.floor(Math.random() * 200)}`;
 		const makeRequest = () =>
 			new Request("http://localhost/api/auth/session", {
 				method: "POST",
-				headers: { "x-forwarded-for": ip, "content-type": "application/json" },
+				headers: {
+					"content-type": "application/json",
+					"x-shelleport-client-ip": ip,
+				},
 				body: JSON.stringify({ token: "wrong" }),
 			});
 
-		// First 10 attempts should pass the rate limit check
 		for (let i = 0; i < 10; i++) {
 			expect(() => checkLoginRateLimit(makeRequest())).not.toThrow();
 			recordFailedLoginAttempt(makeRequest());
 		}
 
-		// 11th should be rejected
 		expect(() => checkLoginRateLimit(makeRequest())).toThrow();
-
 		resetLoginRateLimit(makeRequest());
+	});
 
-		const token = setAdminToken("known-good-token");
-		const successResponse = await handleApiRequest(
+	test("ignores spoofed proxy IP headers unless trust proxy is enabled", async () => {
+		const { checkLoginRateLimit, recordFailedLoginAttempt, resetLoginRateLimit } =
+			await import("~/server/auth.server");
+
+		const makeRequest = (ip: string) =>
 			new Request("http://localhost/api/auth/session", {
 				method: "POST",
-				headers: { "x-forwarded-for": ip, "content-type": "application/json" },
-				body: JSON.stringify({ token }),
-			}),
-		);
-		expect(successResponse.status).toBe(200);
+				headers: {
+					"content-type": "application/json",
+					"x-forwarded-for": ip,
+				},
+				body: JSON.stringify({ token: "wrong" }),
+			});
 
-		expect(() => checkLoginRateLimit(makeRequest())).not.toThrow();
-		setAdminToken("test-token");
+		for (let i = 0; i < 10; i++) {
+			expect(() => checkLoginRateLimit(makeRequest("203.0.113.10"))).not.toThrow();
+			recordFailedLoginAttempt(makeRequest("203.0.113.10"));
+		}
+
+		expect(() => checkLoginRateLimit(makeRequest("198.51.100.25"))).toThrow();
+		resetLoginRateLimit(new Request("http://localhost/api/auth/session", { method: "POST" }));
+	});
+
+	test("honors trusted proxy headers for login rate limiting when enabled", async () => {
+		const { checkLoginRateLimit, recordFailedLoginAttempt, resetLoginRateLimit, setAdminToken } =
+			await import("~/server/auth.server");
+		const previousTrustProxy = Bun.env.SHELLEPORT_TRUST_PROXY;
+		Bun.env.SHELLEPORT_TRUST_PROXY = "1";
+		let ip = "10.88.77.10";
+		let otherIp = "10.88.78.10";
+		const makeRequest = (value: string, token = "wrong") =>
+			new Request("http://localhost/api/auth/session", {
+				method: "POST",
+				headers: {
+					"content-type": "application/json",
+					"x-forwarded-for": value,
+				},
+				body: JSON.stringify({ token }),
+			});
+
+		try {
+			ip = `10.88.77.${Math.floor(Math.random() * 200)}`;
+			otherIp = `10.88.78.${Math.floor(Math.random() * 200)}`;
+
+			for (let i = 0; i < 9; i++) {
+				expect(() => checkLoginRateLimit(makeRequest(ip))).not.toThrow();
+				recordFailedLoginAttempt(makeRequest(ip));
+			}
+
+			expect(() => checkLoginRateLimit(makeRequest(ip))).not.toThrow();
+			recordFailedLoginAttempt(makeRequest(ip));
+			expect(() => checkLoginRateLimit(makeRequest(ip))).toThrow();
+			expect(() => checkLoginRateLimit(makeRequest(otherIp))).not.toThrow();
+			resetLoginRateLimit(makeRequest(ip));
+
+			const token = setAdminToken("known-good-token");
+			const successResponse = await handleApiRequest(makeRequest(ip, token));
+			expect(successResponse.status).toBe(200);
+			expect(() => checkLoginRateLimit(makeRequest(ip))).not.toThrow();
+		} finally {
+			resetLoginRateLimit(makeRequest(ip));
+			resetLoginRateLimit(makeRequest(otherIp));
+			if (previousTrustProxy === undefined) {
+				delete Bun.env.SHELLEPORT_TRUST_PROXY;
+			} else {
+				Bun.env.SHELLEPORT_TRUST_PROXY = previousTrustProxy;
+			}
+			setAdminToken("test-token");
+		}
 	});
 
 	test("rejects missing auth", async () => {

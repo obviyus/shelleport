@@ -46,6 +46,44 @@ describe("createServerFetchHandler", () => {
 		expect(authResponse.headers.get("X-Content-Type-Options")).toBe("nosniff");
 		expect(authResponse.headers.get("X-Frame-Options")).toBe("DENY");
 	});
+
+	test("overwrites spoofed internal client IP headers with the server-resolved IP", async () => {
+		const { resetLoginRateLimit } = await import("~/server/auth.server");
+		const fetch = await createServerFetchHandler();
+		const server = {
+			requestIP() {
+				return { address: "10.44.55.66" };
+			},
+		};
+		const makeRequest = (spoofedIp: string) =>
+			new Request("http://localhost/api/auth/session", {
+				method: "POST",
+				headers: {
+					"content-type": "application/json",
+					"x-shelleport-client-ip": spoofedIp,
+				},
+				body: JSON.stringify({ token: "wrong" }),
+			});
+
+		try {
+			for (let attempt = 0; attempt < 10; attempt += 1) {
+				const response = await fetch(makeRequest(`198.51.100.${attempt + 1}`), server);
+				expect(response.status).toBe(401);
+			}
+
+			const blockedResponse = await fetch(makeRequest("203.0.113.9"), server);
+			expect(blockedResponse.status).toBe(429);
+		} finally {
+			resetLoginRateLimit(
+				new Request("http://localhost/api/auth/session", {
+					method: "POST",
+					headers: {
+						"x-shelleport-client-ip": "10.44.55.66",
+					},
+				}),
+			);
+		}
+	});
 });
 
 describe("parseCliOptions", () => {
