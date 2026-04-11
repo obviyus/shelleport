@@ -37,6 +37,8 @@ type ServerRequestIpResolver = {
 	requestIP?(request: Request): { address?: string | null } | null;
 };
 
+type ServerFetchContext = RequestTimeoutController & ServerRequestIpResolver;
+
 export async function getServiceEnvironment(home = Bun.env.HOME ?? process.cwd()) {
 	const pathEntries = [`${home}/.local/bin`, ...(process.env.PATH ?? "").split(":")].filter(
 		Boolean,
@@ -871,18 +873,40 @@ function withResolvedClientIp(request: Request, server?: ServerRequestIpResolver
 	return new Request(request, { headers });
 }
 
+export function resolveServerFetchContext(
+	timeoutControllerOrServer?:
+		| RequestTimeoutController
+		| ServerRequestIpResolver
+		| ServerFetchContext,
+	serverArg?: ServerRequestIpResolver,
+) {
+	const server = serverArg ?? (timeoutControllerOrServer as ServerRequestIpResolver | undefined);
+	const candidate = timeoutControllerOrServer as RequestTimeoutController | undefined;
+	const timeoutController =
+		candidate && typeof candidate.timeout === "function" ? candidate : undefined;
+
+	return {
+		server,
+		timeoutController,
+	};
+}
+
 export async function createServerFetchHandler() {
 	const { sessionBroker } = await import("~/server/session-broker.server");
 	sessionBroker.recoverInterruptedRuns();
 
 	return async function fetch(
 		request: Request,
-		timeoutControllerOrServer?: RequestTimeoutController | ServerRequestIpResolver,
+		timeoutControllerOrServer?:
+			| RequestTimeoutController
+			| ServerRequestIpResolver
+			| ServerFetchContext,
 		serverArg?: ServerRequestIpResolver,
 	) {
-		const timeoutController =
-			serverArg === undefined ? undefined : (timeoutControllerOrServer as RequestTimeoutController);
-		const server = serverArg ?? (timeoutControllerOrServer as ServerRequestIpResolver | undefined);
+		const { server, timeoutController } = resolveServerFetchContext(
+			timeoutControllerOrServer,
+			serverArg,
+		);
 		request = withResolvedClientIp(request, server);
 		const url = new URL(request.url);
 

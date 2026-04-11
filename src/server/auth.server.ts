@@ -47,11 +47,10 @@ function getTrustedProxyIp(request: Request) {
 }
 
 function getClientIp(request: Request): string {
-	return (
-		readValidIp(request.headers.get(CLIENT_IP_HEADER_NAME)) ||
-		(isProxyTrusted() ? getTrustedProxyIp(request) : null) ||
-		"unknown"
-	);
+	const resolvedClientIp = readValidIp(request.headers.get(CLIENT_IP_HEADER_NAME));
+	const trustedProxyIp = isProxyTrusted() ? getTrustedProxyIp(request) : null;
+
+	return trustedProxyIp || resolvedClientIp || "unknown";
 }
 
 function cleanupExpiredBuckets() {
