@@ -16,6 +16,7 @@ const linuxInstallDir = "/usr/local/lib/shelleport";
 const linuxBinaryPath = `${linuxInstallDir}/shelleport`;
 const linuxCliPath = "/usr/local/bin/shelleport";
 const systemdServicePath = "/etc/systemd/system/shelleport.service";
+const clientIpHeaderName = "x-shelleport-client-ip";
 
 type CommandName = "serve" | "doctor" | "token" | "install-service" | "upgrade";
 
@@ -31,6 +32,12 @@ type CliOptions = {
 type RequestTimeoutController = {
 	timeout(request: Request, seconds: number): void;
 };
+
+type ServerRequestIpResolver = {
+	requestIP?(request: Request): { address?: string | null } | null;
+};
+
+type ServerFetchContext = RequestTimeoutController & ServerRequestIpResolver;
 
 export async function getServiceEnvironment(home = Bun.env.HOME ?? process.cwd()) {
 	const pathEntries = [`${home}/.local/bin`, ...(process.env.PATH ?? "").split(":")].filter(
@@ -151,7 +158,7 @@ function parsePort(value: string) {
 }
 
 export function getInstallServiceHost(host: string) {
-	return host === config.defaultHost ? "0.0.0.0" : host;
+	return host;
 }
 
 function getReleaseTarget() {
@@ -853,11 +860,54 @@ function applySecurityHeaders(response: Response) {
 	return response;
 }
 
+function withResolvedClientIp(request: Request, server?: ServerRequestIpResolver) {
+	const headers = new Headers(request.headers);
+	const resolvedAddress = server?.requestIP?.(request)?.address?.trim() ?? "";
+
+	if (resolvedAddress.length > 0) {
+		headers.set(clientIpHeaderName, resolvedAddress);
+	} else {
+		headers.delete(clientIpHeaderName);
+	}
+
+	return new Request(request, { headers });
+}
+
+export function resolveServerFetchContext(
+	timeoutControllerOrServer?:
+		| RequestTimeoutController
+		| ServerRequestIpResolver
+		| ServerFetchContext,
+	serverArg?: ServerRequestIpResolver,
+) {
+	const server = serverArg ?? (timeoutControllerOrServer as ServerRequestIpResolver | undefined);
+	const candidate = timeoutControllerOrServer as RequestTimeoutController | undefined;
+	const timeoutController =
+		candidate && typeof candidate.timeout === "function" ? candidate : undefined;
+
+	return {
+		server,
+		timeoutController,
+	};
+}
+
 export async function createServerFetchHandler() {
 	const { sessionBroker } = await import("~/server/session-broker.server");
 	sessionBroker.recoverInterruptedRuns();
 
-	return async function fetch(request: Request, timeoutController?: RequestTimeoutController) {
+	return async function fetch(
+		request: Request,
+		timeoutControllerOrServer?:
+			| RequestTimeoutController
+			| ServerRequestIpResolver
+			| ServerFetchContext,
+		serverArg?: ServerRequestIpResolver,
+	) {
+		const { server, timeoutController } = resolveServerFetchContext(
+			timeoutControllerOrServer,
+			serverArg,
+		);
+		request = withResolvedClientIp(request, server);
 		const url = new URL(request.url);
 
 		try {

@@ -353,7 +353,9 @@ function DirectoryColumn({
 						</p>
 						<p className="mt-0.5 truncate text-[0.6875rem] text-muted-foreground">{path}</p>
 					</div>
-					{isLoading && <Loader2 aria-hidden="true" className="size-3 animate-spin text-muted-foreground" />}
+					{isLoading && (
+						<Loader2 aria-hidden="true" className="size-3 animate-spin text-muted-foreground" />
+					)}
 				</div>
 				<div className="relative mt-2">
 					<label htmlFor={searchInputId} className="sr-only">
@@ -830,8 +832,8 @@ export function SessionLauncher({
 								<motion.button
 									type="button"
 									onClick={() => setShowMobileOptions((v) => !v)}
-								aria-expanded={showMobileOptions}
-								className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-foreground/10 bg-card/90 px-2 text-[0.6875rem] text-foreground/70 transition-colors active:bg-accent"
+									aria-expanded={showMobileOptions}
+									className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-foreground/10 bg-card/90 px-2 text-[0.6875rem] text-foreground/70 transition-colors active:bg-accent"
 									whileHover={prefersReducedMotion === true ? undefined : { scale: 1.03 }}
 									whileTap={prefersReducedMotion === true ? undefined : { scale: 0.97 }}
 								>
@@ -947,15 +949,15 @@ export function SessionLauncher({
 											</div>
 										</div>
 
-{/* Title */}
-									<div className="space-y-1">
-										<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
-											Title
-										</p>
-										<input
-											type="text"
-											aria-label="Session title"
-											value={title}
+										{/* Title */}
+										<div className="space-y-1">
+											<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+												Title
+											</p>
+											<input
+												type="text"
+												aria-label="Session title"
+												value={title}
 												onChange={(event) => setTitle(event.target.value)}
 												autoComplete="off"
 												placeholder="Optional session title…"
@@ -1035,14 +1037,14 @@ export function SessionLauncher({
 											</div>
 										)}
 
-{/* System prompt */}
-									<div className="space-y-1">
-										<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
-											System prompt
-										</p>
-										<textarea
-											aria-label="System prompt"
-											value={systemPrompt}
+										{/* System prompt */}
+										<div className="space-y-1">
+											<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+												System prompt
+											</p>
+											<textarea
+												aria-label="System prompt"
+												value={systemPrompt}
 												onChange={(event) => setSystemPrompt(event.target.value)}
 												placeholder="Custom instructions for this session…"
 												rows={2}
@@ -1196,7 +1198,10 @@ export function SessionLauncher({
 
 						{/* Row 1 right: Title */}
 						<div className="space-y-1">
-							<label htmlFor={titleInputId} className="block text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+							<label
+								htmlFor={titleInputId}
+								className="block text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68"
+							>
 								Title
 							</label>
 							<input
@@ -1354,14 +1359,14 @@ export function SessionLauncher({
 										</div>
 									)}
 
-{/* System prompt — full width below effort / permissions */}
-								<div className="space-y-1 md:col-span-2">
-									<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
-										System prompt
-									</p>
-									<textarea
-										aria-label="System prompt"
-										value={systemPrompt}
+									{/* System prompt — full width below effort / permissions */}
+									<div className="space-y-1 md:col-span-2">
+										<p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-foreground/68">
+											System prompt
+										</p>
+										<textarea
+											aria-label="System prompt"
+											value={systemPrompt}
 											onChange={(event) => setSystemPrompt(event.target.value)}
 											placeholder="Custom instructions for this session…"
 											rows={2}
@@ -1377,7 +1382,9 @@ export function SessionLauncher({
 					{/* Selected directory bar */}
 					<div className="flex flex-wrap items-center gap-2 rounded-md border border-foreground/8 bg-card/60 px-2.5 py-1.5">
 						<FolderOpen aria-hidden="true" className="size-3 shrink-0 text-foreground/55" />
-						<p className="min-w-0 flex-1 truncate text-[0.6875rem] text-foreground/80">{currentPath}</p>
+						<p className="min-w-0 flex-1 truncate text-[0.6875rem] text-foreground/80">
+							{currentPath}
+						</p>
 						{selectedProjectId === null && !showNewProject && (
 							<div className="flex shrink-0 items-center gap-1.5">
 								<input
@@ -1511,7 +1518,9 @@ export function SessionLauncher({
 						<div className="min-w-0 flex-1">
 							<div className="flex items-center gap-1.5">
 								<FolderOpen aria-hidden="true" className="size-3 shrink-0 text-foreground/55" />
-								<p className="min-w-0 truncate text-[0.6875rem] text-foreground/70">{currentPath}</p>
+								<p className="min-w-0 truncate text-[0.6875rem] text-foreground/70">
+									{currentPath}
+								</p>
 							</div>
 						</div>
 						<button

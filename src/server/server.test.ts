@@ -5,6 +5,7 @@ import {
 	getInstallServiceUser,
 	getServiceEnvironment,
 	parseCliOptions,
+	resolveServerFetchContext,
 } from "../../server";
 
 describe("createServerFetchHandler", () => {
@@ -45,6 +46,142 @@ describe("createServerFetchHandler", () => {
 		const authResponse = await fetch(new Request("http://localhost/api/providers"));
 		expect(authResponse.headers.get("X-Content-Type-Options")).toBe("nosniff");
 		expect(authResponse.headers.get("X-Frame-Options")).toBe("DENY");
+	});
+
+	test("overwrites spoofed internal client IP headers with the server-resolved IP", async () => {
+		const { resetLoginRateLimit } = await import("~/server/auth.server");
+		const fetch = await createServerFetchHandler();
+		const server = {
+			requestIP() {
+				return { address: "10.44.55.66" };
+			},
+		};
+		const makeRequest = (spoofedIp: string) =>
+			new Request("http://localhost/api/auth/session", {
+				method: "POST",
+				headers: {
+					"content-type": "application/json",
+					"x-shelleport-client-ip": spoofedIp,
+				},
+				body: JSON.stringify({ token: "wrong" }),
+			});
+
+		try {
+			for (let attempt = 0; attempt < 10; attempt += 1) {
+				const response = await fetch(makeRequest(`198.51.100.${attempt + 1}`), server);
+				expect(response.status).toBe(401);
+			}
+
+			const blockedResponse = await fetch(makeRequest("203.0.113.9"), server);
+			expect(blockedResponse.status).toBe(429);
+		} finally {
+			resetLoginRateLimit(
+				new Request("http://localhost/api/auth/session", {
+					method: "POST",
+					headers: {
+						"x-shelleport-client-ip": "10.44.55.66",
+					},
+				}),
+			);
+		}
+	});
+
+	test("prefers trusted proxy headers over the proxy socket IP when proxy mode is enabled", async () => {
+		const { resetLoginRateLimit } = await import("~/server/auth.server");
+		const previousTrustProxy = Bun.env.SHELLEPORT_TRUST_PROXY;
+		Bun.env.SHELLEPORT_TRUST_PROXY = "1";
+		const fetch = await createServerFetchHandler();
+		const server = {
+			requestIP() {
+				return { address: "10.0.0.5" };
+			},
+		};
+		const makeRequest = (forwardedFor: string) =>
+			new Request("http://localhost/api/auth/session", {
+				method: "POST",
+				headers: {
+					"content-type": "application/json",
+					"x-forwarded-for": forwardedFor,
+				},
+				body: JSON.stringify({ token: "wrong" }),
+			});
+
+		try {
+			for (let attempt = 0; attempt < 10; attempt += 1) {
+				const response = await fetch(makeRequest("203.0.113.10"), server);
+				expect(response.status).toBe(401);
+			}
+
+			const blockedResponse = await fetch(makeRequest("203.0.113.10"), server);
+			expect(blockedResponse.status).toBe(429);
+
+			const separateClientResponse = await fetch(makeRequest("198.51.100.24"), server);
+			expect(separateClientResponse.status).toBe(401);
+		} finally {
+			resetLoginRateLimit(
+				new Request("http://localhost/api/auth/session", {
+					method: "POST",
+					headers: {
+						"x-forwarded-for": "203.0.113.10",
+					},
+				}),
+			);
+			resetLoginRateLimit(
+				new Request("http://localhost/api/auth/session", {
+					method: "POST",
+					headers: {
+						"x-forwarded-for": "198.51.100.24",
+					},
+				}),
+			);
+			if (previousTrustProxy === undefined) {
+				delete Bun.env.SHELLEPORT_TRUST_PROXY;
+			} else {
+				Bun.env.SHELLEPORT_TRUST_PROXY = previousTrustProxy;
+			}
+		}
+	});
+});
+
+describe("resolveServerFetchContext", () => {
+	test("uses the Bun server object as the timeout controller when passed as the second argument", () => {
+		const server = {
+			requestIP() {
+				return { address: "10.0.0.5" };
+			},
+			timeout() {},
+		};
+
+		const context = resolveServerFetchContext(server);
+		expect(context.server).toBe(server);
+		expect(context.timeoutController).toBe(server);
+	});
+
+	test("does not synthesize a timeout controller when the second argument only resolves client IPs", () => {
+		const server = {
+			requestIP() {
+				return { address: "10.0.0.7" };
+			},
+		};
+
+		const context = resolveServerFetchContext(server);
+		expect(context.server).toBe(server);
+		expect(context.timeoutController).toBeUndefined();
+	});
+
+	test("preserves explicit timeout controller and server arguments", () => {
+		const timeoutController = {
+			timeout() {},
+		};
+		const server = {
+			requestIP() {
+				return { address: "10.0.0.6" };
+			},
+		};
+
+		const context = resolveServerFetchContext(timeoutController, server);
+		expect(context.server).toBe(server);
+		expect(context.timeoutController).toBe(timeoutController);
 	});
 });
 
@@ -111,8 +248,12 @@ describe("parseCliOptions", () => {
 });
 
 describe("getInstallServiceHost", () => {
-	test("defaults service installs to public bind", () => {
-		expect(getInstallServiceHost("127.0.0.1")).toBe("0.0.0.0");
+	test("keeps default service installs on loopback", () => {
+		expect(getInstallServiceHost("127.0.0.1")).toBe("127.0.0.1");
+	});
+
+	test("preserves explicit public binds", () => {
+		expect(getInstallServiceHost("0.0.0.0")).toBe("0.0.0.0");
 	});
 
 	test("preserves explicit tailscale binds", () => {
