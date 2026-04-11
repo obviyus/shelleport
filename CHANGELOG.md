@@ -2,6 +2,12 @@
 
 All notable changes to shelleport are documented here.
 
+## Unreleased
+
+### Fixed
+
+- `install-service` now keeps the default loopback bind instead of exposing `0.0.0.0` unless `--public` or another explicit host option is used
+
 ## 0.0.33 - 2026-04-01
 
 ### Changed

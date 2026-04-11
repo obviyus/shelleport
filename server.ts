@@ -156,7 +156,7 @@ function parsePort(value: string) {
 }
 
 export function getInstallServiceHost(host: string) {
-	return host === config.defaultHost ? "0.0.0.0" : host;
+	return host;
 }
 
 function getReleaseTarget() {

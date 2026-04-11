@@ -149,8 +149,12 @@ describe("parseCliOptions", () => {
 });
 
 describe("getInstallServiceHost", () => {
-	test("defaults service installs to public bind", () => {
-		expect(getInstallServiceHost("127.0.0.1")).toBe("0.0.0.0");
+	test("keeps default service installs on loopback", () => {
+		expect(getInstallServiceHost("127.0.0.1")).toBe("127.0.0.1");
+	});
+
+	test("preserves explicit public binds", () => {
+		expect(getInstallServiceHost("0.0.0.0")).toBe("0.0.0.0");
 	});
 
 	test("preserves explicit tailscale binds", () => {
