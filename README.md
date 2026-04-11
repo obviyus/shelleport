@@ -128,10 +128,11 @@ shelleport token
 
 ### Environment Variables
 
-| Variable | Default     | Description  |
-| :------- | :---------- | :----------- |
-| `HOST`   | `127.0.0.1` | Bind address |
-| `PORT`   | `1206`      | Bind port    |
+| Variable                 | Default     | Description                                                                                                    |
+| :----------------------- | :---------- | :------------------------------------------------------------------------------------------------------------- |
+| `HOST`                   | `127.0.0.1` | Bind address                                                                                                   |
+| `PORT`                   | `1206`      | Bind port                                                                                                      |
+| `SHELLEPORT_TRUST_PROXY` | unset       | Trust `X-Forwarded-For` / `X-Real-IP` for login rate limiting only when running behind a trusted reverse proxy |
 
 CLI flags:
 
