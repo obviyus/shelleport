@@ -2,10 +2,16 @@
 
 All notable changes to shelleport are documented here.
 
-## Unreleased
+## 0.0.34 - 2026-05-05
+
+### Added
+
+- Chat messages now show hover copy buttons for faster transcript reuse
+- Session headers now show the workspace path, and the launcher copy is clearer for project, effort, and permission choices
 
 ### Fixed
 
+- Session launcher layout, spacing, motion, typography, keyboard selection, and accessibility are tightened across mobile and desktop
 - Login rate limiting now ignores spoofed proxy IP headers unless `SHELLEPORT_TRUST_PROXY` is enabled, while trusted proxy deployments use forwarded client IP headers for rate-limit buckets (#79) (thanks @kesava500)
 - `install-service` now keeps the default loopback bind instead of exposing `0.0.0.0` unless `--public` or another explicit host option is used (#79) (thanks @kesava500)
 

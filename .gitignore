@@ -5,6 +5,7 @@
 /.shelleport-delete-test
 
 /build/
+/.worktrees/
 
 # Project
 .shelleport/
