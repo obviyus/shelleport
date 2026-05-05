@@ -6,7 +6,8 @@ All notable changes to shelleport are documented here.
 
 ### Fixed
 
-- `install-service` now keeps the default loopback bind instead of exposing `0.0.0.0` unless `--public` or another explicit host option is used
+- Login rate limiting now ignores spoofed proxy IP headers unless `SHELLEPORT_TRUST_PROXY` is enabled, while trusted proxy deployments use forwarded client IP headers for rate-limit buckets (#79) (thanks @kesava500)
+- `install-service` now keeps the default loopback bind instead of exposing `0.0.0.0` unless `--public` or another explicit host option is used (#79) (thanks @kesava500)
 
 ## 0.0.33 - 2026-04-01
 
