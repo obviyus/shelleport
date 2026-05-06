@@ -440,7 +440,6 @@ export function orderSessionLimits(limits: SessionLimit[]) {
 	const includedWindows = new Set<string>();
 
 	for (const window of orderedWindows) {
-		// Prefer the canonical window (e.g. "weekly") over aliases (e.g. "seven_day", "10080m")
 		const limit =
 			limits.find((candidate) => candidate.window === window) ??
 			limits.find((candidate) => aliases[candidate.window ?? ""] === window);
@@ -477,7 +476,6 @@ export function formatSessionLimitLabel(window: string) {
 		return "Weekly";
 	}
 
-	// Codex-style windows: "300m" (5h), "10080m" (weekly)
 	const minutesMatch = window.match(/^(\d+)m$/);
 	if (minutesMatch) {
 		const minutes = Number(minutesMatch[1]);

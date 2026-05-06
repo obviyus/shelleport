@@ -1527,10 +1527,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const sessionHeaderBadges = useMemo(() => getSessionHeaderBadges(sessionView), [sessionView]);
 	const activeLimits = useMemo(() => {
 		const provider = sessionView?.provider ?? "claude";
-		return orderSessionLimits([
-			...getSessionLimits(sessionStream),
-			...(providerLimits[provider] ?? []),
-		]);
+		return orderSessionLimits([...getSessionLimits(sessionStream), ...providerLimits[provider]]);
 	}, [providerLimits, sessionStream, sessionView?.provider]);
 	const creatableProviders = useMemo(
 		() =>
@@ -1768,10 +1765,10 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 						if (limit?.window) {
 							const provider = activeProviderRef.current;
 							setProviderLimits((previous) => {
-								const providerLimits = previous[provider] ?? [];
+								const limits = previous[provider];
 								return {
 									...previous,
-									[provider]: mergeProviderLimit(providerLimits, limit),
+									[provider]: mergeProviderLimit(limits, limit),
 								};
 							});
 						}
