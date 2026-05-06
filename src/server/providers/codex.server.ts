@@ -89,6 +89,15 @@ const codexCapabilities: ProviderCapabilities = {
 	liveResume: "provider-managed",
 };
 
+const CODEX_KNOWN_MODELS: ProviderModel[] = [
+	{
+		defaultEffort: "medium",
+		id: "gpt-5.5",
+		label: "gpt-5.5",
+		supportedEfforts: ["low", "medium", "high", "max"],
+	},
+];
+
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -155,6 +164,13 @@ function mapCodexModel(model: CodexJsonObject): ProviderModel | null {
 		label,
 		supportedEfforts,
 	};
+}
+
+function addKnownCodexModels(models: ProviderModel[]) {
+	const seen = new Set(models.map((model) => model.id));
+	const missingKnownModels = CODEX_KNOWN_MODELS.filter((model) => !seen.has(model.id));
+
+	return [...missingKnownModels, ...models];
 }
 
 function createCodexTurnStream(): CodexTurnStream {
@@ -1082,7 +1098,7 @@ async function loadCodexModels() {
 		throw new Error(stderr || `Codex app-server exited with code ${exitCode}`);
 	}
 
-	return models;
+	return addKnownCodexModels(models);
 }
 
 async function getCodexModels() {

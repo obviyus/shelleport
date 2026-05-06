@@ -992,6 +992,11 @@ describe("handleApiRequest", () => {
 			},
 			models: [
 				{
+					id: "gpt-5.5",
+					label: "gpt-5.5",
+					supportedEfforts: ["low", "medium", "high", "max"],
+				},
+				{
 					id: "gpt-5.4",
 					label: "gpt-5.4",
 					supportedEfforts: ["low", "medium", "high", "max"],
