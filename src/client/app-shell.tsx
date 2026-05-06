@@ -105,7 +105,6 @@ import {
 	friendlyModelLabel,
 	getSessionHeaderBadges,
 	type SessionHeaderBadge,
-	getSessionLimits,
 	getSidebarMeta,
 	getSidebarTitle,
 	getStatusMessage,
@@ -1527,8 +1526,8 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const sessionHeaderBadges = useMemo(() => getSessionHeaderBadges(sessionView), [sessionView]);
 	const activeLimits = useMemo(() => {
 		const provider = sessionView?.provider ?? "claude";
-		return orderSessionLimits([...getSessionLimits(sessionStream), ...providerLimits[provider]]);
-	}, [providerLimits, sessionStream, sessionView?.provider]);
+		return orderSessionLimits(providerLimits[provider]);
+	}, [providerLimits, sessionView?.provider]);
 	const creatableProviders = useMemo(
 		() =>
 			providers.filter(
@@ -1731,6 +1730,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 						previousSessionStatus.current = message.payload.session.status;
 						setDetailSessionId(message.payload.session.id);
 						setStream(message.payload.events);
+						setProviderLimits(message.payload.providerLimits);
 						setTotalEvents(message.payload.totalEvents ?? message.payload.events.length);
 						setPendingRequests(
 							message.payload.pendingRequests.filter((request) => request.status === "pending"),

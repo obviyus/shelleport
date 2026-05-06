@@ -234,6 +234,7 @@ export type SessionDetail = {
 	pendingRequests: PendingRequest[];
 	queuedInputs: QueuedSessionInput[];
 	protocolFrames: ProviderProtocolFrame[];
+	providerLimits: ProviderLimitState;
 };
 
 export type SessionStreamMessage =

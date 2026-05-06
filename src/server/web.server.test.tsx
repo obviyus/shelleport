@@ -46,6 +46,7 @@ const testSessionDetail: SessionDetail = {
 	totalEvents: 0,
 	pendingRequests: [],
 	protocolFrames: [],
+	providerLimits: { claude: [], codex: [] },
 	queuedInputs: [],
 	session: testSession,
 };

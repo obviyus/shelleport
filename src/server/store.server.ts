@@ -851,6 +851,7 @@ export const sessionStore = {
 			pendingRequests: listRequestsStatement.all(sessionId).map(mapRequest),
 			queuedInputs: listQueuedInputsStatement.all(sessionId).map(mapQueuedInput),
 			protocolFrames: listProtocolFramesStatement.all(sessionId, 500).map(mapProtocolFrame),
+			providerLimits: this.getProviderLimits(),
 		};
 	},
 	getAuthState() {
