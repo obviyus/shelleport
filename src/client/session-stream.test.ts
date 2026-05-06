@@ -93,6 +93,35 @@ describe("session limits", () => {
 			},
 		]);
 	});
+
+	test("keeps the first Codex alias limit when duplicate windows are merged", () => {
+		expect(
+			orderSessionLimits([
+				{
+					isUsingOverage: null,
+					window: "300m",
+					resetsAt: 2,
+					utilization: 40,
+					status: null,
+				},
+				{
+					isUsingOverage: null,
+					window: "300m",
+					resetsAt: 1,
+					utilization: 90,
+					status: null,
+				},
+			]),
+		).toEqual([
+			{
+				isUsingOverage: null,
+				window: "300m",
+				resetsAt: 2,
+				utilization: 40,
+				status: null,
+			},
+		]);
+	});
 });
 
 describe("getSessionHeaderBadges", () => {
