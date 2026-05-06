@@ -138,22 +138,30 @@ function readCodexProviderEffort(value: unknown): EffortLevel | null {
 	return null;
 }
 
+function normalizeCodexModelLabel(id: string): string {
+	return id
+		.split("-")
+		.map((segment) =>
+			segment === "gpt" ? "GPT" : `${segment.charAt(0).toUpperCase()}${segment.slice(1)}`,
+		)
+		.join("-");
+}
+
 function mapCodexModel(model: CodexJsonObject): ProviderModel | null {
 	const id = readString(model.id);
-	const label = readString(model.displayName);
 	const supportedEfforts = readArray(model.supportedReasoningEfforts)
 		.filter(isRecord)
 		.map((option) => readCodexProviderEffort(option.reasoningEffort))
 		.filter((effort): effort is EffortLevel => effort !== null);
 
-	if (!id || !label) {
+	if (!id) {
 		return null;
 	}
 
 	return {
 		defaultEffort: readCodexProviderEffort(model.defaultReasoningEffort),
 		id,
-		label,
+		label: normalizeCodexModelLabel(id),
 		supportedEfforts,
 	};
 }
