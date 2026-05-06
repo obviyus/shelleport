@@ -193,6 +193,7 @@ export type SessionLimit = {
 
 export type ProviderLimitState = {
 	claude: SessionLimit[];
+	codex: SessionLimit[];
 };
 
 export type PendingRequest = {
