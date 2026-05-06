@@ -10,6 +10,7 @@ import type {
 	RequestResponsePayload,
 	SessionAttachment,
 	SessionControlPayload,
+	SessionLimit,
 } from "~/shared/shelleport";
 import { getCodexBin } from "~/server/config.server";
 import type {
@@ -299,6 +300,32 @@ function createCodexUsage(totalUsage: Record<string, unknown>, model: string | n
 		model,
 		outputTokens: outputTokens + reasoningOutputTokens,
 	};
+}
+
+export function mapCodexRateLimits(params: CodexJsonObject): SessionLimit[] {
+	const rateLimits = isRecord(params.rateLimits) ? params.rateLimits : null;
+	const limits: SessionLimit[] = [];
+
+	for (const key of ["primary", "secondary"] as const) {
+		const rawLimit = isRecord(rateLimits?.[key]) ? rateLimits[key] : null;
+		const resetsAt = readNumber(rawLimit?.resetsAt);
+		const windowDuration = readNumber(rawLimit?.windowDurationMins);
+		const usedPercent = readNumber(rawLimit?.usedPercent);
+
+		if (resetsAt === null || windowDuration === null || usedPercent === null) {
+			continue;
+		}
+
+		limits.push({
+			isUsingOverage: null,
+			resetsAt: resetsAt * 1000,
+			status: null,
+			utilization: usedPercent,
+			window: `${windowDuration}m`,
+		});
+	}
+
+	return limits;
 }
 
 function readCodexResponseThread(result: CodexJsonObject) {
@@ -1297,30 +1324,15 @@ function handleCodexNotification(
 ) {
 	switch (method) {
 		case "account/rateLimits/updated": {
-			const rateLimits = isRecord(params.rateLimits) ? params.rateLimits : null;
-			const primary = isRecord(rateLimits?.primary) ? rateLimits.primary : null;
-			const resetsAt = readNumber(primary?.resetsAt);
-			const windowDuration = readNumber(primary?.windowDurationMins);
-			const usedPercent = readNumber(primary?.usedPercent);
-
-			pushCodexTurnEvent(liveSession, {
-				type: "host-event",
-				kind: "system",
-				summary: "Rate limit update",
-				data: {
-					limit:
-						resetsAt === null || windowDuration === null || usedPercent === null
-							? null
-							: {
-									isUsingOverage: null,
-									resetsAt: resetsAt * 1000,
-									status: null,
-									utilization: usedPercent / 100,
-									window: `${windowDuration}m`,
-								},
-				},
-				rawProviderEvent: params,
-			});
+			for (const limit of mapCodexRateLimits(params)) {
+				pushCodexTurnEvent(liveSession, {
+					type: "host-event",
+					kind: "system",
+					summary: "Rate limit update",
+					data: { limit },
+					rawProviderEvent: params,
+				});
+			}
 			return;
 		}
 		case "error": {

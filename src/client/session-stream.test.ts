@@ -56,6 +56,43 @@ describe("session limits", () => {
 			}),
 		).toBeNull();
 	});
+
+	test("normalizes Codex-style minute windows", () => {
+		expect(formatSessionLimitLabel("300m")).toBe("5 hour");
+		expect(formatSessionLimitLabel("10080m")).toBe("Weekly");
+		expect(formatSessionLimitLabel("60m")).toBe("1h");
+		expect(formatSessionLimitLabel("120m")).toBe("2h");
+		expect(formatSessionLimitLabel("45m")).toBe("45m");
+	});
+
+	test("deduplicates Codex 300m when five_hour is present", () => {
+		expect(
+			orderSessionLimits([
+				{
+					isUsingOverage: null,
+					window: "300m",
+					resetsAt: 1,
+					utilization: 50,
+					status: null,
+				},
+				{
+					isUsingOverage: null,
+					window: "five_hour",
+					resetsAt: 2,
+					utilization: 30,
+					status: null,
+				},
+			]),
+		).toEqual([
+			{
+				isUsingOverage: null,
+				window: "five_hour",
+				resetsAt: 2,
+				utilization: 30,
+				status: null,
+			},
+		]);
+	});
 });
 
 describe("getSessionHeaderBadges", () => {

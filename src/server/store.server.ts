@@ -859,6 +859,7 @@ export const sessionStore = {
 	getProviderLimits(): ProviderLimitState {
 		return {
 			claude: listProviderLimitsStatement.all("claude").map(mapProviderLimit),
+			codex: listProviderLimitsStatement.all("codex").map(mapProviderLimit),
 		};
 	},
 	saveProviderLimit(provider: ProviderId, limit: SessionLimit) {

@@ -346,8 +346,8 @@ async function consumeProviderRun(
 			const limit = readSessionLimit(event.data.limit);
 			const hasUsage = event.data.usage && typeof event.data.usage === "object";
 
-			if (session.provider === "claude" && limit?.window) {
-				sessionStore.saveProviderLimit("claude", limit);
+			if (limit?.window) {
+				sessionStore.saveProviderLimit(session.provider, limit);
 			}
 
 			if (session.provider === "claude" && (limit?.window || hasUsage)) {

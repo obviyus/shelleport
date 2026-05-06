@@ -105,6 +105,7 @@ import {
 	friendlyModelLabel,
 	getSessionHeaderBadges,
 	type SessionHeaderBadge,
+	getSessionLimits,
 	getSidebarMeta,
 	getSidebarTitle,
 	getStatusMessage,
@@ -1109,17 +1110,25 @@ function SidebarSessionItem({
 	);
 }
 
-function SidebarLimitsPanel({ limits }: { limits: SessionLimit[] }) {
+function SidebarLimitsPanel({
+	limits,
+	provider,
+}: {
+	limits: SessionLimit[];
+	provider: ProviderId;
+}) {
 	const now = useNow();
 
 	if (limits.length === 0) {
 		return null;
 	}
 
+	const heading = provider === "codex" ? "Codex limits" : "Claude limits";
+
 	return (
 		<div className="mb-3 rounded border border-foreground/8 bg-background/30 px-3.5 py-3">
 			<div className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-				Claude limits
+				{heading}
 			</div>
 			<div className="space-y-3.5">
 				{limits.map((limit) => (
@@ -1426,6 +1435,8 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		[selectedId, sessions],
 	);
 	const sessionView = selectedSession;
+	const activeProviderRef = useRef<ProviderId>(sessionView?.provider ?? "claude");
+	activeProviderRef.current = sessionView?.provider ?? "claude";
 	const hideThinking = !selectedId || hiddenThinkingSessionIds.includes(selectedId);
 	const [voiceState, setVoiceState] = useState<VoiceInputState>({ status: "idle" });
 	const voiceSetupRef = useRef<ReturnType<typeof createVoiceSession> | null>(null);
@@ -1514,10 +1525,13 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		);
 	}, [sessionStream, hideThinking]);
 	const sessionHeaderBadges = useMemo(() => getSessionHeaderBadges(sessionView), [sessionView]);
-	const claudeLimits = useMemo(
-		() => orderSessionLimits(providerLimits.claude),
-		[providerLimits.claude],
-	);
+	const activeLimits = useMemo(() => {
+		const provider = sessionView?.provider ?? "claude";
+		return orderSessionLimits([
+			...getSessionLimits(sessionStream),
+			...(providerLimits[provider] ?? []),
+		]);
+	}, [providerLimits, sessionStream, sessionView?.provider]);
 	const creatableProviders = useMemo(
 		() =>
 			providers.filter(
@@ -1622,7 +1636,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		}
 	}
 
-	function mergeClaudeLimit(previous: SessionLimit[], next: SessionLimit) {
+	function mergeProviderLimit(previous: SessionLimit[], next: SessionLimit) {
 		if (!next.window) {
 			return previous;
 		}
@@ -1752,10 +1766,14 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 								: null;
 
 						if (limit?.window) {
-							setProviderLimits((previous) => ({
-								...previous,
-								claude: mergeClaudeLimit(previous.claude, limit),
-							}));
+							const provider = activeProviderRef.current;
+							setProviderLimits((previous) => {
+								const providerLimits = previous[provider] ?? [];
+								return {
+									...previous,
+									[provider]: mergeProviderLimit(providerLimits, limit),
+								};
+							});
 						}
 
 						setStream((previous) => [...previous, message.payload]);
@@ -2559,7 +2577,10 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 
 						<div className="shrink-0 px-3 pt-3">
 							<SidebarShortcutLegend />
-							<SidebarLimitsPanel limits={claudeLimits} />
+							<SidebarLimitsPanel
+								limits={activeLimits}
+								provider={sessionView?.provider ?? "claude"}
+							/>
 						</div>
 						<div className="shrink-0 border-t border-border px-3 py-3">
 							<button
