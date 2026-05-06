@@ -141,17 +141,9 @@ function readCodexProviderEffort(value: unknown): EffortLevel | null {
 function normalizeCodexModelLabel(id: string): string {
 	return id
 		.split("-")
-		.map((segment) => {
-			if (segment === "gpt") {
-				return "GPT";
-			}
-
-			if (/^\d+(?:\.\d+)?$/.test(segment)) {
-				return segment;
-			}
-
-			return `${segment.charAt(0).toUpperCase()}${segment.slice(1)}`;
-		})
+		.map((segment) =>
+			segment === "gpt" ? "GPT" : `${segment.charAt(0).toUpperCase()}${segment.slice(1)}`,
+		)
 		.join("-");
 }
 
