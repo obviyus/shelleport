@@ -137,22 +137,39 @@ function readCodexProviderEffort(value: unknown): EffortLevel | null {
 	return null;
 }
 
+function normalizeCodexModelLabel(id: string): string {
+	// Codex app-server returns inconsistent displayName capitalization
+	// (e.g. "GPT-5.5" vs "gpt-5.4"). Normalize to a consistent format:
+	//   gpt-5.5        → GPT-5.5
+	//   gpt-5.4-mini   → GPT-5.4-Mini
+	//   gpt-5.3-codex  → GPT-5.3-Codex
+	return id
+		.split("-")
+		.map((part) =>
+			part === "gpt"
+				? "GPT"
+				: part.match(/^\d/)
+					? part
+					: part.charAt(0).toUpperCase() + part.slice(1),
+		)
+		.join("-");
+}
+
 function mapCodexModel(model: CodexJsonObject): ProviderModel | null {
 	const id = readString(model.id);
-	const label = readString(model.displayName);
 	const supportedEfforts = readArray(model.supportedReasoningEfforts)
 		.filter(isRecord)
 		.map((option) => readCodexProviderEffort(option.reasoningEffort))
 		.filter((effort): effort is EffortLevel => effort !== null);
 
-	if (!id || !label) {
+	if (!id) {
 		return null;
 	}
 
 	return {
 		defaultEffort: readCodexProviderEffort(model.defaultReasoningEffort),
 		id,
-		label,
+		label: normalizeCodexModelLabel(id),
 		supportedEfforts,
 	};
 }

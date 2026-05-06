@@ -993,12 +993,12 @@ describe("handleApiRequest", () => {
 			models: [
 				{
 					id: "gpt-5.4",
-					label: "gpt-5.4",
+					label: "GPT-5.4",
 					supportedEfforts: ["low", "medium", "high", "max"],
 				},
 				{
 					id: "gpt-5.1-codex-mini",
-					label: "gpt-5.1-codex-mini",
+					label: "GPT-5.1-Codex-Mini",
 					supportedEfforts: ["medium", "high"],
 				},
 			],
