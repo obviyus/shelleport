@@ -147,7 +147,7 @@ function normalizeCodexModelLabel(id: string): string {
 		.join("-");
 }
 
-function mapCodexModel(model: CodexJsonObject): ProviderModel | null {
+export function mapCodexModel(model: CodexJsonObject): ProviderModel | null {
 	const id = readString(model.id);
 	const supportedEfforts = readArray(model.supportedReasoningEfforts)
 		.filter(isRecord)
@@ -161,7 +161,7 @@ function mapCodexModel(model: CodexJsonObject): ProviderModel | null {
 	return {
 		defaultEffort: readCodexProviderEffort(model.defaultReasoningEffort),
 		id,
-		label: normalizeCodexModelLabel(id),
+		label: readString(model.displayName) ?? normalizeCodexModelLabel(id),
 		supportedEfforts,
 	};
 }
@@ -621,6 +621,36 @@ function mapCodexImageViewResult(item: CodexJsonObject): ProviderAdapterEvent {
 	};
 }
 
+function mapCodexImageGenerationCall(item: CodexJsonObject): ProviderAdapterEvent {
+	const prompt = readString(item.revisedPrompt) ?? "Image generation";
+
+	return {
+		type: "host-event",
+		kind: "tool-call",
+		summary: prompt,
+		data: {
+			input: { prompt },
+			toolName: "ImageGeneration",
+			toolUseId: readString(item.id),
+		},
+		rawProviderEvent: item,
+	};
+}
+
+function mapCodexImageGenerationResult(item: CodexJsonObject): ProviderAdapterEvent {
+	return {
+		type: "host-event",
+		kind: "tool-result",
+		summary: "Image generated",
+		data: {
+			isError: readString(item.status) === "failed",
+			output: readString(item.savedPath) ?? readString(item.result) ?? "",
+			toolUseId: readString(item.id),
+		},
+		rawProviderEvent: item,
+	};
+}
+
 function mapCodexWebSearchResult(item: CodexJsonObject): ProviderAdapterEvent {
 	return {
 		type: "host-event",
@@ -635,7 +665,7 @@ function mapCodexWebSearchResult(item: CodexJsonObject): ProviderAdapterEvent {
 	};
 }
 
-function mapCodexItemStarted(item: CodexJsonObject): ProviderAdapterEvent | null {
+export function mapCodexItemStarted(item: CodexJsonObject): ProviderAdapterEvent | null {
 	switch (readString(item.type)) {
 		case "commandExecution":
 			return mapCodexCommandCall(item);
@@ -651,6 +681,8 @@ function mapCodexItemStarted(item: CodexJsonObject): ProviderAdapterEvent | null
 			return mapCodexWebSearchCall(item);
 		case "imageView":
 			return mapCodexImageViewCall(item);
+		case "imageGeneration":
+			return mapCodexImageGenerationCall(item);
 		case "enteredReviewMode":
 			return {
 				type: "host-event",
@@ -680,7 +712,7 @@ function mapCodexItemStarted(item: CodexJsonObject): ProviderAdapterEvent | null
 	}
 }
 
-function mapCodexItemCompleted(item: CodexJsonObject): ProviderAdapterEvent | null {
+export function mapCodexItemCompleted(item: CodexJsonObject): ProviderAdapterEvent | null {
 	switch (readString(item.type)) {
 		case "commandExecution":
 			return mapCodexCommandResult(item);
@@ -696,24 +728,33 @@ function mapCodexItemCompleted(item: CodexJsonObject): ProviderAdapterEvent | nu
 			return mapCodexWebSearchResult(item);
 		case "imageView":
 			return mapCodexImageViewResult(item);
+		case "imageGeneration":
+			return mapCodexImageGenerationResult(item);
 		case "plan":
-			if (!readString(item.text)) {
-				return null;
-			}
-
-			return {
-				type: "host-event",
-				kind: "system",
-				summary: "Plan updated",
-				data: { text: readString(item.text) },
-				rawProviderEvent: item,
-			};
+			return mapCodexPlanUpdate(readString(item.text), item);
 		default:
 			return null;
 	}
 }
 
-function buildCodexPendingRequest(
+function mapCodexPlanUpdate(
+	text: string | null,
+	rawProviderEvent: CodexJsonObject,
+): ProviderAdapterEvent | null {
+	if (!text) {
+		return null;
+	}
+
+	return {
+		type: "host-event",
+		kind: "system",
+		summary: "Plan updated",
+		data: { text },
+		rawProviderEvent,
+	};
+}
+
+export function buildCodexPendingRequest(
 	requestId: string,
 	request: CodexPendingRequest,
 ): ProviderAdapterEvent | null {
@@ -722,8 +763,14 @@ function buildCodexPendingRequest(
 			const command = readString(request.params.command);
 			const cwd = readString(request.params.cwd);
 			const reason = readString(request.params.reason);
-			const target =
-				command && cwd
+			const networkApprovalContext = isRecord(request.params.networkApprovalContext)
+				? request.params.networkApprovalContext
+				: null;
+			const host = readString(networkApprovalContext?.host);
+			const protocol = readString(networkApprovalContext?.protocol);
+			const target = host
+				? `Allow Codex network access to ${protocol ? `${protocol}://` : ""}${host}?`
+				: command && cwd
 					? `Allow Codex to run \`${command}\` in ${cwd}?`
 					: "Allow Codex to run this command?";
 
@@ -735,6 +782,7 @@ function buildCodexPendingRequest(
 				data: {
 					command,
 					cwd,
+					networkApprovalContext,
 					requestId,
 					toolUseId: readString(request.params.itemId),
 				},
@@ -1431,6 +1479,20 @@ function handleCodexNotification(
 				data: { usage },
 				rawProviderEvent: params,
 			});
+			return;
+		}
+		case "turn/plan/updated": {
+			const plan = readArray(params.plan)
+				.filter(isRecord)
+				.map((step) => readString(step.step))
+				.filter((step): step is string => step !== null)
+				.join("\n");
+			const event = mapCodexPlanUpdate(readString(params.explanation) ?? plan, params);
+
+			if (event) {
+				pushCodexTurnEvent(liveSession, event);
+			}
+
 			return;
 		}
 		case "turn/completed": {
