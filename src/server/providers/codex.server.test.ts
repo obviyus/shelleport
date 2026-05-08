@@ -5,6 +5,7 @@ import {
 	mapCodexItemCompleted,
 	mapCodexItemStarted,
 	mapCodexModel,
+	mapCodexPlanNotification,
 	mapCodexRateLimits,
 	parseCodexHistoricalSession,
 } from "~/server/providers/codex.server";
@@ -119,6 +120,26 @@ describe("mapCodexItem", () => {
 				isError: false,
 				output: "/tmp/output.png",
 				toolUseId: "image-1",
+			},
+		});
+	});
+});
+
+describe("mapCodexPlanNotification", () => {
+	test("falls back to plan steps when explanation is empty", () => {
+		expect(
+			mapCodexPlanNotification({
+				explanation: "",
+				plan: [
+					{ step: "Inspect app-server schema", status: "completed" },
+					{ step: "Map supported events", status: "inProgress" },
+				],
+			}),
+		).toMatchObject({
+			kind: "system",
+			summary: "Plan updated",
+			data: {
+				text: "Inspect app-server schema\nMap supported events",
 			},
 		});
 	});

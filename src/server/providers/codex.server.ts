@@ -754,6 +754,16 @@ function mapCodexPlanUpdate(
 	};
 }
 
+export function mapCodexPlanNotification(params: CodexJsonObject): ProviderAdapterEvent | null {
+	const plan = readArray(params.plan)
+		.filter(isRecord)
+		.map((step) => readString(step.step))
+		.filter((step): step is string => step !== null)
+		.join("\n");
+
+	return mapCodexPlanUpdate(readString(params.explanation) || plan, params);
+}
+
 export function buildCodexPendingRequest(
 	requestId: string,
 	request: CodexPendingRequest,
@@ -1482,12 +1492,7 @@ function handleCodexNotification(
 			return;
 		}
 		case "turn/plan/updated": {
-			const plan = readArray(params.plan)
-				.filter(isRecord)
-				.map((step) => readString(step.step))
-				.filter((step): step is string => step !== null)
-				.join("\n");
-			const event = mapCodexPlanUpdate(readString(params.explanation) ?? plan, params);
+			const event = mapCodexPlanNotification(params);
 
 			if (event) {
 				pushCodexTurnEvent(liveSession, event);
