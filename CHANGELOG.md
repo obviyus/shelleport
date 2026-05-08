@@ -2,6 +2,16 @@
 
 All notable changes to shelleport are documented here.
 
+## Unreleased
+
+### Added
+
+- Codex App Server integration now handles current image-generation items, plan update notifications, display model names, and managed network approval prompts
+
+### Fixed
+
+- README support tables now reflect shipped Codex live sessions and historical import
+
 ## 0.0.34 - 2026-05-05
 
 ### Added

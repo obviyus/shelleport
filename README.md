@@ -93,14 +93,14 @@ Verifies your data directory, CLI availability, host/port config, and token stat
 - Finder-style directory browser to launch sessions in any directory
 - Image attachments via paste or upload
 - Session archive, restore, interrupt, and terminate
-- Historical session import from `~/.claude/projects`
+- Historical session import from `~/.claude/projects` and Codex session history
+- Codex App Server sessions with approvals, model discovery, image attachments, and structured tool events
 - Rate limit detection with live retry countdown
 - Native single-file per-platform binaries built with `bun build --compile`
 - Background service install (launchd / systemd)
 
 ### Planned
 
-- Codex App Server support
 - Skills
 - Automations
 - Settings
@@ -110,7 +110,7 @@ Verifies your data directory, CLI availability, host/port config, and token stat
 | Agent           | Live Sessions | Historical Import |
 | :-------------- | :-----------: | :---------------: |
 | **Claude Code** |      Yes      |        Yes        |
-| **Codex**       |    Planned    |      Planned      |
+| **Codex**       |      Yes      |        Yes        |
 
 The provider system is extensible — add new agents by implementing the `ProviderAdapter` interface.
 
