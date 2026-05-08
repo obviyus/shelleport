@@ -720,7 +720,7 @@ rl.on("line", (line) => {
         {
           id: "gpt-5.4",
           model: "gpt-5.4",
-          displayName: "gpt-5.4",
+          displayName: "GPT-5.4",
           hidden: false,
           supportedReasoningEfforts: [
             { reasoningEffort: "low", description: "" },
@@ -733,7 +733,7 @@ rl.on("line", (line) => {
         {
           id: "gpt-5.1-codex-mini",
           model: "gpt-5.1-codex-mini",
-          displayName: "gpt-5.1-codex-mini",
+          displayName: "GPT-5.1-Codex-Mini",
           hidden: false,
           supportedReasoningEfforts: [
             { reasoningEffort: "medium", description: "" },

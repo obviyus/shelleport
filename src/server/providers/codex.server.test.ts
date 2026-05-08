@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { mapCodexRateLimits, parseCodexHistoricalSession } from "~/server/providers/codex.server";
+import {
+	buildCodexPendingRequest,
+	mapCodexItemCompleted,
+	mapCodexItemStarted,
+	mapCodexModel,
+	mapCodexRateLimits,
+	parseCodexHistoricalSession,
+} from "~/server/providers/codex.server";
 
 const tempPaths: string[] = [];
 const tempDir = Bun.env.TMPDIR ?? "/tmp";
@@ -55,6 +62,96 @@ describe("mapCodexRateLimits", () => {
 				},
 			}),
 		).toEqual([]);
+	});
+});
+
+describe("mapCodexModel", () => {
+	test("uses app-server display names", () => {
+		expect(
+			mapCodexModel({
+				id: "gpt-5.3-codex-spark",
+				displayName: "GPT-5.3-Codex-Spark",
+				defaultReasoningEffort: "xhigh",
+				supportedReasoningEfforts: [
+					{ reasoningEffort: "low" },
+					{ reasoningEffort: "medium" },
+					{ reasoningEffort: "xhigh" },
+				],
+			}),
+		).toEqual({
+			defaultEffort: "max",
+			id: "gpt-5.3-codex-spark",
+			label: "GPT-5.3-Codex-Spark",
+			supportedEfforts: ["low", "medium", "max"],
+		});
+	});
+});
+
+describe("mapCodexItem", () => {
+	test("maps app-server image generation items", () => {
+		expect(
+			mapCodexItemStarted({
+				id: "image-1",
+				type: "imageGeneration",
+				revisedPrompt: "A clean product screenshot",
+				status: "inProgress",
+			}),
+		).toMatchObject({
+			kind: "tool-call",
+			summary: "A clean product screenshot",
+			data: {
+				toolName: "ImageGeneration",
+				toolUseId: "image-1",
+			},
+		});
+
+		expect(
+			mapCodexItemCompleted({
+				id: "image-1",
+				type: "imageGeneration",
+				status: "completed",
+				savedPath: "/tmp/output.png",
+			}),
+		).toMatchObject({
+			kind: "tool-result",
+			summary: "Image generated",
+			data: {
+				isError: false,
+				output: "/tmp/output.png",
+				toolUseId: "image-1",
+			},
+		});
+	});
+});
+
+describe("buildCodexPendingRequest", () => {
+	test("renders managed network approvals as network access", () => {
+		expect(
+			buildCodexPendingRequest("request-1", {
+				id: "rpc-1",
+				method: "item/commandExecution/requestApproval",
+				params: {
+					itemId: "tool-1",
+					networkApprovalContext: {
+						host: "api.example.com",
+						protocol: "https",
+					},
+					reason: "fetch package metadata",
+				},
+			}),
+		).toMatchObject({
+			blockReason: "permission",
+			kind: "approval",
+			prompt: "Allow Codex network access to https://api.example.com? fetch package metadata",
+			data: {
+				networkApprovalContext: {
+					host: "api.example.com",
+					protocol: "https",
+				},
+				requestId: "request-1",
+				toolUseId: "tool-1",
+			},
+		});
 	});
 });
 
