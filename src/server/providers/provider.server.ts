@@ -54,19 +54,13 @@ export interface ProviderAdapter {
 	readonly label: string;
 	capabilities(): ProviderCapabilities;
 	summary(): Promise<ProviderSummary>;
-	sendInput(input: ProviderAdapterRunInput): AsyncGenerator<ProviderAdapterEvent>;
-	resumeSession(
-		session: HostSession,
-		input: ProviderAdapterRunInput,
-	): AsyncGenerator<ProviderAdapterEvent>;
+	run(input: ProviderAdapterRunInput): AsyncGenerator<ProviderAdapterEvent>;
 	listHistoricalSessions(): Promise<HistoricalSession[]>;
-	canHandleRequestResponse?(session: HostSession, request: PendingRequest): boolean;
-	respondToRequest?(
+	respondToRequest(
 		session: HostSession,
 		request: PendingRequest,
 		input: RequestResponsePayload,
-	): Promise<void>;
-	canHandleControl?(session: HostSession, input: SessionControlPayload): boolean;
-	controlSession?(session: HostSession, input: SessionControlPayload): Promise<void>;
+	): Promise<boolean>;
+	controlSession(session: HostSession, input: SessionControlPayload): Promise<boolean>;
 	deleteSession?(session: HostSession): Promise<void>;
 }

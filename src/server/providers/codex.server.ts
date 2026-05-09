@@ -19,6 +19,11 @@ import type {
 	ProviderAdapterRunInput,
 } from "~/server/providers/provider.server";
 import { listJsonlFiles, readHeadJsonl } from "~/server/providers/jsonl.server";
+import {
+	closeProviderSubprocess,
+	readStderrTail,
+	TextTail,
+} from "~/server/providers/process.server";
 import { sessionStore } from "~/server/store.server";
 const CODEX_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 const CODEX_MODEL_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -60,7 +65,7 @@ type CodexLiveSession = {
 	pendingRequests: Map<string, CodexPendingRequest>;
 	pendingResponses: Map<string, CodexPendingResponse>;
 	sessionId: string;
-	stderrChunks: Uint8Array[];
+	stderrTail: TextTail;
 	stopping: boolean;
 	subprocess: Bun.Subprocess<"pipe", "pipe", "pipe">;
 	threadId: string | null;
@@ -933,7 +938,7 @@ function createCodexLiveSession(session: HostSession) {
 		pendingRequests: new Map(),
 		pendingResponses: new Map(),
 		sessionId: session.id,
-		stderrChunks: [],
+		stderrTail: new TextTail(),
 		stopping: false,
 		subprocess,
 		threadId: null,
@@ -959,9 +964,7 @@ function createCodexLiveSession(session: HostSession) {
 
 			rejectCodexPendingResponses(liveSession, new Error("Codex app-server closed"));
 
-			try {
-				void subprocess.stdin.end();
-			} catch {}
+			closeProviderSubprocess(subprocess);
 		},
 	};
 
@@ -1037,21 +1040,11 @@ async function loadCodexModels() {
 	const stdoutReader = subprocess.stdout.getReader();
 	const stderrReader = subprocess.stderr.getReader();
 	const pendingResponses = new Map<string, CodexPendingResponse>();
-	const stderrChunks: Uint8Array[] = [];
+	const stderrTail = new TextTail();
 	const decoder = new TextDecoder();
 	let buffer = "";
 
-	const stderrPromise = (async () => {
-		for (;;) {
-			const { done, value } = await stderrReader.read();
-
-			if (done) {
-				return;
-			}
-
-			stderrChunks.push(value);
-		}
-	})();
+	const stderrPromise = readStderrTail(stderrReader, stderrTail);
 
 	const stdoutPromise = (async () => {
 		for (;;) {
@@ -1154,9 +1147,7 @@ async function loadCodexModels() {
 			pendingResponse.reject(new Error("Codex app-server closed"));
 		}
 
-		try {
-			void subprocess.stdin.end();
-		} catch {}
+		closeProviderSubprocess(subprocess);
 
 		await stdoutPromise.catch(() => {});
 		await stderrPromise;
@@ -1171,8 +1162,7 @@ async function loadCodexModels() {
 	}
 
 	if (exitCode !== 0) {
-		const stderr = Buffer.concat(stderrChunks).toString("utf8").trim();
-		throw new Error(stderr || `Codex app-server exited with code ${exitCode}`);
+		throw new Error(stderrTail.text() || `Codex app-server exited with code ${exitCode}`);
 	}
 
 	return models;
@@ -1575,17 +1565,7 @@ async function runCodexLiveSession(liveSession: CodexLiveSession) {
 	const decoder = new TextDecoder();
 	let buffer = "";
 
-	const stderrPromise = (async () => {
-		for (;;) {
-			const { done, value } = await stderrReader.read();
-
-			if (done) {
-				return;
-			}
-
-			liveSession.stderrChunks.push(value);
-		}
-	})();
+	const stderrPromise = readStderrTail(stderrReader, liveSession.stderrTail);
 
 	function handleCodexFrame(frame: CodexJsonObject) {
 		sessionStore.appendProtocolFrame(liveSession.sessionId, {
@@ -1688,7 +1668,7 @@ async function runCodexLiveSession(liveSession: CodexLiveSession) {
 	}
 
 	if (liveSession.pendingResponses.size > 0) {
-		const stderr = Buffer.concat(liveSession.stderrChunks).toString("utf8").trim();
+		const stderr = liveSession.stderrTail.text();
 		const message =
 			exitCode === 0
 				? "Codex app-server closed before replying"
@@ -1703,7 +1683,7 @@ async function runCodexLiveSession(liveSession: CodexLiveSession) {
 			summary: "Codex CLI error",
 			data: {
 				exitCode,
-				stderr: Buffer.concat(liveSession.stderrChunks).toString("utf8").trim(),
+				stderr: liveSession.stderrTail.text(),
 			},
 			rawProviderEvent: null,
 		});
@@ -1902,11 +1882,7 @@ export class CodexProviderAdapter implements ProviderAdapter {
 		};
 	}
 
-	sendInput(runInput: ProviderAdapterRunInput) {
-		return streamCodexTurn(runInput);
-	}
-
-	resumeSession(_session: HostSession, runInput: ProviderAdapterRunInput) {
+	run(runInput: ProviderAdapterRunInput) {
 		return streamCodexTurn(runInput);
 	}
 
@@ -1919,10 +1895,6 @@ export class CodexProviderAdapter implements ProviderAdapter {
 			.sort((left, right) => right.updateTime - left.updateTime);
 	}
 
-	canHandleRequestResponse(session: HostSession, request: PendingRequest) {
-		return activeCodexSessions.has(session.id) && typeof request.data.requestId === "string";
-	}
-
 	async respondToRequest(
 		session: HostSession,
 		request: PendingRequest,
@@ -1932,7 +1904,7 @@ export class CodexProviderAdapter implements ProviderAdapter {
 		const requestId = typeof request.data.requestId === "string" ? request.data.requestId : null;
 
 		if (!liveSession || !requestId) {
-			throw new Error("Codex request is no longer active");
+			return false;
 		}
 
 		const pendingRequest = liveSession.pendingRequests.get(requestId);
@@ -1950,7 +1922,7 @@ export class CodexProviderAdapter implements ProviderAdapter {
 			sendCodexResponse(liveSession, pendingRequest.id, {
 				decision: createCodexRequestDecision(input.decision),
 			});
-			return;
+			return true;
 		}
 
 		if (pendingRequest.method === "item/permissions/requestApproval") {
@@ -1963,13 +1935,13 @@ export class CodexProviderAdapter implements ProviderAdapter {
 				permissions,
 				scope: "turn",
 			});
-			return;
+			return true;
 		}
 
 		throw new Error(`Unsupported Codex request type: ${pendingRequest.method}`);
 	}
 
-	canHandleControl(session: HostSession, input: SessionControlPayload) {
+	async controlSession(session: HostSession, input: SessionControlPayload) {
 		const liveSession = activeCodexSessions.get(session.id);
 
 		if (!liveSession) {
@@ -1977,32 +1949,19 @@ export class CodexProviderAdapter implements ProviderAdapter {
 		}
 
 		if (input.action === "terminate") {
+			liveSession.close("terminate");
 			return true;
 		}
 
-		return Boolean(liveSession.threadId && liveSession.activeTurnId);
-	}
-
-	async controlSession(session: HostSession, input: SessionControlPayload) {
-		const liveSession = activeCodexSessions.get(session.id);
-
-		if (!liveSession) {
-			return;
-		}
-
-		if (input.action === "terminate") {
-			liveSession.close("terminate");
-			return;
-		}
-
 		if (!liveSession.threadId || !liveSession.activeTurnId) {
-			return;
+			return false;
 		}
 
 		await sendCodexRequest(liveSession, "turn/interrupt", {
 			threadId: liveSession.threadId,
 			turnId: liveSession.activeTurnId,
-		}).catch(() => {});
+		});
+		return true;
 	}
 
 	async deleteSession(session: HostSession) {

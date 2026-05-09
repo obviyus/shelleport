@@ -17,6 +17,11 @@ import type {
 	ProviderAdapterRunInput,
 } from "~/server/providers/provider.server";
 import { listJsonlFiles, readHeadJsonl } from "~/server/providers/jsonl.server";
+import {
+	closeProviderSubprocess,
+	readStderrTail,
+	TextTail,
+} from "~/server/providers/process.server";
 import { sessionStore } from "~/server/store.server";
 
 const decoder = new TextDecoder();
@@ -87,6 +92,10 @@ function parseTokenCount(value: unknown) {
 
 function parseCost(value: unknown) {
 	return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function parseResetsAt(value: unknown) {
@@ -593,8 +602,8 @@ function tryParsePartialJsonRecord(text: string) {
 	}
 
 	try {
-		const parsed = JSON.parse(text) as unknown;
-		return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
+		const parsed: unknown = JSON.parse(text);
+		return isRecord(parsed) ? parsed : {};
 	} catch {
 		return {};
 	}
@@ -1173,9 +1182,7 @@ function createClaudeLiveSession(
 				activeClaudeSessions.delete(session.id);
 			}
 
-			try {
-				void subprocess.stdin.end();
-			} catch {}
+			closeProviderSubprocess(subprocess);
 		},
 	};
 
@@ -1202,7 +1209,7 @@ function failClaudeTurn(liveSession: ClaudeLiveSession, error: unknown) {
 async function runClaudeLiveSession(liveSession: ClaudeLiveSession) {
 	const stdoutReader = liveSession.subprocess.stdout.getReader();
 	const stderrReader = liveSession.subprocess.stderr.getReader();
-	const stderrChunks: Uint8Array[] = [];
+	const stderrTail = new TextTail();
 	let buffer = "";
 
 	function detectModel(rawEvent: Record<string, unknown>) {
@@ -1334,17 +1341,7 @@ async function runClaudeLiveSession(liveSession: ClaudeLiveSession) {
 		}
 	}
 
-	const stderrPromise = (async () => {
-		for (;;) {
-			const { done, value } = await stderrReader.read();
-
-			if (done) {
-				return;
-			}
-
-			stderrChunks.push(value);
-		}
-	})();
+	const stderrPromise = readStderrTail(stderrReader, stderrTail);
 
 	try {
 		for (;;) {
@@ -1398,7 +1395,7 @@ async function runClaudeLiveSession(liveSession: ClaudeLiveSession) {
 			summary: "Claude CLI error",
 			data: {
 				exitCode,
-				stderr: Buffer.concat(stderrChunks).toString("utf8").trim(),
+				stderr: stderrTail.text(),
 			},
 			rawProviderEvent: null,
 		});
@@ -1502,15 +1499,8 @@ export class ClaudeProviderAdapter implements ProviderAdapter {
 		};
 	}
 
-	sendInput(runInput: ProviderAdapterRunInput): AsyncGenerator<ProviderAdapterEvent> {
+	run(runInput: ProviderAdapterRunInput): AsyncGenerator<ProviderAdapterEvent> {
 		return streamClaudeProcess(runInput);
-	}
-
-	resumeSession(
-		session: HostSession,
-		runInput: ProviderAdapterRunInput,
-	): AsyncGenerator<ProviderAdapterEvent> {
-		return streamClaudeProcess({ ...runInput, session });
 	}
 
 	async listHistoricalSessions() {
@@ -1522,10 +1512,6 @@ export class ClaudeProviderAdapter implements ProviderAdapter {
 			.sort((left, right) => right.updateTime - left.updateTime);
 	}
 
-	canHandleRequestResponse(session: HostSession, request: PendingRequest) {
-		return activeClaudeSessions.has(session.id) && typeof request.data.requestId === "string";
-	}
-
 	async respondToRequest(
 		session: HostSession,
 		request: PendingRequest,
@@ -1535,7 +1521,7 @@ export class ClaudeProviderAdapter implements ProviderAdapter {
 		const requestId = typeof request.data.requestId === "string" ? request.data.requestId : null;
 
 		if (!handle || !requestId) {
-			throw new Error("Claude bridge request is no longer active");
+			return false;
 		}
 
 		const pendingRequest = handle.pendingRequests.get(requestId);
@@ -1566,22 +1552,19 @@ export class ClaudeProviderAdapter implements ProviderAdapter {
 							},
 			},
 		});
-	}
-
-	canHandleControl(session: HostSession) {
-		return activeClaudeSessions.has(session.id);
+		return true;
 	}
 
 	async controlSession(session: HostSession, input: SessionControlPayload) {
 		const handle = activeClaudeSessions.get(session.id);
 
 		if (!handle) {
-			return;
+			return false;
 		}
 
 		if (input.action === "terminate") {
 			handle.close("terminate");
-			return;
+			return true;
 		}
 
 		handle.interruptRequested = true;
@@ -1592,6 +1575,7 @@ export class ClaudeProviderAdapter implements ProviderAdapter {
 				subtype: "interrupt",
 			},
 		});
+		return true;
 	}
 
 	async deleteSession(session: HostSession) {

@@ -206,15 +206,11 @@ function startNextQueuedInput(sessionId: string) {
 
 	publishQueuedInputs(sessionId, sessionStore.listQueuedInputs(sessionId));
 
-	void consumeProviderRun(sessionId, queuedInput, "send");
+	void consumeProviderRun(sessionId, queuedInput);
 	return true;
 }
 
-async function consumeProviderRun(
-	sessionId: string,
-	input: SessionInputPayload,
-	mode: "send" | "resume",
-) {
+async function consumeProviderRun(sessionId: string, input: SessionInputPayload) {
 	let session = sessionStore.getSession(sessionId);
 
 	if (!session) {
@@ -241,20 +237,12 @@ async function consumeProviderRun(
 	}
 	let nextStatus: HostSession["status"] = "idle";
 	let nextStatusDetail = emptyStatusDetail();
-	const generator =
-		mode === "resume"
-			? provider.resumeSession(session, {
-					session,
-					prompt: input.prompt,
-					attachments: input.attachments,
-					signal: activeRun.abortController.signal,
-				})
-			: provider.sendInput({
-					session,
-					prompt: input.prompt,
-					attachments: input.attachments,
-					signal: activeRun.abortController.signal,
-				});
+	const generator = provider.run({
+		session,
+		prompt: input.prompt,
+		attachments: input.attachments,
+		signal: activeRun.abortController.signal,
+	});
 
 	try {
 		for await (const event of generator) {
@@ -535,7 +523,7 @@ export const sessionBroker = {
 
 		if (input.prompt?.trim()) {
 			publishPromptEvent(session.id, { prompt: input.prompt, attachments: [] });
-			void consumeProviderRun(session.id, { prompt: input.prompt, attachments: [] }, "send");
+			void consumeProviderRun(session.id, { prompt: input.prompt, attachments: [] });
 		}
 
 		return sessionStore.getSession(session.id);
@@ -595,7 +583,7 @@ export const sessionBroker = {
 		publishPromptEvent(sessionId, input);
 
 		if (canStartInputRun(session)) {
-			void consumeProviderRun(sessionId, input, "send");
+			void consumeProviderRun(sessionId, input);
 			return sessionStore.getSession(sessionId);
 		}
 
@@ -677,7 +665,7 @@ export const sessionBroker = {
 		publishQueuedInputs(sessionId, sessionStore.listQueuedInputs(sessionId));
 		return queuedInput;
 	},
-	controlSession(sessionId: string, input: SessionControlPayload) {
+	async controlSession(sessionId: string, input: SessionControlPayload) {
 		const activeRun = activeRuns.get(sessionId);
 
 		if (!activeRun) {
@@ -685,24 +673,15 @@ export const sessionBroker = {
 		}
 
 		const session = sessionStore.getSession(sessionId);
+		const handledByProvider = session
+			? await getProvider(session.provider).controlSession(session, input)
+			: false;
 
-		if (session) {
-			const provider = getProvider(session.provider);
-
-			if (provider.canHandleControl?.(session, input)) {
-				void provider.controlSession?.(session, input);
-
-				if (input.action === "interrupt") {
-					return;
-				}
-			}
+		if (input.action === "interrupt" && handledByProvider) {
+			return;
 		}
 
 		activeRun.abortController.abort();
-
-		if (input.action === "terminate") {
-			return;
-		}
 	},
 	async respondToRequest(requestId: string, input: RequestResponsePayload) {
 		const request = sessionStore.getPendingRequest(requestId);
@@ -719,8 +698,7 @@ export const sessionBroker = {
 
 		const provider = getProvider(session.provider);
 
-		if (provider.canHandleRequestResponse?.(session, request)) {
-			await provider.respondToRequest?.(session, request, input);
+		if (await provider.respondToRequest(session, request, input)) {
 			const resolvedRequest = sessionStore.resolvePendingRequest(
 				requestId,
 				input.decision === "allow" ? "resolved" : "rejected",
@@ -798,7 +776,7 @@ export const sessionBroker = {
 				? request.data.resumePrompt
 				: "The user approved the blocked request. Retry it if still needed, then continue the task.";
 
-		void consumeProviderRun(updatedSession.id, { prompt: resumePrompt, attachments: [] }, "resume");
+		void consumeProviderRun(updatedSession.id, { prompt: resumePrompt, attachments: [] });
 
 		return resolvedRequest;
 	},

@@ -6,6 +6,7 @@ import type {
 	EffortLevel,
 	ImportSessionPayload,
 	PermissionMode,
+	ProviderId,
 	QueuedSessionInputUpdatePayload,
 	RequestResponsePayload,
 	SessionArchivePayload,
@@ -14,7 +15,7 @@ import type {
 	SessionMetaPayload,
 	SessionStreamMessage,
 } from "~/shared/shelleport";
-import { getSupportedEffortLevels } from "~/shared/shelleport";
+import { EFFORT_LEVELS, getSupportedEffortLevels, isProviderId } from "~/shared/shelleport";
 import {
 	checkLoginRateLimit,
 	clearAuthCookie,
@@ -74,8 +75,8 @@ async function assertDirectory(path: string, fieldName: string) {
 	}
 }
 
-function assertProviderId(providerId: unknown, fieldName: string): "claude" | "codex" {
-	if (providerId === "claude" || providerId === "codex") {
+function assertProviderId(providerId: unknown, fieldName: string): ProviderId {
+	if (isProviderId(providerId)) {
 		return providerId;
 	}
 
@@ -265,42 +266,36 @@ function validateArchiveInput(payload: SessionArchivePayload) {
 	}
 }
 
+const SESSION_META_FIELDS = ["title", "pinned", "model", "effort", "systemPrompt"] as const;
+
 async function validateMetaInput(
 	providerId: CreateSessionInput["provider"],
 	payload: SessionMetaPayload,
 	current: { model: string | null; effort: EffortLevel | null },
 ) {
-	let hasField = false;
-
 	if (payload.title !== undefined) {
-		hasField = true;
 		validateTitle(payload.title);
 	}
 
 	if (payload.pinned !== undefined) {
-		hasField = true;
 		if (typeof payload.pinned !== "boolean") {
 			throw new ApiError(400, "invalid_pinned", "pinned must be a boolean");
 		}
 	}
 
 	if (payload.model !== undefined) {
-		hasField = true;
 		if (payload.model !== null && typeof payload.model !== "string") {
 			throw new ApiError(400, "invalid_model", "model must be a string or null");
 		}
 	}
 
 	if (payload.effort !== undefined) {
-		hasField = true;
-		const validEfforts = ["low", "medium", "high", "max"];
-		if (payload.effort !== null && !validEfforts.includes(payload.effort)) {
+		if (payload.effort !== null && !EFFORT_LEVELS.includes(payload.effort)) {
 			throw new ApiError(400, "invalid_effort", "effort must be low, medium, high, max, or null");
 		}
 	}
 
 	if (payload.systemPrompt !== undefined) {
-		hasField = true;
 		validateSystemPrompt(payload.systemPrompt);
 	}
 	await validateEffortForModel(
@@ -309,7 +304,7 @@ async function validateMetaInput(
 		payload.effort === undefined ? current.effort : payload.effort,
 	);
 
-	if (!hasField) {
+	if (!SESSION_META_FIELDS.some((field) => payload[field] !== undefined)) {
 		throw new ApiError(
 			400,
 			"invalid_session_meta",
@@ -655,7 +650,7 @@ async function dispatchApiRequest(request: Request, timeoutController?: RequestT
 		if (request.method === "POST" && segments[3] === "control") {
 			const payload = await readJson<SessionControlPayload>(request);
 			validateControlInput(payload);
-			sessionBroker.controlSession(sessionId, payload);
+			await sessionBroker.controlSession(sessionId, payload);
 			return Response.json({ ok: true });
 		}
 
