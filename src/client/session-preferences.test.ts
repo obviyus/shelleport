@@ -13,37 +13,39 @@ const models = [
 
 function installStorage(entries: Record<string, string> = {}) {
 	const store = new Map(Object.entries(entries));
-	(
-		globalThis as unknown as {
-			window?: { localStorage: Storage };
-		}
-	).window = {
-		localStorage: {
-			getItem(key) {
-				return store.get(key) ?? null;
-			},
-			setItem(key, value) {
-				store.set(key, value);
-			},
-			removeItem(key) {
-				store.delete(key);
-			},
-			clear() {
-				store.clear();
-			},
-			key(index) {
-				return Array.from(store.keys())[index] ?? null;
-			},
-			get length() {
-				return store.size;
+	Object.defineProperty(globalThis, "window", {
+		configurable: true,
+		value: {
+			localStorage: {
+				getItem(key: string) {
+					return store.get(key) ?? null;
+				},
+				setItem(key: string, value: string) {
+					store.set(key, value);
+				},
+				removeItem(key: string) {
+					store.delete(key);
+				},
+				clear() {
+					store.clear();
+				},
+				key(index: number) {
+					return Array.from(store.keys())[index] ?? null;
+				},
+				get length() {
+					return store.size;
+				},
 			},
 		},
-	};
+	});
 	return store;
 }
 
 afterEach(() => {
-	delete (globalThis as unknown as { window?: unknown }).window;
+	Object.defineProperty(globalThis, "window", {
+		configurable: true,
+		value: undefined,
+	});
 });
 
 describe("session preferences", () => {

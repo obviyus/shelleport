@@ -4,6 +4,7 @@ import {
 	getFirstRunReadiness,
 	getNextPromptHistoryState,
 	getPreviousPromptHistoryState,
+	getSessionBuckets,
 	getSessionCompletionNotificationBody,
 	getSessionListEmptyState,
 	pushPromptHistory,
@@ -11,6 +12,51 @@ import {
 	shouldInterruptOnCtrlC,
 	shouldNotifySessionCompletion,
 } from "~/client/app-shell";
+import type { HostSession, Project } from "~/shared/shelleport";
+
+function testSession(
+	input: Partial<HostSession> & Pick<HostSession, "id" | "projectId">,
+): HostSession {
+	return {
+		allowedTools: [],
+		archived: false,
+		createTime: 0,
+		cwd: "/tmp/project",
+		imported: false,
+		model: null,
+		effort: null,
+		systemPrompt: null,
+		lastEventSequence: 0,
+		permissionMode: "default",
+		pid: null,
+		pinned: false,
+		provider: "claude",
+		providerSessionRef: null,
+		queuedInputCount: 0,
+		status: "idle",
+		statusDetail: {
+			attempt: null,
+			blockReason: null,
+			message: null,
+			nextRetryTime: null,
+			waitKind: null,
+		},
+		title: input.id,
+		updateTime: 0,
+		usage: null,
+		...input,
+	};
+}
+
+function testProject(input: Pick<Project, "id" | "name">): Project {
+	return {
+		cwd: "/tmp/project",
+		permissionMode: "bypassPermissions",
+		createTime: 0,
+		updateTime: 0,
+		...input,
+	};
+}
 
 describe("getDocumentTitle", () => {
 	test("uses the base title when no session is selected", () => {
@@ -295,6 +341,39 @@ describe("getSessionListEmptyState", () => {
 			actionLabel: "Create one",
 			message: "No sessions",
 		});
+	});
+});
+
+describe("getSessionBuckets", () => {
+	test("splits archived sessions and orders project groups by project name", () => {
+		const alpha = testProject({ id: "project-alpha", name: "Alpha" });
+		const beta = testProject({ id: "project-beta", name: "Beta" });
+		const buckets = getSessionBuckets(
+			[
+				testSession({ id: "ungrouped", projectId: null }),
+				testSession({ id: "beta", projectId: beta.id }),
+				testSession({ id: "archived", archived: true, projectId: alpha.id }),
+				testSession({ id: "alpha", projectId: alpha.id }),
+			],
+			[beta, alpha],
+		);
+
+		expect(buckets.activeSessions.map((session) => session.id)).toEqual([
+			"ungrouped",
+			"beta",
+			"alpha",
+		]);
+		expect(buckets.archivedSessions.map((session) => session.id)).toEqual(["archived"]);
+		expect(
+			buckets.projectGroups.map((group) => ({
+				projectId: group.projectId,
+				sessions: group.sessions.map((session) => session.id),
+			})),
+		).toEqual([
+			{ projectId: alpha.id, sessions: ["alpha"] },
+			{ projectId: beta.id, sessions: ["beta"] },
+			{ projectId: null, sessions: ["ungrouped"] },
+		]);
 	});
 });
 
