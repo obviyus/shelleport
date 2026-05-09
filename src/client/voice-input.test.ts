@@ -15,7 +15,7 @@ function collectStates() {
 }
 
 type NavigatorOverride = {
-	mediaDevices?: MediaDevices | undefined;
+	mediaDevices?: Pick<MediaDevices, "getUserMedia"> | undefined;
 };
 
 async function withNavigator(override: NavigatorOverride, fn: () => Promise<void>) {
@@ -47,7 +47,7 @@ describe("createVoiceSession", () => {
 			{
 				mediaDevices: {
 					getUserMedia: () => Promise.reject(new Error("test abort")),
-				} as unknown as MediaDevices,
+				},
 			},
 			async () => {
 				const cb = collectStates();
@@ -78,7 +78,7 @@ describe("createVoiceSession", () => {
 				mediaDevices: {
 					getUserMedia: () =>
 						Promise.reject(new DOMException("Permission denied", "NotAllowedError")),
-				} as unknown as MediaDevices,
+				},
 			},
 			async () => {
 				const cb = collectStates();
@@ -99,7 +99,7 @@ describe("createVoiceSession", () => {
 			{
 				mediaDevices: {
 					getUserMedia: () => Promise.reject(new Error("Device busy")),
-				} as unknown as MediaDevices,
+				},
 			},
 			async () => {
 				const cb = collectStates();
@@ -118,7 +118,7 @@ describe("createVoiceSession", () => {
 			{
 				mediaDevices: {
 					getUserMedia: () => Promise.reject("string error"),
-				} as unknown as MediaDevices,
+				},
 			},
 			async () => {
 				const cb = collectStates();
@@ -139,7 +139,7 @@ describe("createVoiceSession", () => {
 			{
 				mediaDevices: {
 					getUserMedia: () => Promise.reject(new Error("any error")),
-				} as unknown as MediaDevices,
+				},
 			},
 			async () => {
 				const cb = collectStates();

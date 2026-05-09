@@ -707,7 +707,6 @@ function FileBrowserSidebar({
 				/>
 			)}
 
-			{/* Header */}
 			<div className="flex items-center gap-1.5 border-b border-foreground/10 px-2 py-2 shrink-0">
 				<button
 					type="button"
@@ -738,7 +737,6 @@ function FileBrowserSidebar({
 				</button>
 			</div>
 
-			{/* Content */}
 			<div className="flex-1 overflow-y-auto py-1">
 				{loading && (
 					<div className="flex items-center justify-center py-8">
@@ -1364,6 +1362,57 @@ function getComposerPlaceholder(providerLabel: string, isBusy: boolean, canAttac
 	return `Message ${providerLabel}... (Enter to send)`;
 }
 
+type ProjectSessionGroup = {
+	projectId: string | null;
+	projectName: string | null;
+	sessions: HostSession[];
+};
+
+export function getSessionBuckets(sessions: HostSession[], projects: Project[]) {
+	const activeSessions: HostSession[] = [];
+	const archivedSessions: HostSession[] = [];
+	const sessionsByProject = new Map<string | null, HostSession[]>();
+
+	for (const session of sessions) {
+		if (session.archived) {
+			archivedSessions.push(session);
+			continue;
+		}
+
+		activeSessions.push(session);
+		const projectId = session.projectId ?? null;
+		const projectSessions = sessionsByProject.get(projectId);
+		if (projectSessions) {
+			projectSessions.push(session);
+		} else {
+			sessionsByProject.set(projectId, [session]);
+		}
+	}
+
+	const projectGroups: ProjectSessionGroup[] = [];
+	for (const project of [...projects].sort((left, right) => left.name.localeCompare(right.name))) {
+		const projectSessions = sessionsByProject.get(project.id) ?? [];
+		if (projectSessions.length > 0) {
+			projectGroups.push({
+				projectId: project.id,
+				projectName: project.name,
+				sessions: projectSessions,
+			});
+		}
+	}
+
+	const ungroupedSessions = sessionsByProject.get(null) ?? [];
+	if (ungroupedSessions.length > 0) {
+		projectGroups.push({
+			projectId: null,
+			projectName: null,
+			sessions: ungroupedSessions,
+		});
+	}
+
+	return { activeSessions, archivedSessions, projectGroups };
+}
+
 export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated: true }> }) {
 	const route = useCurrentRoute();
 	const renderRoute =
@@ -1449,67 +1498,10 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 	const sessionTotalEvents = hasSelectedSessionDetail ? totalEvents : 0;
 	const sessionPendingRequests = hasSelectedSessionDetail ? pendingRequests : [];
 	const sessionQueuedInputs = hasSelectedSessionDetail ? queuedInputs : [];
-	const { activeSessions, archivedSessions, projectGroups } = useMemo(() => {
-		const active: HostSession[] = [];
-		const archived: HostSession[] = [];
-
-		for (const candidate of sessions) {
-			if (candidate.archived) {
-				archived.push(candidate);
-				continue;
-			}
-
-			active.push(candidate);
-		}
-
-		// Group active sessions by projectId
-		const groupMap = new Map<string | null, HostSession[]>();
-		for (const session of active) {
-			const key = session.projectId ?? null;
-			if (!groupMap.has(key)) {
-				groupMap.set(key, []);
-			}
-			groupMap.get(key)!.push(session);
-		}
-
-		// Create groups: named projects first (sorted by name), then ungrouped
-		const groups: Array<{
-			projectId: string | null;
-			projectName: string | null;
-			sessions: HostSession[];
-		}> = [];
-
-		// Add named projects first (sorted by name)
-		const namedProjects = projects
-			.filter((p) => p.id !== null)
-			.sort((a, b) => a.name.localeCompare(b.name));
-		for (const project of namedProjects) {
-			const sessions = groupMap.get(project.id) ?? [];
-			if (sessions.length > 0) {
-				groups.push({
-					projectId: project.id,
-					projectName: project.name,
-					sessions,
-				});
-			}
-		}
-
-		// Add ungrouped sessions
-		const ungrouped = groupMap.get(null) ?? [];
-		if (ungrouped.length > 0) {
-			groups.push({
-				projectId: null,
-				projectName: null,
-				sessions: ungrouped,
-			});
-		}
-
-		return {
-			activeSessions: active,
-			archivedSessions: archived,
-			projectGroups: groups,
-		};
-	}, [sessions, projects]);
+	const { activeSessions, archivedSessions, projectGroups } = useMemo(
+		() => getSessionBuckets(sessions, projects),
+		[sessions, projects],
+	);
 	const fileDiffs = useMemo(() => getStreamEditDiffs(sessionStream), [sessionStream]);
 
 	const grouped = useMemo(() => {
@@ -2296,6 +2288,24 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 		: null;
 	const sessionProviderLabel = sessionProvider?.label ?? "Agent";
 	const canAttach = sessionProvider?.capabilities.supportsAttachments === true;
+	const composerModels = sessionProvider?.models ?? [];
+	const composerControls = sessionView ? (
+		<>
+			<InputPlusMenu canAttach={canAttach} onAttach={() => fileInputRef.current?.click()} />
+			{composerModels.length > 0 && (
+				<InputModelPicker
+					session={sessionView}
+					models={composerModels}
+					onChangeModel={(model) => void handleChangeModel(sessionView, model, composerModels)}
+				/>
+			)}
+			<InputEffortPicker
+				models={composerModels}
+				session={sessionView}
+				onChangeEffort={(effort) => void handleChangeEffort(sessionView, effort, composerModels)}
+			/>
+		</>
+	) : null;
 	const isSessionBusy =
 		sessionView?.status === "running" ||
 		sessionView?.status === "retrying" ||
@@ -2402,7 +2412,6 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 					</DialogFooter>
 				</DialogContent>
 			</Dialog>
-			{/* System prompt edit modal */}
 			<Dialog
 				open={isEditingSystemPrompt}
 				onOpenChange={(open) => {
@@ -2451,7 +2460,6 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 					</DialogFooter>
 				</DialogContent>
 			</Dialog>
-			{/* Sidebar content — shared between desktop aside and mobile Sheet */}
 			{(() => {
 				const sidebarContent = (
 					<>
@@ -2612,12 +2620,10 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 
 				return (
 					<>
-						{/* Desktop sidebar */}
 						<aside className="hidden md:flex w-60 shrink-0 flex-col border-r border-foreground/10 bg-card/55 backdrop-blur-md">
 							{sidebarContent}
 						</aside>
 
-						{/* Mobile sidebar drawer */}
 						<Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
 							<SheetContent
 								side="left"
@@ -2632,7 +2638,6 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 				);
 			})()}
 
-			{/* File browser sidebar (desktop only) */}
 			{fileBrowserOpen && sessionView && (
 				<aside className="hidden md:flex w-56 shrink-0 flex-col border-r border-foreground/10 bg-card/40">
 					<FileBrowserSidebar
@@ -3062,38 +3067,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 												<div className="flex flex-col gap-2 px-3 py-3">
 													<VoiceWaveform analyser={activeVoiceSession.analyser} />
 													<div className="flex items-center justify-between gap-2">
-														<div className="flex items-center gap-1.5">
-															<InputPlusMenu
-																canAttach={canAttach}
-																onAttach={() => fileInputRef.current?.click()}
-															/>
-															{sessionView && (sessionProvider?.models ?? []).length > 0 && (
-																<InputModelPicker
-																	session={sessionView}
-																	models={sessionProvider?.models ?? []}
-																	onChangeModel={(model) =>
-																		void handleChangeModel(
-																			sessionView,
-																			model,
-																			sessionProvider?.models ?? [],
-																		)
-																	}
-																/>
-															)}
-															{sessionView && (
-																<InputEffortPicker
-																	models={sessionProvider?.models ?? []}
-																	session={sessionView}
-																	onChangeEffort={(effort) =>
-																		void handleChangeEffort(
-																			sessionView,
-																			effort,
-																			sessionProvider?.models ?? [],
-																		)
-																	}
-																/>
-															)}
-														</div>
+														<div className="flex items-center gap-1.5">{composerControls}</div>
 														<div className="flex items-center gap-1.5">
 															<button
 																type="button"
@@ -3134,38 +3108,7 @@ export function AppShell({ boot }: { boot: Extract<AppBootData, { authenticated:
 														className="min-h-[76px] md:min-h-[64px] w-full resize-none bg-transparent px-3.5 py-3 text-base leading-[1.6] text-foreground outline-none placeholder:text-muted-foreground md:text-xs"
 													/>
 													<div className="flex items-center justify-between px-1.5 pb-0.5">
-														<div className="flex items-center gap-1.5">
-															<InputPlusMenu
-																canAttach={canAttach}
-																onAttach={() => fileInputRef.current?.click()}
-															/>
-															{sessionView && (sessionProvider?.models ?? []).length > 0 && (
-																<InputModelPicker
-																	session={sessionView}
-																	models={sessionProvider?.models ?? []}
-																	onChangeModel={(model) =>
-																		void handleChangeModel(
-																			sessionView,
-																			model,
-																			sessionProvider?.models ?? [],
-																		)
-																	}
-																/>
-															)}
-															{sessionView && (
-																<InputEffortPicker
-																	models={sessionProvider?.models ?? []}
-																	session={sessionView}
-																	onChangeEffort={(effort) =>
-																		void handleChangeEffort(
-																			sessionView,
-																			effort,
-																			sessionProvider?.models ?? [],
-																		)
-																	}
-																/>
-															)}
-														</div>
+														<div className="flex items-center gap-1.5">{composerControls}</div>
 														<div className="flex items-center gap-1.5">
 															{isVoiceBusy ? (
 																<>
