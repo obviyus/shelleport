@@ -4,13 +4,18 @@ All notable changes to shelleport are documented here.
 
 ## Unreleased
 
+## 0.0.35 - 2026-05-09
+
 ### Added
 
+- Codex sessions now show usage limits in the sidebar (#83) (thanks @kesava500)
 - Codex App Server integration now handles current image-generation items, plan update notifications, display model names, and managed network approval prompts
 
 ### Fixed
 
+- Codex model labels now stay normalized in session metadata and UI surfaces (#84) (thanks @kesava500)
 - README support tables now reflect shipped Codex live sessions and historical import
+- Provider runtime cleanup now bounds retained subprocess stderr and uses one provider run/control path
 
 ## 0.0.34 - 2026-05-05
 
