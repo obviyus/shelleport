@@ -1,4 +1,9 @@
-export type ProviderId = "claude" | "codex";
+export const PROVIDER_IDS = ["claude", "codex"] as const;
+export type ProviderId = (typeof PROVIDER_IDS)[number];
+
+export function isProviderId(value: unknown): value is ProviderId {
+	return typeof value === "string" && PROVIDER_IDS.some((providerId) => providerId === value);
+}
 
 export type Project = {
 	id: string;
@@ -49,7 +54,8 @@ export type ProviderSummary = {
 	models: ProviderModel[];
 };
 
-export type EffortLevel = "low" | "medium" | "high" | "max";
+export const EFFORT_LEVELS = ["low", "medium", "high", "max"] as const;
+export type EffortLevel = (typeof EFFORT_LEVELS)[number];
 
 const BASIC_EFFORT_LEVELS: EffortLevel[] = ["low", "medium", "high"];
 const OPUS_EFFORT_LEVELS: EffortLevel[] = [...BASIC_EFFORT_LEVELS, "max"];
